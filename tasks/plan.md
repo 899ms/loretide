@@ -1,7 +1,7 @@
 # Loretide · 首版任务实施计划
 
 日期：2026-09-13
-状态：LT-001 完成，独立 app checkout 已建立；工具、依赖、数据库与浏览器运行尚未验证。见 [初始化记录](../records/2026-09-13-应用工程初始化记录.md)。
+状态：LT-001～002、CP-01 完成；源码与工具核验已有记录，工具缺口待补齐，依赖、数据库与浏览器运行尚未验证。见 [初始化记录](../records/2026-09-13-应用工程初始化记录.md)。
 任务状态来源：[功能任务 todo.md](todo.md) 与 [架构前置 architecture.md](architecture.md)，以及 [完整诊断 diagnostics.md](diagnostics.md)，三者不重复维护同一任务。本轮不创建 GitHub Issues 或独立 Codex 任务。
 
 ## 目标与依据
