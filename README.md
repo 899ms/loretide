@@ -1,4 +1,10 @@
-# 内容创作工作台
+# Loretide
+
+> Turn knowledge into a publishing tide.
+
+**Loretide · 本地优先的品牌内容创作工作台**
+
+仓库：[899ms/loretide](https://github.com/899ms/loretide)
 
 面向中国社交媒体品牌运营的内容工作台：把分散素材、账号表达、研究与改写、正式作品、人工审核、手动发布记录和 AI 复盘连接起来，验证一条可以持续运转的内容经营 SOP。
 
