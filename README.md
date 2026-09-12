@@ -1,121 +1,125 @@
 # Loretide
 
+**English** | [简体中文](README.zh-CN.md)
+
 > Turn knowledge into a publishing tide.
 
-**Loretide · 本地优先的品牌内容创作工作台**
+**A local-first content workspace for brand operations.**
 
-仓库：[899ms/loretide](https://github.com/899ms/loretide)
+Repository: [899ms/loretide](https://github.com/899ms/loretide)
 
-面向中国社交媒体品牌运营的内容工作台：把分散素材、账号表达、研究与改写、正式作品、人工审核、手动发布记录和 AI 复盘连接起来，验证一条可以持续运转的内容经营 SOP。
+Loretide connects source materials, account-specific writing instructions, research and rewriting, editable works, human review, manual publication records, and AI retrospectives. It is designed to validate a repeatable content operating workflow for Chinese social media.
 
-**当前阶段：需求与开发基线已整理，应用尚未实施。** 本仓库保存文档、决策记录和固定版本的审核 Skill 源码；不是已经可以启动的 Web App。
+**Status: requirements and the development baseline are documented; the application is not implemented.** This repository contains specifications, decision records, and a pinned review Skill source snapshot. It is not a runnable web application yet.
 
-文档基线：v0.6.0 · 更新：2026-09-13
+Documentation baseline: v0.6.0 · Updated: 2026-09-13
 
-## 从这里开始
+## Start here
 
-1. [首版开发基线与实施清单](docs/11-首版开发基线与实施清单.md)：最新确认、W-01～W-09 开发顺序、依赖和验收出口。
-2. [完整工作流](docs/01-完整工作流.md)：从品牌/账号设置到真实记录与复盘的操作链。
-3. [开发需求 PRD](docs/02-开发需求PRD.md)：55 项功能需求、10 项非功能需求与页面范围。
-4. [技术设计与开发路线](docs/03-技术设计与开发路线.md)：数据、权限、版本、执行接口及开发工作包。
-5. [验收标准与追踪矩阵](docs/04-验收标准与追踪矩阵.md)：65 项基础验收、6 项 D10 与 11 项 D11 补充检查。
+The detailed development documents are currently in Chinese.
 
-最新用户确认以 11 的汇总为入口；历史讨论中的被替代方案保留用于追溯，不作为当前开发要求。文档中的设计、模拟验证和实际应用验证分别记录。
+1. [Development baseline and implementation checklist](docs/11-首版开发基线与实施清单.md): confirmed decisions, W-01 through W-09, dependencies, and acceptance criteria.
+2. [Complete workflow](docs/01-完整工作流.md): account setup through publication records and retrospectives.
+3. [Product requirements](docs/02-开发需求PRD.md): 55 functional requirements, 10 nonfunctional requirements, and page scope.
+4. [Technical design](docs/03-技术设计与开发路线.md): data, permissions, versioning, execution interfaces, and work packages.
+5. [Acceptance matrix](docs/04-验收标准与追踪矩阵.md): 65 baseline checks, 6 D10 checks, and 11 D11 checks.
 
-## 要解决什么
+Document 11 summarizes the latest confirmed decisions. Superseded proposals remain in historical records for traceability, not as implementation requirements. Design decisions, simulated checks, and real application tests are reported separately.
 
-品牌运营者的网页收藏、笔记、参数资料、用户反馈和成品常散落在不同工具里。工作台围绕账号与作品组织这些材料，辅助判断什么值得写、整理依据、研究对标、创作或改写，并将 AI 成果保存为可编辑、可追踪的作品。
+## What Loretide is for
 
-发布由操作人完成，真实结果由操作人登记；AI 分析这些记录，提出下一轮选题与经营建议，经人采纳后沉淀。
+Bookmarks, notes, product specifications, customer feedback, and finished assets often live in separate tools. Loretide organizes them around accounts and works, helping operators decide what to create, assemble supporting material, research comparable content, and create or rewrite formal, editable outputs.
+
+Operators publish manually and enter actual results. AI analyzes those records and proposes next steps; durable operational knowledge is updated only after human adoption.
 
 ```mermaid
 flowchart LR
-  A[主动登记素材 / 笔记 / 链接] --> B[知识整理与选题]
-  C[品牌规范 / 账号提示词] --> B
-  B --> D[研究 / 改写]
-  D --> E[正式作品与版本]
-  E --> F[AI 预检与逐项处置]
-  F --> G[必须人工终审]
-  G --> H[交付 / 操作人手动发布]
-  H --> I[人工登记真实结果]
-  I --> J[AI 复盘]
+  A[Selected files / notes / links] --> B[Knowledge and topic selection]
+  C[Brand guidelines / account prompts] --> B
+  B --> D[Research / rewrite]
+  D --> E[Editable works and versions]
+  E --> F[AI precheck and finding dispositions]
+  F --> G[Mandatory human approval]
+  G --> H[Handoff / manual publication]
+  H --> I[Manually recorded results]
+  I --> J[AI retrospective]
   J --> B
-  J --> K[人工采纳经营记忆]
+  J --> K[Human-adopted operational knowledge]
   K --> B
 ```
 
-## 已确认的首版行为
+## Confirmed first-release behavior
 
-| 范围 | 决定 |
+| Area | Decision |
 |---|---|
-| 品牌与账号 | 一个品牌一个工作空间，内部多个账号、项目和自定义 SOP；支持单人使用，预留小团队 |
-| 人设 | 各账号设置自己的 `persona_prompt`，任务直接沿用；没有独立人设库、跨账号人设绑定或任务级选择 |
-| 资料授权 | 品牌公共资料在授权范围内复用，账号专属素材和记忆按任务授权；提示词不授予读取权 |
-| 本地文件 | 操作人自行分类和保留版本；仅登记主动选择的文件，不扫描/监听目录，不自动整理或复制成品快照，不要求上传云端 |
-| 选材 | AI 在已登记且授权范围内自动找素材，允许指定必用/排除，实际引用可追溯 |
-| 研究与改写 | 两种流程均可选本地、联网、全部（本地＋联网）；本地指资料范围，不代表离线模型 |
-| 开始界面 | 选题、素材要求和资料范围一起设置，不额外弹窗；范围按账号记住，首次默认全部，启动后固定 |
-| 网络异常 | 全部模式联网失败保留成果并暂停后续创作，操作人选择重试或仅用现有材料继续；临时处理不改变账号偏好 |
-| SOP | 受约束步骤模板，支持依赖校验、确认、退回、重试及恢复；保留研究结论到正文前的一次人工确认 |
-| 预检 | 品牌级默认开启，账号统一使用；提审时运行，修改草稿不反复调用模型，关闭后可手动检查 |
-| 审核 | AI 原始报告与逐项人工处置分别保留；检查未完成不能标为 AI 通过；最终人审必须绑定确定交付版本 |
-| 媒体 | 工作台处理文案和脚本；图片/成片外部制作后登记本地引用，由人查看终审，不把脚本检查当作成片检查 |
-| 运营闭环 | 手动发布、手动记录真实数据，AI 复盘；缺失数据不造零，长期记忆须人工采纳 |
+| Brands and accounts | One workspace per brand, with multiple accounts, projects, and configurable SOPs. Start with individual operation and leave room for small teams. |
+| Persona prompts | Each account has its own `persona_prompt`, used automatically for its work. No separate persona library, cross-account persona binding, or per-task persona selection. |
+| Authorization | Brand materials can be reused within authorized scope. Account-specific materials and knowledge require task authorization; prompts do not grant access. |
+| Local files | Operators organize folders and retain file versions. Register explicitly selected files only: no folder scanning or watching, automatic reorganization, automatic finished-media snapshots, or mandatory cloud upload. |
+| Material selection | AI searches registered, authorized materials automatically. Operators can require or exclude materials and inspect actual references. |
+| Research and rewriting | Both support Local, Web, and All (Local + Web). Local limits information retrieval; it does not require an offline model. |
+| Start screen | Set the topic, material requirements, and source scope together, without an extra confirmation dialog. Remember scope per account, initially All, and freeze it when execution starts. |
+| Network failure | In All mode, preserve available results and pause dependent creation. The operator chooses retry or continuation with existing material. Temporary recovery does not change account preferences. |
+| SOPs | Constrained step templates with dependency validation, confirmation, return, retry, and recovery. Preserve human confirmation of research conclusions before drafting. |
+| Precheck | Enabled by default at brand level, shared by all accounts. Run on review submission, not on every draft save. Manual checks remain available when automatic checks are off. |
+| Approval | Preserve original AI reports separately from individual human dispositions. Incomplete checks cannot be labeled AI-passed. Final human approval is mandatory and tied to the exact delivery version. |
+| Media | Create copy and scripts in the workspace. Produce images and finished videos externally, register local references, and review them manually. Script review is not finished-media review. |
+| Learning | Publish and record actual results manually; use AI for retrospectives. Missing data stays missing. Durable operational knowledge requires human adoption. |
 
-缺失或变更的本地文件会影响交付校验。未自行保留旧成品时，系统只能追溯审核记录，不能恢复旧文件。预检按内容性质判断，观点、经验和创意不统一要求外部事实引用。
+Missing or changed local files affect delivery validation. If operators do not retain an older media file, Loretide can retain its review record but cannot restore the file. Opinions, experiences, and creative content are not universally required to have external factual citations.
 
-首版面向中国平台，公众号、小红书、抖音和视频号为初始模板建议。平台直连发布、自动剪辑、媒体自动生成、自由 DAG 画布和独立人设管理不在首版交付范围。
+The product targets Chinese platforms. WeChat Official Accounts, Xiaohongshu, Douyin, and WeChat Channels are suggested initial templates. Direct platform publishing, automatic editing or media generation, arbitrary DAG canvases, and independent persona management are outside the first release.
 
-## 技术路线与测试入口
+## Architecture and testing
 
-以 **Multica** 为源码底座：Next.js / React / TypeScript Web、Go API 与本机 daemon、PostgreSQL。核心内容模块使用原生页面和服务；Skill 提供工作方法，后端负责权限、数据状态和人工审核门禁，插件是可选辅助。
+Use **Multica** as the source-code foundation: Next.js / React / TypeScript for the web workspace, Go for the API and local daemon, and PostgreSQL. Core content features use native pages and services. Skills guide AI work; the backend enforces authorization, state, and human approval. Plugins are optional helpers.
 
-执行架构支持可替换的 Agent 与 API 路径，目标包括 Pi、OpenCode、Codex、Claude Code、Hermes、Gemini 和 API，具体能力逐项验收。上述列表不是当前已经全部接通的声明。OpenClaw 不作为交付依赖。
+The execution architecture is replaceable, targeting Pi, OpenCode, Codex, Claude Code, Hermes, Gemini, and API paths. Each path requires separate validation; this is not a claim that they are already connected. OpenClaw is excluded from the delivered dependency chain.
 
-首条真实联调先用本机 Codex；联网优先复用经实测可用的搜索/网页读取能力，暂不增加付费搜索或社媒采集服务。当前聊天可联网不代表 daemon 中的客户端已完成验证。
+The first real integration path uses local Codex. Prefer its search and page-reading capabilities once verified in that execution environment; do not initially add paid search or social-media collection services. Tools available in a chat session do not prove daemon integration works.
 
-**浏览器是日常主测试入口**，无需同时调试桌面窗口。先建立便于定位问题的独立本机开发实例，随后验证远程服务与本机 daemon 的配对、断线和恢复。具体实例拓扑、端口、客户端能力与安全边界在实施时核验。
+**The browser is the primary daily testing entry point.** A desktop window is not required alongside it. Start with an isolated local development instance for debugging, then validate pairing, disconnection, and recovery between remote services and the local daemon. Verify actual topology, ports, client capabilities, and isolation during implementation.
 
-## 当前交付状态
+## Delivery status
 
-| 项目 | 状态 |
+| Item | Status |
 |---|---|
-| 工作流、PRD、技术方案、验收、Grilling 汇总 | 已整理，开发基线 v0.6.0 |
-| 开发工作包 | 已列 W-01～W-09；尚未全部拆为可执行任务 |
-| Git / GitHub | 本文档仓库已建立，私有，main 分支 |
-| Multica 和两个审核上游 | 已有本地固定版本；仓库收录来源/哈希，审核 Skill A 原始快照纳入 vendor |
-| 正式应用工程与数据库 | 尚未建立 |
-| 审核能力合并、默认 Skill 加载、Go 门禁 | 尚未实现 |
-| 浏览器应用、真实 Agent、远程恢复验收 | 尚未执行 |
+| Workflow, PRD, technical design, acceptance, and decision summary | Documented at baseline v0.6.0 |
+| Work packages | W-01 through W-09 listed; not all split into executable tasks yet |
+| Git / GitHub | Private documentation repository on `main` |
+| Multica and both review upstreams | Pinned local sources; provenance and hashes recorded; review Skill A snapshot included under vendor |
+| Application implementation and database | Not created |
+| Merged review capability, default Skill loading, and Go approval enforcement | Not implemented |
+| Browser application, real Agent, and remote recovery acceptance | Not run |
 
-本仓库目前没有应用启动命令，不能通过安装 vendor 依赖得到完整工作台。下一实施项是 W-01 独立开发实例；实施前将近期工作包拆为有依赖、交付物和验收标准的任务。
+There is no application startup command in this repository yet. Installing vendor dependencies does not produce the complete workspace. The next implementation package is W-01, an isolated development instance; first break near-term packages into tasks with dependencies, deliverables, and acceptance criteria.
 
-## 文档与来源索引
+## Documentation and upstreams
 
-| 入口 | 用途 |
+| Link | Purpose |
 |---|---|
-| [07 隔离与可替换 AI](docs/07-隔离工作空间与可替换AI执行架构.md) | 品牌/账号数据边界、执行器与凭据隔离 |
-| [08 Multica 源码研究](docs/08-Multica源码研究与小改可行性.md) | 固定提交的能力、许可及实现差距 |
-| [09 模块映射](docs/09-Multica二次开发决策与模块映射.md) | 上游复用、原生新增、Skill 与插件职责 |
-| [10 审核内核计划](docs/10-审核内核合并与精简计划.md) | 两份审核上游的能力合并、数据契约和评估 |
-| [Grilling 记录](records/2026-09-12-Grilling需求追问记录.md) | 决策历史及纠正，不代替最新开发基线 |
-| [v0.6 整理记录](records/2026-09-12-v06开发基线收口记录.md) | 文档关联、清理范围与验证 |
-| [Git 初始化记录](records/2026-09-13-Git初始化与GitHub同步记录.md) | 仓库边界、提交及同步证据 |
-| [来源锁定清单](research/upstreams.lock.json) / [Skill 锁文件](vendor/skills.lock.json) | 上游提交、文件位置和哈希 |
-| [vendor 接入约定](vendor/README.md) | 原始源码、运行装配和授权边界 |
+| [07 Isolation and replaceable AI](docs/07-隔离工作空间与可替换AI执行架构.md) | Brand/account boundaries, execution and credential isolation |
+| [08 Multica source research](docs/08-Multica源码研究与小改可行性.md) | Capabilities, licensing, and gaps at the pinned commit |
+| [09 Module mapping](docs/09-Multica二次开发决策与模块映射.md) | Reuse, native additions, Skills, and plugins |
+| [10 Review kernel plan](docs/10-审核内核合并与精简计划.md) | Combining review capabilities, contracts, and evaluation |
+| [Grilling record](records/2026-09-12-Grilling需求追问记录.md) | Decision history and corrections |
+| [v0.6 consolidation record](records/2026-09-12-v06开发基线收口记录.md) | File relationships, cleanup, and validation |
+| [Git initialization record](records/2026-09-13-Git初始化与GitHub同步记录.md) | Repository boundaries and synchronization evidence |
+| [Upstream manifest](research/upstreams.lock.json) / [Skill lock](vendor/skills.lock.json) | Commits, paths, and file hashes |
+| [Vendor integration notes](vendor/README.md) | Source preservation, runtime loading, and authorization |
 
-固定研究基准：
+Pinned research sources:
 
-- [Multica](https://github.com/multica-ai/multica/tree/3551e72e76d2c276e550b668303646d1280fb1e2)：本地 research checkout，不纳入本仓库。
-- [self-media-compliance-review](vendor/skills/self-media-compliance-review/SKILL.md)：固定提交 `9a1a530a6840280ed5726aa9a5073b2f7dc8a125`，55 文件原始快照纳入 vendor，保留原始许可。
-- [yuwen-publish-precheck](https://github.com/yuwen-cool/yuwen-publish-precheck/tree/44a7b654283726db153591df73cbafe255685f33)：固定提交的 33 文件本地 checkout，不纳入本仓库，文件哈希见来源清单。
+- [Multica](https://github.com/multica-ai/multica/tree/3551e72e76d2c276e550b668303646d1280fb1e2): a local research checkout, excluded from this repository.
+- [self-media-compliance-review](vendor/skills/self-media-compliance-review/SKILL.md): commit `9a1a530a6840280ed5726aa9a5073b2f7dc8a125`; 55 original files included under vendor with their license.
+- [yuwen-publish-precheck](https://github.com/yuwen-cool/yuwen-publish-precheck/tree/44a7b654283726db153591df73cbafe255685f33): 33 files in a separate pinned local checkout; hashes recorded in the upstream manifest.
 
-部分技术研究中的本机路径和代码行链接供原工作区核对，在 GitHub 上应使用上述固定提交查看上游。00、05、06 文档保留历史调研，Easel/Hermes 的旧工程映射已被 Multica 路线替代。
+Some research documents contain local paths and source-line links intended for the original workspace. On GitHub, use the pinned upstream commits above. Documents 00, 05, and 06 retain historical research; Multica supersedes the earlier Easel/Hermes implementation mapping.
 
-## 仓库管理
+## Repository conventions
 
-本仓库管理开发文档、项目记录、来源清单及 vendor 依赖；研究 checkout 和未来正式应用工程保持独立。素材、成片、数据库、凭据、缓存、整理前目录备份与一次性编辑脚本不纳入 Git，见 [.gitignore](.gitignore)。
+This repository tracks development documents, project records, provenance, and vendor dependencies. Research checkouts and the future application remain separate. Materials, finished media, databases, credentials, caches, pre-edit folder backups, and one-off editing scripts are excluded; see [.gitignore](.gitignore).
 
-贡献或接手前阅读 [AGENTS.md](AGENTS.md)，每次变更记录对应文件与用途。原需求/验收 ID 保持可追踪，功能状态须有实际验证证据。vendor 文件保持原始字节，升级使用明确固定提交并重新核验。
+Read [AGENTS.md](AGENTS.md) before contributing or taking over. Record each change and its related files, preserve requirement and acceptance IDs, and support completion claims with actual evidence. Preserve vendor bytes; upgrades must use explicit pinned commits and renewed verification.
 
-本仓库未为项目自有内容声明开源许可证。上游许可按各自文件和研究记录处理，私有存储不等于获得对外托管、改品牌或再分发授权。
+No open-source license has been declared for this project's own content. Upstream licenses are handled separately. Private storage does not grant public-hosting, rebranding, or redistribution rights.
