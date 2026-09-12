@@ -16,7 +16,7 @@ Documentation baseline: v0.6.0 · Updated: 2026-09-13
 
 ## Start here
 
-**Development tasks:** [Implementation plan](tasks/plan.md) · [Task checklist](tasks/todo.md). W-01–W-03 are split into 24 tasks, followed by 6 phase-level items and 9 checkpoints. All application tasks are pending; start with LT-001.
+**Development tasks:** [Implementation plan](tasks/plan.md) · [Task checklist](tasks/todo.md). W-01–W-03 are split into 24 tasks, plus [2 architecture prerequisites](tasks/architecture.md), followed by 6 phase-level items and 9 checkpoints. All application tasks are pending; start with LT-001.
 
 The detailed development documents are currently in Chinese.
 
@@ -125,3 +125,7 @@ This repository tracks development documents, project records, provenance, and v
 Read [AGENTS.md](AGENTS.md) before contributing or taking over. Record each change and its related files, preserve requirement and acceptance IDs, and support completion claims with actual evidence. Preserve vendor bytes; upgrades must use explicit pinned commits and renewed verification.
 
 No open-source license has been declared for this project's own content. Upstream licenses are handled separately. Private storage does not grant public-hosting, rebranding, or redistribution rights.
+
+## Modular boundaries
+
+The planned implementation is a modular monolith with explicit data ownership and public interfaces. See [module boundaries and regression rules](docs/12-模块边界与变更回归约束.md). Dependency checks, consumer contract tests, and critical workflow regression are required; these protections are not implemented yet.
