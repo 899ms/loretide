@@ -16,7 +16,7 @@ Documentation baseline: v0.6.0 · Updated: 2026-09-13
 
 ## Start here
 
-**Development tasks:** [Implementation plan](tasks/plan.md) · [Task checklist](tasks/todo.md). W-01–W-03 are split into 24 tasks, plus [2 architecture prerequisites](tasks/architecture.md), followed by 6 phase-level items and 9 checkpoints. All application tasks are pending; start with LT-001.
+**Development tasks:** [Implementation plan](tasks/plan.md) · [Task checklist](tasks/todo.md). W-01–W-03 are split into 24 tasks, plus [2 architecture prerequisites](tasks/architecture.md), followed by 6 phase-level items and 9 checkpoints. There are also [13 mandatory early diagnostics tasks](tasks/diagnostics.md) and a diagnostics gate before LT-009. All application tasks are pending; start with LT-001.
 
 The detailed development documents are currently in Chinese.
 
@@ -129,3 +129,7 @@ No open-source license has been declared for this project's own content. Upstrea
 ## Modular boundaries
 
 The planned implementation is a modular monolith with explicit data ownership and public interfaces. See [module boundaries and regression rules](docs/12-模块边界与变更回归约束.md). Dependency checks, consumer contract tests, and critical workflow regression are required; these protections are not implemented yet.
+
+## Full diagnostics from the start
+
+[Diagnostics specification](docs/13-完整开发诊断与操作日志需求.md) covers operation audit logs, technical errors/logs, cross-layer traces, a browser diagnostics panel, input snapshots, reproducible simulated failures, and regression results. All capabilities are required early, not a reduced version. Subsequent features must ship their instrumentation and tests together. This is planned work, not an implemented monitoring system.
