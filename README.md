@@ -16,6 +16,8 @@ Documentation baseline: v0.6.0 · Updated: 2026-09-13
 
 ## Start here
 
+**Development tasks:** [Implementation plan](tasks/plan.md) · [Task checklist](tasks/todo.md). W-01–W-03 are split into 24 tasks, followed by 6 phase-level items and 9 checkpoints. All application tasks are pending; start with LT-001.
+
 The detailed development documents are currently in Chinese.
 
 1. [Development baseline and implementation checklist](docs/11-首版开发基线与实施清单.md): confirmed decisions, W-01 through W-09, dependencies, and acceptance criteria.
@@ -85,14 +87,14 @@ The first real integration path uses local Codex. Prefer its search and page-rea
 | Item | Status |
 |---|---|
 | Workflow, PRD, technical design, acceptance, and decision summary | Documented at baseline v0.6.0 |
-| Work packages | W-01 through W-09 listed; not all split into executable tasks yet |
+| Work packages | W-01–W-03 split into 24 tasks; W-04–W-09 retained as 6 phase items; all pending |
 | Git / GitHub | Private documentation repository on `main` |
 | Multica and both review upstreams | Pinned local sources; provenance and hashes recorded; review Skill A snapshot included under vendor |
 | Application implementation and database | Not created |
 | Merged review capability, default Skill loading, and Go approval enforcement | Not implemented |
 | Browser application, real Agent, and remote recovery acceptance | Not run |
 
-There is no application startup command in this repository yet. Installing vendor dependencies does not produce the complete workspace. The next implementation package is W-01, an isolated development instance; first break near-term packages into tasks with dependencies, deliverables, and acceptance criteria.
+There is no application startup command in this repository yet. Installing vendor dependencies does not produce the complete workspace. The next executable task is LT-001: establish the isolated application checkout and Git boundary. Near-term tasks now include dependencies, deliverables, and acceptance criteria.
 
 ## Documentation and upstreams
 
