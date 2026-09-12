@@ -1,0 +1,42 @@
+{
+  "product": {
+    "url": "https://fxg.jinritemai.com/product/example-123456",
+    "title": "XX品牌 补水保湿面霜 50g 清爽型",
+    "brand": "XX品牌",
+    "skus": [
+      {"name": "清爽型 50g", "price": "129.00", "spec": {"净含量": "50g", "类型": "清爽型"}},
+      {"name": "滋润型 50g", "price": "129.00", "spec": {"净含量": "50g", "类型": "滋润型"}}
+    ],
+    "current_price": "129.00",
+    "original_price": "259.00",
+    "gifts": ["试用装5g×2"],
+    "activity_rules": "满2件减20元，活动时间2026-08-01至2026-08-31",
+    "activity_deadline": "2026-08-31",
+    "category": "化妆品/护肤品/面霜",
+    "captured_at": "2026-08-10T15:30:00+08:00"
+  },
+  "video_claims_consistent": {
+    "source": "原创拍摄",
+    "brand_mentioned": "XX品牌",
+    "style_color_mentioned": "清爽型 50g",
+    "specs_mentioned": {"净含量": "50g", "类型": "清爽型"},
+    "price_mentioned": "129",
+    "gifts_mentioned": ["试用装5g×2"],
+    "activity_mentioned": "满2件减20",
+    "deadline_mentioned": "2026-08-31",
+    "efficacy_claims": [],
+    "data_claims": []
+  },
+  "video_claims_inconsistent": {
+    "source": "原创拍摄",
+    "brand_mentioned": "YY品牌",
+    "style_color_mentioned": "滋润型 100g",
+    "specs_mentioned": {"净含量": "100g", "类型": "滋润型"},
+    "price_mentioned": "99",
+    "gifts_mentioned": ["送面膜5片", "免费加赠精华液"],
+    "activity_mentioned": "限时特价",
+    "deadline_mentioned": "最后一天",
+    "efficacy_claims": ["7天美白", "根治敏感肌", "比大牌好用10倍", "医生推荐"],
+    "data_claims": ["已售100万+件", "好评率99.9%"]
+  }
+}

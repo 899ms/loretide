@@ -1,0 +1,293 @@
+{
+  "schema_version": 1,
+  "skills": [
+    {
+      "name": "self-media-compliance-review",
+      "source": "https://github.com/JuneYaooo/self-media-compliance-review",
+      "ref": "9a1a530a6840280ed5726aa9a5073b2f7dc8a125",
+      "path": "skills/self-media-compliance-review",
+      "license": "MIT",
+      "installation_scope": "project-vendor",
+      "bundled_default_intent": true,
+      "application_loader_implemented": false,
+      "automatic_updates": false,
+      "files": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "bytes": 980,
+          "sha256": "ea0c4bce303f954db58852f8ac74044b4a9ced5457113f1f02bd35b97d8247f1"
+        },
+        {
+          "path": ".gitignore",
+          "bytes": 159,
+          "sha256": "77d27f2835acd499e0fdd44bb2344e9861cadec0ce735c7ea8e1fcb67c5b24f8"
+        },
+        {
+          "path": "agents/openai.yaml",
+          "bytes": 776,
+          "sha256": "a96148ff605f1ba551776918b3e9a66037539bee69c50a86ba5806f26a24ec9d"
+        },
+        {
+          "path": "docs/sources.md",
+          "bytes": 8128,
+          "sha256": "660e9c68fa19533c7672ba591f212d0b0df586867feeddb5734fd180009dc008"
+        },
+        {
+          "path": "LICENSE",
+          "bytes": 1056,
+          "sha256": "1126322e2cc8d165adc4c792eeb195717de2bcc7b39be1ce77959d78e87ef685"
+        },
+        {
+          "path": "pyproject.toml",
+          "bytes": 45,
+          "sha256": "16713d02c4751fb02221a274d20fe9f3be7ffaffd1a3031af82cd37f3a6456f3"
+        },
+        {
+          "path": "README.md",
+          "bytes": 16492,
+          "sha256": "fd3ab26a68f4f8a32a57483eef4d1c37e286ee32e10b51aeb02b3e783fd4c222"
+        },
+        {
+          "path": "references/bilibili.md",
+          "bytes": 8663,
+          "sha256": "bc37f36944bfae48b0e304fc69dd348c0fbe2b79c3787634293fc398de55a77a"
+        },
+        {
+          "path": "references/cases/bilibili.md",
+          "bytes": 17094,
+          "sha256": "8684e8cf023c6dc4755da590aa5686d75654f9789f235df360be4329e39907d2"
+        },
+        {
+          "path": "references/cases/douyin.md",
+          "bytes": 26203,
+          "sha256": "e4f894626da2466056ef31c75a22e5a51465664625039b024cbebdd2a7b896c5"
+        },
+        {
+          "path": "references/cases/ecommerce-cases.md",
+          "bytes": 8425,
+          "sha256": "d950fa3276a5821b054e774f013bbdc8c3ecb44ae0c635bcf2c4202bd8611780"
+        },
+        {
+          "path": "references/cases/kuaishou.md",
+          "bytes": 20506,
+          "sha256": "64cc77326ae4b7530d00e9ffee3f9df5dacda2b241b16b48fa1952e5bc8f42a2"
+        },
+        {
+          "path": "references/cases/wechat-channels.md",
+          "bytes": 14398,
+          "sha256": "696b74891f13344ddf91367f5d064d66a73aef0d69c3ba5af503b3ad85403e50"
+        },
+        {
+          "path": "references/cases/wechat-official-account.md",
+          "bytes": 16778,
+          "sha256": "2436e7ad68340e3cc7bbdf8c4b5970f0abb63c2da81dbb470ca5501126ba5f25"
+        },
+        {
+          "path": "references/cases/xiaohongshu.md",
+          "bytes": 124005,
+          "sha256": "4a6849285a0580b8f85583e2fd2030ff94ec99c5d97c5235489f241167a83aaa"
+        },
+        {
+          "path": "references/douyin-ecommerce.md",
+          "bytes": 8256,
+          "sha256": "c3e1ac6e0e6dca7767af190cb8bad7bf0965ffc43226dfbe9e1c7d8f8c9f4138"
+        },
+        {
+          "path": "references/douyin.md",
+          "bytes": 8377,
+          "sha256": "dc8c2915eefa0e94981cf869e9166cdcaa953cce8ab90ea1be914263e871a53d"
+        },
+        {
+          "path": "references/ecommerce-claims.md",
+          "bytes": 6235,
+          "sha256": "da60b1d34fa8146233f0e64e77e768f34a0d534ec7284470d7ed57d76eb8b563"
+        },
+        {
+          "path": "references/ecommerce-workflow.md",
+          "bytes": 3565,
+          "sha256": "3ab1d8d2e43d79f4b152b9c21983ee3ffb6a4f37fed0023bf7734b26e0a35e1d"
+        },
+        {
+          "path": "references/kuaishou.md",
+          "bytes": 7575,
+          "sha256": "d6c5b767476e3773baf9610d37603d30810fdb9b5119c10d923f89cf46dbc530"
+        },
+        {
+          "path": "references/live-evidence-workflow.md",
+          "bytes": 2402,
+          "sha256": "74471c62a3abcb5e5265718811f74b3f3cfad2a14fc3571d9a8e502a70ee14ab"
+        },
+        {
+          "path": "references/qianchuan-low-quality.md",
+          "bytes": 7134,
+          "sha256": "0dd0ff385e04cf482c77cee2b08f209469f0441f85cfc63aa4467812c9f91b7b"
+        },
+        {
+          "path": "references/recent-cases-2025-2026.md",
+          "bytes": 11479,
+          "sha256": "e297c62e9b133a027567617e2feea532c5f3374852de21efb1617088234f831e"
+        },
+        {
+          "path": "references/report-schema.md",
+          "bytes": 1830,
+          "sha256": "300f0e1347cf6c6887b25d5b15e8fa0538157e687fcb64e0e31dad8ed743fd13"
+        },
+        {
+          "path": "references/video-evidence-integrity.md",
+          "bytes": 7646,
+          "sha256": "5af2aaeb5caefa5400dd5d0794fa98afcf5544b81defc95a41542f5e3fee2224"
+        },
+        {
+          "path": "references/video-review-workflow.md",
+          "bytes": 3575,
+          "sha256": "c97cf621c7fd6ad17a9bc76120eade08cb5e8378ff932f915acd440a44292ed4"
+        },
+        {
+          "path": "references/wechat-channels.md",
+          "bytes": 18375,
+          "sha256": "61d16dcff321f3b150cf2efecc7452f227fbe131a63a76606789485f69afdafe"
+        },
+        {
+          "path": "references/wechat-official-account.md",
+          "bytes": 13655,
+          "sha256": "feff901280f53bd532af7d03edb7528e4b02174c59cd432ae91d290878519fc7"
+        },
+        {
+          "path": "references/xiaohongshu.md",
+          "bytes": 11535,
+          "sha256": "fc34ecc19881e72718dcf4b3e24c32f8b76e3ea57b1198b4861a1171d0ead30c"
+        },
+        {
+          "path": "schemas/compliance-report.schema.json",
+          "bytes": 1394,
+          "sha256": "420124276c7e1274dedb09be13bfd5312598ff73022826251e024ca8d5864931"
+        },
+        {
+          "path": "schemas/product-consistency.schema.json",
+          "bytes": 1018,
+          "sha256": "282bc3ac95e9e84fd0b8811a2b30c11eb89725f407ff87f7b802367c8d44ef86"
+        },
+        {
+          "path": "schemas/video-evidence-manifest.schema.json",
+          "bytes": 1436,
+          "sha256": "3c29ee276531c743b9dceb8e69a19ce42377eae0da6b1941255f60dd41c56132"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 9827,
+          "sha256": "2c911beb14400f4131aa5f0478cd282db3d848cb7154ae5d3858be101415e215"
+        },
+        {
+          "path": "tests/fixtures/product_mismatch.json",
+          "bytes": 1681,
+          "sha256": "72d63a1fd701865825bb8249e7b2305665bb257e69dcb7d23a62d34f297e28c2"
+        },
+        {
+          "path": "tests/fixtures/xhs_app_search_notes.json",
+          "bytes": 750,
+          "sha256": "af8b9aa4ae9afa8873cc3fca6bebd82e34e99ad5538076d326673de9eaf45b03"
+        },
+        {
+          "path": "tests/fixtures/xhs_note_comments.json",
+          "bytes": 796,
+          "sha256": "e00ca75d5ffaff35e48a7c2c0e4a6c65c600e714591609a1dfc3f5ca5fad13ef"
+        },
+        {
+          "path": "tests/fixtures/xhs_search_notes.json",
+          "bytes": 1209,
+          "sha256": "f5e3ed1da4d2423c2c05d5c665d475218c8243db7f8524679c46861c862c5493"
+        },
+        {
+          "path": "tests/test_analyze_video.py",
+          "bytes": 3216,
+          "sha256": "5bcee571dd87f469ff8e075422dd53e1e71cd5d5517fed5850fff812c0b0aea2"
+        },
+        {
+          "path": "tests/test_ecommerce_rules.py",
+          "bytes": 9022,
+          "sha256": "546665f3ed869f514c8d60ac313d0534dc96207a220a9d2358ddfb020ca87403"
+        },
+        {
+          "path": "tests/test_schemas.py",
+          "bytes": 687,
+          "sha256": "4a938bd7a6056346338975c7b85436d6b77b3b427fc062d5f63796a1de9ff1a5"
+        },
+        {
+          "path": "tests/test_search_local_evidence.py",
+          "bytes": 2189,
+          "sha256": "b4f3c56b9b3cf8ba31c6cadefdc07c09fe6779dcb0a1e50f88d0fd5dc24be66d"
+        },
+        {
+          "path": "tests/test_skill_layout.py",
+          "bytes": 3489,
+          "sha256": "33a3347f17ea2dc0632072aa7f3da295c36580b14ab0a03ffceb74afc5e3fc9e"
+        },
+        {
+          "path": "tests/test_tikhub_client.py",
+          "bytes": 1330,
+          "sha256": "24683d4cb9d8a602f316180d7d7ffd26280bc18d503e860c3aadaf0dac55edd0"
+        },
+        {
+          "path": "tests/test_tikhub_rest.py",
+          "bytes": 6403,
+          "sha256": "c2a9a1e934c50932ef0ee3e01bd629e132f17ebd695c17f4da5419d7dd25d774"
+        },
+        {
+          "path": "tests/test_xhs_dynamic_evidence.py",
+          "bytes": 11394,
+          "sha256": "46f7bef8afa418bbbcfb1dba9cd38753c223272a87a0369075fc0a2f3c78a6df"
+        },
+        {
+          "path": "tools/analyze_video.py",
+          "bytes": 33078,
+          "sha256": "7c9b4cc256ef5e1dc5f6afab1d8bf9489dbffcfebfbe385888940ed770546ec4"
+        },
+        {
+          "path": "tools/compare_product_link.py",
+          "bytes": 19088,
+          "sha256": "1cdffc490fdbcf3eab01a54cb0c4df3cee288007771faf4851d855d4c7e48317"
+        },
+        {
+          "path": "tools/extract_claims.py",
+          "bytes": 10761,
+          "sha256": "b839523cc852578740649077810ee0c926a020ba43e597e4e15165528261ef11"
+        },
+        {
+          "path": "tools/search_local_evidence.py",
+          "bytes": 9969,
+          "sha256": "163f52424794f1e0912590b25033482f2b6c7a1ad156a62c737453f6842a47d3"
+        },
+        {
+          "path": "tools/tikhub/bin/tikhub",
+          "bytes": 5869,
+          "sha256": "afaf4f70295a7a65e199c1ae895c8081afdf2c4a97fc0144f8b473cf924a22b9"
+        },
+        {
+          "path": "tools/tikhub/lib/tikhub_client.py",
+          "bytes": 8872,
+          "sha256": "fa5622ff44ad3bef925f7f8393819d34baf980726b8e409dbcd0190d6a581522"
+        },
+        {
+          "path": "tools/tikhub/references/tools-douyin.json",
+          "bytes": 352629,
+          "sha256": "e6af1ca5f46507bd8cecb66205d1c8653a12ec8dd3f4933f862af9ce4d336b06"
+        },
+        {
+          "path": "tools/tikhub/references/tools-xiaohongshu.json",
+          "bytes": 40044,
+          "sha256": "8ee070c00aced5dd184d5fb34403fce42e7eaa63e162c4e175afdc612935b844"
+        },
+        {
+          "path": "tools/tikhub/scripts/refresh_tools.py",
+          "bytes": 5645,
+          "sha256": "f85b17feb22d10e1a2424fcf120bdaf6988c48c37de062c74d6847c9359f2a74"
+        },
+        {
+          "path": "tools/xhs_dynamic_evidence.py",
+          "bytes": 14525,
+          "sha256": "5628f2d263666b8cedae7f33e99d87ed1cf754298731d51d906bbf1f51a0919b"
+        }
+      ]
+    }
+  ]
+}

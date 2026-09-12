@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-09-12",
+  "sources": [
+    {
+      "repository": "https://github.com/JuneYaooo/self-media-compliance-review",
+      "commit": "9a1a530a6840280ed5726aa9a5073b2f7dc8a125",
+      "path": "vendor/skills/self-media-compliance-review",
+      "kind": "source_snapshot",
+      "file_manifest": "vendor/skills.lock.json",
+      "installed_into_application": false
+    },
+    {
+      "repository": "https://github.com/yuwen-cool/yuwen-publish-precheck",
+      "commit": "44a7b654283726db153591df73cbafe255685f33",
+      "path": "research/yuwen-publish-precheck",
+      "kind": "shallow_git_checkout",
+      "license": "MIT",
+      "installed_into_application": false,
+      "files": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "sha256": "6fcbff65b5b04d8a4f3caae562420d468a62e7b08dba46958f65f106173ba9db",
+          "bytes": 451
+        },
+        {
+          "path": ".gitignore",
+          "sha256": "77dc22b84f8ed2466a75e8e8e18e0dd6a30b1680dcfe03d0a1f76f671a7fb01f",
+          "bytes": 618
+        },
+        {
+          "path": "CHANGELOG.md",
+          "sha256": "0e3e36c2e8e9dfcb7a1ece2394af6395ef2622e97f8d8763395bd10c9721faad",
+          "bytes": 3608
+        },
+        {
+          "path": "CONTRIBUTING.md",
+          "sha256": "67377f18b6838d109f10244f8d5de21bed5ef4964852eccde3dc69e79b933827",
+          "bytes": 2073
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "09bb5a633e6deba11ef2278344d741e6581c97faaa7fea4067832f0cd2742b35",
+          "bytes": 1088
+        },
+        {
+          "path": "MAINTAINING.md",
+          "sha256": "4e25ade4a88db0ebeb546938e89d7fc327f8cdc807f56014bf6ed521ab92af17",
+          "bytes": 4065
+        },
+        {
+          "path": "README.md",
+          "sha256": "baddf3d6ed68f534f853275a5cf8e945dc90ba37ea0ff0a46c9b2625c71db790",
+          "bytes": 8997
+        },
+        {
+          "path": "ROADMAP.md",
+          "sha256": "2c548519c50c28fa5a27494dd1d9f5d3bfd778e66a1a55f05bb299a92dd23d3a",
+          "bytes": 1993
+        },
+        {
+          "path": "SECURITY.md",
+          "sha256": "c17dead7e9c1b50e6fe21a7e8348961c8604ce3e026022abe069f53615d9908a",
+          "bytes": 1556
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "33da4028c8f1b4de9419ecf7c3e1f51c8e953c6cdcc631b304310ae7414c43cb",
+          "bytes": 15794
+        },
+        {
+          "path": "THIRD_PARTY_NOTICES.md",
+          "sha256": "3b8b32d85ff2382b81fa4ddad71732ed16120e1510ffd1cf042eb8f06626974b",
+          "bytes": 653
+        },
+        {
+          "path": "data/README.md",
+          "sha256": "afad7a45911219c67de834afac75d5eeb5bfce83a7d314c35aed77f156bf9c9e",
+          "bytes": 1334
+        },
+        {
+          "path": "data/cases/README.md",
+          "sha256": "9fb24b24687b3291f398308d5fe27f2f74a7730477976ad966d0e74a1d332d35",
+          "bytes": 821
+        },
+        {
+          "path": "data/history/README.md",
+          "sha256": "78e7461f76780e000c411778d12c327349bc8dd8359bb0cda1c9992104192937",
+          "bytes": 327
+        },
+        {
+          "path": "data/wordlists/README.md",
+          "sha256": "3ff28aa52d42cc34f34714b8c6bb233cd5eeef176b180560e0efbfad325fc493",
+          "bytes": 352
+        },
+        {
+          "path": "evals/test_scan.py",
+          "sha256": "ee6906a7cae59fea8df1a1b9b9d641261072b98ffc46f0de70af099bf5986b23",
+          "bytes": 8581
+        },
+        {
+          "path": "evals/trigger_cases.jsonl",
+          "sha256": "4f2e8f91418a44b4a9e575d79b8478b393df2c27f2a12bf255db877362cfb3c6",
+          "bytes": 873
+        },
+        {
+          "path": "references/diagnose.md",
+          "sha256": "f4f7645900bbee692adc6ff120a952b27cdbe0a55fdc2a5594c5a9f38a9198af",
+          "bytes": 3080
+        },
+        {
+          "path": "references/industry-finance.md",
+          "sha256": "493041c0458c6b8795b1ffa90df50119331788e0dbda2fc7216648f4d81d2d36",
+          "bytes": 9922
+        },
+        {
+          "path": "references/industry-medical.md",
+          "sha256": "8040619d5f725156c4f839d3487b38a3e3d6f51824f63e9139a41894b8568773",
+          "bytes": 12407
+        },
+        {
+          "path": "references/judgment.md",
+          "sha256": "b180d23d70041aece42ae1f3e4a800d31ef694358680635270bd1496669cd07f",
+          "bytes": 5401
+        },
+        {
+          "path": "references/platform-douyin.md",
+          "sha256": "cef7085f574ed3e7c1a56abc6301202d035a6041aee4f3a91976083b12a13b99",
+          "bytes": 3162
+        },
+        {
+          "path": "references/platform-shipinhao.md",
+          "sha256": "59c27a9313c5f07b5935146a72eee60c5f650eb3429f9ec1f2fd3336b65a8323",
+          "bytes": 1899
+        },
+        {
+          "path": "references/platform-xiaohongshu.md",
+          "sha256": "ef6a51497d559acda1984a0880ed5b8345bfe9c37532ae5ecf3a4b43338dec35",
+          "bytes": 2000
+        },
+        {
+          "path": "references/repair.md",
+          "sha256": "7140ba73bf121054af5c711d67e18359abacc2130db8440afc320a44e9980f88",
+          "bytes": 5258
+        },
+        {
+          "path": "references/rules-commercial.md",
+          "sha256": "ee9902dba176be5c4e2d8a721754478ad01080bf71e6cc1588e49d1e60f26150",
+          "bytes": 16724
+        },
+        {
+          "path": "references/rules-common.md",
+          "sha256": "da94976230567f3b8135e98f3e125b6265eb6b4ba9970723bd3743a01e3ff238",
+          "bytes": 26030
+        },
+        {
+          "path": "scripts/scan.py",
+          "sha256": "d97e6e1d41b038422d5b1d6d6bc34d02970a7fb6eddb3b972cbaa6a3a2749052",
+          "bytes": 12274
+        },
+        {
+          "path": "scripts/terms.json",
+          "sha256": "0dc22574b9687f3a4973e335bee33c594d60ca44e69eb8c39810a3a78f8672ae",
+          "bytes": 16455
+        },
+        {
+          "path": "templates/expressions.md",
+          "sha256": "9fbb8b31d371f1d8fb70cfe43e3221cd92abb8c478732be271ae9c4d3fec27bb",
+          "bytes": 2302
+        },
+        {
+          "path": "templates/my-rules.md",
+          "sha256": "7a0c443502d5ab5e88d0f91e7fbe14d39e839551190baa98af6904f24521580d",
+          "bytes": 1143
+        },
+        {
+          "path": "templates/profile.md",
+          "sha256": "432df8e16403d3a662ec3ef1dd6efc8d87761b4b0f0013693788ccfe1a6e6d67",
+          "bytes": 661
+        },
+        {
+          "path": "templates/词库示例.md",
+          "sha256": "263bdd8a4a5d0bacb885477675f0690c51fe8f2a38eeb7b9db09aa85ad86f644",
+          "bytes": 505
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+* text=auto
+*.md text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+
+# Preserve vendored bytes so the upstream SHA256 lock remains verifiable.
+vendor/skills/** -text

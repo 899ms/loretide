@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JuneYaooo/self-media-compliance-review/schemas/compliance-report.schema.json",
+  "title": "Self-media compliance report",
+  "type": "object",
+  "required": ["schema_version", "platforms", "risk_level", "findings", "pending_verification", "reviewed_at"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "platforms": {"type": "array", "items": {"type": "string"}},
+    "content_type": {"type": "string"},
+    "content_scope": {"type": "array", "items": {"type": "string"}},
+    "risk_level": {"enum": ["pass", "low", "medium", "high", "blocker"]},
+    "highest_risk": {"type": "string"},
+    "rule_version": {"type": "string"},
+    "coverage": {"type": "object"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "reason", "fix"],
+        "properties": {
+          "severity": {"enum": ["low", "medium", "high", "blocker"]},
+          "rule_id": {"type": "string"},
+          "evidence": {"type": "string"},
+          "reason": {"type": "string"},
+          "fix": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "pending_verification": {"type": "array", "items": {"type": "string"}},
+    "reviewed_at": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": true
+}

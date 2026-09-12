@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""CLI wrapper for TikHub's direct REST API endpoints."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent / "lib"))
+
+from tikhub_client import TikhubClient, TikhubError, health, platforms  # noqa: E402
+
+REFERENCES_DIR = HERE.parent / "references"
+SUPPORTED_PLATFORMS = tuple(platforms())
+
+
+def _die(message: str, code: int = 1) -> None:
+    print(json.dumps({"error": message}, ensure_ascii=False), file=sys.stderr)
+    raise SystemExit(code)
+
+
+def _print_json(value) -> None:
+    print(json.dumps(value, ensure_ascii=False, indent=2))
+
+
+def _coerce_value(raw: str):
+    low = raw.lower()
+    if low == "true":
+        return True
+    if low == "false":
+        return False
+    if low in ("null", "none"):
+        return None
+    return raw
+
+
+def _apply_type_tag(key: str, raw: str):
+    if ":" not in key:
+        return key, _coerce_value(raw)
+    name, tag = key.split(":", 1)
+    try:
+        if tag == "int":
+            return name, int(raw)
+        if tag == "float":
+            return name, float(raw)
+        if tag == "bool":
+            return name, raw.lower() in ("true", "1", "yes", "on")
+        if tag == "str":
+            return name, raw
+    except ValueError:
+        _die(f"--{key}: cannot parse {raw!r} as {tag}")
+    _die(f"--{key}: unknown type tag {tag!r} (use int/float/bool/str)")
+
+
+def _parse_kwargs(extras: list[str]) -> dict:
+    out: dict = {}
+    index = 0
+    while index < len(extras):
+        token = extras[index]
+        if not token.startswith("--"):
+            _die(f"unexpected positional arg: {token!r}")
+        key = token[2:]
+        if "=" in key:
+            raw_key, raw_value = key.split("=", 1)
+            name, value = _apply_type_tag(raw_key, raw_value)
+            out[name] = value
+            index += 1
+            continue
+        if index + 1 >= len(extras) or extras[index + 1].startswith("--"):
+            name, _value = _apply_type_tag(key, "")
+            out[name] = True
+            index += 1
+        else:
+            name, value = _apply_type_tag(key, extras[index + 1])
+            out[name] = value
+            index += 2
+    return out
+
+
+def _load_cached_tools(platform: str) -> list[dict] | None:
+    path = REFERENCES_DIR / f"tools-{platform}.json"
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, list) else None
+
+
+def _cmd_list(platform: str, substring: str | None) -> None:
+    tools = _load_cached_tools(platform)
+    if tools is None:
+        _die(
+            f"no cached REST catalog for {platform!r}. Run: "
+            f"python3 {HERE.parent}/scripts/refresh_tools.py {platform}"
+        )
+    if substring:
+        needle = substring.lower()
+        tools = [tool for tool in tools if needle in tool["name"].lower()]
+    print(f"# {platform} - {len(tools)} REST endpoint(s)")
+    for tool in tools:
+        description = (tool.get("description") or "").splitlines()[0][:90]
+        print(f"  {tool['name']:<60s}  {description}")
+
+
+def _cmd_describe(platform: str, tool_name: str) -> None:
+    tools = _load_cached_tools(platform)
+    if tools is None:
+        _die(f"no cached REST catalog for {platform!r}")
+    for tool in tools:
+        if tool.get("name") == tool_name:
+            _print_json(tool)
+            return
+    _die(f"REST endpoint {tool_name!r} not found in {platform} catalog")
+
+
+def _cmd_call(platform: str, tool_name: str, args: argparse.Namespace, extras: list[str]) -> None:
+    if args.json:
+        try:
+            arguments = json.loads(args.json)
+        except json.JSONDecodeError as exc:
+            _die(f"--json parse error: {exc}")
+        if not isinstance(arguments, dict):
+            _die("--json must be an object")
+    else:
+        arguments = _parse_kwargs(extras)
+    try:
+        result = TikhubClient(platform=platform).call(tool_name, arguments)
+    except TikhubError as exc:
+        _die(str(exc), code=2)
+    _print_json(result) if isinstance(result, (dict, list)) else print(result)
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        prog="tikhub",
+        description="CLI wrapper for TikHub direct REST API endpoints (no MCP).",
+        allow_abbrev=False,
+    )
+    parser.add_argument("--health", action="store_true")
+    parser.add_argument("--platforms", action="store_true")
+    parser.add_argument("--json", help="raw JSON arguments object")
+    parser.add_argument("positional", nargs="*")
+    args, extras = parser.parse_known_args(argv)
+
+    if args.health:
+        try:
+            _print_json(health())
+        except TikhubError as exc:
+            _die(str(exc), code=2)
+        return
+    if args.platforms:
+        _print_json(platforms())
+        return
+    if not args.positional:
+        parser.print_help(sys.stderr)
+        raise SystemExit(1)
+
+    head = args.positional[0]
+    if head == "list":
+        if len(args.positional) < 2:
+            _die("usage: tikhub list <platform> [substring]")
+        _cmd_list(args.positional[1], args.positional[2] if len(args.positional) >= 3 else None)
+        return
+    if head == "describe":
+        if len(args.positional) != 3:
+            _die("usage: tikhub describe <platform> <endpoint_name>")
+        _cmd_describe(args.positional[1], args.positional[2])
+        return
+    if head not in SUPPORTED_PLATFORMS:
+        _die(f"unknown platform {head!r}. Supported: {', '.join(SUPPORTED_PLATFORMS)}")
+    if len(args.positional) < 2:
+        _die(f"usage: tikhub {head} <endpoint_name> [--key value ...]")
+    _cmd_call(head, args.positional[1], args, extras)
+
+
+if __name__ == "__main__":
+    main()

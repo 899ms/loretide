@@ -1,0 +1,7 @@
+PASS: 10 updated documents local links and fences (line anchors supported)
+PASS: A 55 files; B 33 files; SHA256 manifests
+PASS: clean checkout and fsck research/multica
+PASS: clean checkout and fsck research/yuwen-publish-precheck
+PASS: attachment and project copy byte-identical
+PASS: 55 R requirements, 65 baseline AC, 11 D11 checks
+NOT RUN: application/browser/model/remote daemon tests

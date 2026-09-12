@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JuneYaooo/self-media-compliance-review/schemas/video-evidence-manifest.schema.json",
+  "title": "Video compliance evidence manifest",
+  "type": "object",
+  "required": ["schema_version", "analysis_type", "generated_at", "source", "metadata", "coverage", "evidence", "pending_verification", "verdict"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "analysis_type": {"const": "video_compliance_evidence"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "target_platforms": {"type": "array", "items": {"type": "string"}},
+    "source": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "metadata": {"type": "object"},
+    "coverage": {"type": "object"},
+    "evidence": {"type": "object"},
+    "technical_signals": {"type": "object"},
+    "text_precheck": {"type": "object"},
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "pending_verification": {"type": "array", "items": {"type": "string"}},
+    "verdict": {
+      "type": "object",
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {"const": "not_assigned"},
+        "reason": {"type": "string"}
+      }
+    }
+  },
+  "additionalProperties": true
+}

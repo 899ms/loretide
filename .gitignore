@@ -1,0 +1,40 @@
+# Keep the documentation repository separate from research/application checkouts.
+/research/*
+!/research/upstreams.lock.json
+/app/
+/apps/
+
+# Local pre-edit copies and one-off migration scripts.
+/records/*更新前文档/
+/records/*整理前文档/
+/records/*.py
+
+# Credentials, runtime state, dependencies and personal content.
+.env
+.env.*
+!.env.example
+auth.json
+credentials.json
+*.pem
+*.key
+*.p12
+*.pfx
+node_modules/
+.venv/
+__pycache__/
+.next/
+dist/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+/data/
+/storage/
+/uploads/
+/materials/
+/media/
+/素材/
+/成片/
+/工作/
+Thumbs.db
+.DS_Store

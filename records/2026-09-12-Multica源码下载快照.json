@@ -1,0 +1,16 @@
+{
+  "recorded_at": "2026-09-12T19:55:06.8547026+08:00",
+  "repository": "https://github.com/multica-ai/multica.git",
+  "commit": "3551e72e76d2c276e550b668303646d1280fb1e2",
+  "directory": "F:\\GJ\\内容创作工作台\\research\\multica",
+  "shallow": true,
+  "tracked_file_count": 5631,
+  "working_tree": "clean",
+  "git_connectivity": "passed",
+  "license_sha256": "7505297A2A4BF866354D482699DB44EF8B50E8893674E674C5844D3F75DA4464",
+  "dependencies_installed": false,
+  "application_started": false,
+  "agent_calls": 0,
+  "tests_run": [],
+  "review_type": "targeted static source review"
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JuneYaooo/self-media-compliance-review/schemas/product-consistency.schema.json",
+  "title": "Product consistency report",
+  "type": "object",
+  "required": ["schema_version", "product_url", "captured_at", "comparisons"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "product_url": {"type": "string"},
+    "captured_at": {"type": "string"},
+    "comparisons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["check_id", "label", "result", "reason"],
+        "properties": {
+          "check_id": {"type": "string"},
+          "label": {"type": "string"},
+          "result": {"enum": ["一致", "不一致", "不完整", "待核验"]},
+          "reason": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "category_risk": {"type": ["object", "null"]},
+    "qianchuan_checks": {"type": "array"}
+  },
+  "additionalProperties": true
+}

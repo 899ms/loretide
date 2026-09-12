@@ -1,0 +1,4 @@
+interface:
+  display_name: "Self-Media Compliance Review"
+  short_description: "面向多平台自媒体视频、封面、文案和带货内容的违规风险审核；支持本地视频帧/音轨/字幕证据分析及抖音电商专项核查"
+  default_prompt: "Use $self-media-compliance-review to audit this self-media video, cover, subtitles, links, and publish copy before delivery. For video, prepare traceable frame/audio evidence and separate user captions, platform metadata, actual media, OCR/ASR, and model observations before assigning risk. Treat live search and TikHub as opt-in; TikHub must use direct REST API only, never MCP. For e-commerce, also check product consistency, 千川 low-quality patterns, efficacy claims, and regulated-category qualifications."

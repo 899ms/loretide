@@ -1,0 +1,7 @@
+PASS: 10 documents links and code fences
+PASS: 55 R, 65 AC, 6 D10, 11 D11 rows retained
+PASS: 55 A and 33 B source file hashes unchanged
+PASS: clean research/multica
+PASS: clean research/yuwen-publish-precheck
+PASS: Downloads attachment byte-identical to project plan
+NOT RUN: application/model/browser/remote tests; documentation delivery only
