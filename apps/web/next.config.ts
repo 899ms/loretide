@@ -39,6 +39,13 @@ const allowedDevOrigins = process.env.CORS_ALLOWED_ORIGINS
   : undefined;
 
 const nextConfig: NextConfig = {
+  // Bound compiler memory in the remote development instance.
+  ...(isDev ? { experimental: { webpackMemoryOptimizations: true } } : {}),
+  webpack(config, { dev }) {
+    // Avoid retaining compiler caches alongside the large shared workspace graph.
+    if (dev) config.cache = false;
+    return config;
+  },
   ...(process.env.STANDALONE === "true" ? { output: "standalone" as const } : {}),
   transpilePackages: ["@multica/core", "@multica/ui", "@multica/views"],
   ...(allowedDevOrigins && allowedDevOrigins.length > 0
