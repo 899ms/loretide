@@ -2,9 +2,9 @@
 
 `scripts/bootstrap-local-windows.ps1` creates a separate local Loretide instance without reading the existing `data/windows` configuration, its development database, or model-client credentials. It does not use Docker, VPS access, firewall changes, or automatic restart.
 
-## Prerequisites
+## Prerequisites and enforced versions
 
-- Node, pnpm and Go on `PATH`.
+- Node 22 or newer, Go 1.26.6 or newer, PostgreSQL 17 or newer, repository pnpm 10.28.2, and workspace Next.js 16.3.4 or newer. Bootstrap fails before startup when a version is missing or too old.
 - The bootstrap runs `pnpm install --frozen-lockfile` when the checkout has no installed frontend dependencies.
 - A native PostgreSQL runtime at an ASCII-only path containing `pgsql/bin/initdb.exe`, `pg_ctl.exe` and `psql.exe`.
 - Three free loopback ports. The defaults are Web `13101`, API `18101`, PostgreSQL `15401`.
@@ -17,7 +17,9 @@ Choose an ASCII output path outside the repository if the checkout path is not A
   -OutputPath C:\loretide-bootstrap-dev
 ```
 
-The first run initializes a native PostgreSQL cluster, creates a dedicated non-superuser application role/database, generates new secrets, runs migrations, builds the API, and starts API/Web. Repeating the command reuses only that output directory and database; it neither replaces the existing development instance nor changes its ports.
+The first run initializes a native PostgreSQL cluster, creates a dedicated non-superuser application role/database, generates new secrets and a random private development verification code, runs migrations, builds the API, and starts API/Web. Repeating the command validates and reuses only that output directory and database. A healthy owned instance is returned as already running without rebuilding or launching duplicates.
+
+The configuration binds its repository, output path, runtime path, PostgreSQL data path, ports, database and role. PostgreSQL is queried after startup to prove that its actual data directory and port match. A conflicting explicit argument or stale configuration fails closed.
 
 The script deliberately sets `LORETIDE_EXECUTION_POLICY=disabled`. Do not change that setting in the generated state to obtain a real-agent run.
 
@@ -29,6 +31,10 @@ The script deliberately sets `LORETIDE_EXECUTION_POLICY=disabled`. Do not change
 ./scripts/bootstrap-local-windows.ps1 -Action start -OutputPath C:\loretide-bootstrap-dev
 ```
 
-`stop` ends only the API/Web processes created by this instance and retains PostgreSQL/data for investigation or restart. Logs remain under `<OutputPath>/logs`; they may contain operational detail and must be reviewed/redacted before sharing. A missing runtime, dependency, port collision or build/migration failure stops with an actionable error and leaves the generated logs in place.
+`status` is read-only: it verifies recorded API/Web ownership and reports PostgreSQL state without starting a stopped service. `stop` validates both tracked roots before acting, then ends only API/Web processes whose PID, creation time, executable and complete command line still match the stored instance record. Web child processes are also checked before any stop occurs; a reused PID or unattributed child makes the entire operation fail closed. PostgreSQL and its data remain available for investigation or restart.
 
-For synthetic local login, use a synthetic address and the development verification code `888888`. It is configured only in the isolated child process environment, never in a repository file. Browser acceptance should include the isolated Web URL and its diagnostics route; do not use the existing development application or database as evidence.
+Logs remain under `<OutputPath>/logs`; they may contain operational detail and must be reviewed/redacted before sharing. Database passwords are passed in process-local environment variables, and role-password SQL is supplied through a short-lived private file rather than command-line arguments. A missing runtime, dependency, port collision or build/migration failure stops with an actionable error and leaves the non-secret diagnostic logs in place.
+
+For synthetic local login, use a synthetic address and the random development verification code in the private `<OutputPath>/state/instance.json`. Do not publish that file or code. The Web process receives `REMOTE_API_URL=http://127.0.0.1:<ApiPort>` for same-origin rewrites; it does not substitute `NEXT_PUBLIC_API_URL` for that upstream. Browser acceptance must include the isolated Web URL and diagnostics route and must not use the existing development application or database as evidence.
+
+If API startup succeeds but Web startup or health fails, the script records the real partial state and exits with an error. Inspect the retained process records and logs; it never prints a full-start success message for a partial start.
