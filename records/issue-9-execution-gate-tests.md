@@ -67,11 +67,15 @@ agent 报 “New(claude) … returned a non-nil backend while execution is disab
 
 ## 真实 CI 运行证据
 
-<!-- 推送并创建 Draft PR 后按 head SHA 补齐 -->
+- PR：https://github.com/899ms/loretide/pull/10 （Draft，base `app-main`）
+- head SHA：`1b4d5dd44b42c3b8cceecbb62f130d7e7af603da`
+- Actions run（成功）：https://github.com/899ms/loretide/actions/runs/34762529129
+  workflow `Loretide content contracts`，conclusion `success`。其
+  “Isolated diagnostic contracts and execution gates” 步骤以
+  `-run 'TestMissingPolicy|TestConfiguredPolicy|TestLoretide'` 运行，涵盖本任务全部 6 个门禁测试
+  （新增的 `TestLoretideErrDisabledMatchesThroughWrapping` 已按 `TestLoretide` 前缀纳入该过滤器）。
 
-- PR：<待补>
-- head SHA：<待补>
-- Actions run：<待补>
+（后续仅追加本记录的提交会再触发一次同 workflow 运行，内容等价、同样通过。）
 
 ## 回滚方法
 
