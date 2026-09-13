@@ -5,6 +5,7 @@
 ## Prerequisites and enforced versions
 
 - Node 22 or newer, Go 1.26.6 or newer, PostgreSQL 17 or newer, repository pnpm 10.28.2, and workspace Next.js 16.3.4 or newer. Bootstrap fails before startup when a version is missing or too old.
+- Toolchain detection runs from the checkout (Go from `server`) and restores the caller's working directory even when a probe fails. You may invoke the script by absolute path from another directory; the pnpm check still resolves the repository's `packageManager` pin rather than an unrelated parent-directory installation.
 - The bootstrap runs `pnpm install --frozen-lockfile` when the checkout has no installed frontend dependencies.
 - A native PostgreSQL runtime at an ASCII-only path containing `pgsql/bin/initdb.exe`, `pg_ctl.exe` and `psql.exe`.
 - Three free loopback ports. The defaults are Web `13101`, API `18101`, PostgreSQL `15401`.
@@ -14,6 +15,13 @@ Choose an ASCII output path outside the repository if the checkout path is not A
 ```powershell
 ./scripts/bootstrap-local-windows.ps1 -Action bootstrap `
   -RuntimePath C:\loretide-runtime `
+  -OutputPath C:\loretide-bootstrap-dev
+```
+
+The same command may be launched outside the checkout by using the script's absolute path. There is no need to change the global pnpm version:
+
+```powershell
+& C:\path\to\loretide\scripts\bootstrap-local-windows.ps1 -Action start `
   -OutputPath C:\loretide-bootstrap-dev
 ```
 

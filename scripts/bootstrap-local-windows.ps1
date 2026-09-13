@@ -190,13 +190,26 @@ function Invoke-CheckedCommand([string]$FilePath,[string[]]$Arguments,[string]$W
   }
 }
 
+function Invoke-ToolVersionCommand([string]$Name,[scriptblock]$Default) {
+  if($script:Hooks.ContainsKey('ToolVersionCommand')){return & $script:Hooks.ToolVersionCommand $Name}
+  & $Default
+}
+
 function Get-ToolVersions {
   if($script:Hooks.ContainsKey('ToolVersions')){return & $script:Hooks.ToolVersions}
-  $goText=Invoke-WithEnvironment @{GOTOOLCHAIN='auto'} {Push-Location (Join-Path $script:RepoRoot 'server');try{(& go version)-join''}finally{Pop-Location}}
-  [pscustomobject]@{node=((& node --version)-join'').TrimStart('v');pnpm=((& pnpm --version)-join'').Trim();go=([regex]::Match($goText,'go([0-9]+\.[0-9]+(?:\.[0-9]+)?)')).Groups[1].Value;postgres=([regex]::Match(((& (Join-Path $script:PgBin 'postgres.exe') --version)-join''),'([0-9]+\.[0-9]+)')).Groups[1].Value;next=(Get-Content -Raw (Join-Path $script:RepoRoot 'apps\web\node_modules\next\package.json')|ConvertFrom-Json).version}
+  Push-Location $script:RepoRoot
+  try {
+    $nodeText=Invoke-ToolVersionCommand node {(& node --version)-join''}
+    $pnpmText=Invoke-ToolVersionCommand pnpm {(& pnpm --version)-join''}
+    $goText=Invoke-WithEnvironment @{GOTOOLCHAIN='auto'} {Push-Location (Join-Path $script:RepoRoot 'server');try{Invoke-ToolVersionCommand go {(& go version)-join''}}finally{Pop-Location}}
+    $postgresText=Invoke-ToolVersionCommand postgres {(& (Join-Path $script:PgBin 'postgres.exe') --version)-join''}
+    [pscustomobject]@{node=$nodeText.TrimStart('v');pnpm=$pnpmText.Trim();go=([regex]::Match($goText,'go([0-9]+\.[0-9]+(?:\.[0-9]+)?)')).Groups[1].Value;postgres=([regex]::Match($postgresText,'([0-9]+\.[0-9]+)')).Groups[1].Value;next=(Get-Content -Raw (Join-Path $script:RepoRoot 'apps\web\node_modules\next\package.json')|ConvertFrom-Json).version}
+  }
+  finally { Pop-Location }
 }
 
 function Ensure-ToolchainDependencies {
+  if ($script:Hooks.ContainsKey('EnsureToolchainDependencies')) { & $script:Hooks.EnsureToolchainDependencies; return }
   if ($script:Hooks.ContainsKey('ToolVersions')) { return }
   foreach ($command in @('node.exe','go.exe','pnpm.cmd')) {
     if (-not (Get-Command $command -ErrorAction SilentlyContinue)) { throw "Missing dependency: $command. Install it and retry." }
