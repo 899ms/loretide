@@ -19,9 +19,13 @@ jobs:
       - run: pnpm install --frozen-lockfile --filter @multica/web...
       - run: node --test scripts/check-content-boundaries.test.mjs
       - run: node scripts/check-content-boundaries.mjs
+      # Non-UI checks only. Per Loretide policy, UI unit tests (React hook /
+      # DOM behaviour) are NOT run in CI and are not acceptance evidence; see
+      # docs/development/README.md and docs/development/ci-diagnostics.md. The
+      # test sources are kept in the repo, only their CI execution is removed:
+      #   - packages/core content/diagnostics/queries.test.tsx (useDiagnosticStream React hook, jsdom)
+      #   - apps/web platform/content-diagnostics.test.ts (download via DOM anchor/URL, jsdom)
       - run: pnpm --filter @multica/core exec vitest run content/diagnostics/contract.test.ts
-      - run: pnpm --filter @multica/core exec vitest run content/diagnostics/queries.test.tsx
-      - run: pnpm --filter @multica/web exec vitest run platform/content-diagnostics.test.ts
       - run: pnpm --filter @multica/views exec vitest run locales/parity.test.ts
       - run: pnpm --filter @multica/web typecheck
       - uses: actions/setup-go@v5

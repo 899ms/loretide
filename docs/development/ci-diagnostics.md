@@ -19,18 +19,36 @@ All steps live in a single `boundaries` job on `ubuntu-latest`.
 | --- | --- | --- |
 | Content module boundaries (unit) | `node --test scripts/check-content-boundaries.test.mjs` | Boundary script's own tests |
 | Content module boundaries (scan) | `node scripts/check-content-boundaries.mjs` | Enforces import boundaries |
-| Diagnostics contract | `pnpm --filter @multica/core exec vitest run content/diagnostics/contract.test.ts` | Schema/contract parsing |
-| Diagnostics stream hook | `pnpm --filter @multica/core exec vitest run content/diagnostics/queries.test.tsx` | `useDiagnosticStream` cursor/dedupe/pause behavior |
-| Diagnostics bundle download | `pnpm --filter @multica/web exec vitest run platform/content-diagnostics.test.ts` | `downloadDiagnosticBundle` blob/anchor behavior |
-| Locale parity | `pnpm --filter @multica/views exec vitest run locales/parity.test.ts` | Translation key parity |
+| Diagnostics contract | `pnpm --filter @multica/core exec vitest run content/diagnostics/contract.test.ts` | Schema/contract parsing (non-UI, node) |
+| Locale parity | `pnpm --filter @multica/views exec vitest run locales/parity.test.ts` | Translation key parity (non-UI, node) |
 | Web typecheck | `pnpm --filter @multica/web typecheck` | TypeScript strict checks |
 | Diagnostics DB integration + execution gates | `go test -race ./internal/content/diagnostics` and targeted `go test` runs | Postgres integration, execution-policy gates, migration invariants |
 | API build | `go build ./cmd/server` | Server compiles |
 
-The two front-end regressions (`queries.test.tsx`,
-`content-diagnostics.test.ts`) are the checks this workflow previously omitted;
-before, only `contract.test.ts` ran. Both are jsdom suites that mock the API
-client and the DOM, so they need no backend.
+### UI unit tests are not run in CI (Loretide policy)
+
+Per Loretide policy, **UI unit tests are not written or run — neither in CI nor
+locally** — and are not acceptance evidence; UI changes are accepted through
+manual verification by the user (see `docs/development/README.md`). The policy
+classifies tests by behavior, not by file extension: a `.test.ts(x)` that drives
+React hooks or the DOM is a UI test.
+
+The following two suites were previously run here and have been **removed from
+CI execution**. Their source files remain in the repository (they are not
+deleted), but they are not run — not in CI and not locally as part of
+verification:
+
+| Suite | Why it is a UI test |
+| --- | --- |
+| `packages/core content/diagnostics/queries.test.tsx` | jsdom + `renderHook`; exercises the `useDiagnosticStream` React hook |
+| `apps/web platform/content-diagnostics.test.ts` | jsdom; drives `downloadDiagnosticBundle` through a DOM anchor and `URL.createObjectURL` |
+
+Their absence from a CI run is a deliberate policy decision, **not a pass** — no
+automated coverage runs for these behaviors, in CI or locally. `contract.test.ts`
+(pure schema parsing, node environment) and `locales/parity.test.ts`
+(`// @vitest-environment node`) are non-UI and remain in CI, as do typecheck, the
+Go `-race` diagnostics, execution-policy gates, migration invariants,
+module-boundary checks, the least-privilege database provisioning, and the build.
 
 ## Database identity and least privilege
 
@@ -98,13 +116,17 @@ SQL
 
 export LORETIDE_DIAG_TEST_DATABASE_URL='postgres://loretide_diag:choose-a-password@127.0.0.1:5432/loretide_diag_ci?sslmode=disable'
 
-# Front-end regressions:
-pnpm --filter @multica/core exec vitest run content/diagnostics/queries.test.tsx
-pnpm --filter @multica/web  exec vitest run platform/content-diagnostics.test.ts
+# Non-UI checks (as CI runs them):
+pnpm --filter @multica/core exec vitest run content/diagnostics/contract.test.ts
+pnpm --filter @multica/views exec vitest run locales/parity.test.ts
 
 # Backend integration + gates:
 (cd server && go test -race ./internal/content/diagnostics -count=1)
 ```
 
+UI unit tests (`queries.test.tsx`, `content-diagnostics.test.ts`) are not part of
+this list: per Loretide policy they are not run, in CI or locally. UI behavior is
+verified manually by the user (see `docs/development/README.md`).
+
 Local success does not substitute for a passing GitHub Actions run; the CI run
-against the PR head SHA is the acceptance evidence.
+against the PR head SHA is the acceptance evidence for the non-UI checks.
