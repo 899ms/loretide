@@ -1,5 +1,7 @@
 # Loretide
 
+UI development policy: [reuse Multica components, layouts, typography and design tokens](docs/design/README.md). This applies to all new pages, including development diagnostics.
+
 **English** | [简体中文](README.zh-CN.md)
 
 > Turn knowledge into a publishing tide.
@@ -10,13 +12,13 @@ Repository: [899ms/loretide](https://github.com/899ms/loretide)
 
 Loretide connects source materials, account-specific writing instructions, research and rewriting, editable works, human review, manual publication records, and AI retrospectives. It is designed to validate a repeatable content operating workflow for Chinese social media.
 
-**Status: requirements and the development baseline are documented; the application is not implemented.** This repository contains specifications, decision records, and a pinned review Skill source snapshot. It is not a runnable web application yet.
+**Status: a Multica-derived application and diagnostics implementation exist in a separate local checkout. Migration to native Windows development is in progress; local acceptance is not complete.** This GitHub repository contains specifications, tasks and records; application source is not yet published here.
 
 Documentation baseline: v0.6.0 · Updated: 2026-09-13
 
 ## Start here
 
-**Development tasks:** [Implementation plan](tasks/plan.md) · [Task checklist](tasks/todo.md). W-01–W-03 are split into 24 tasks, plus [2 architecture prerequisites](tasks/architecture.md), followed by 6 phase-level items and 9 checkpoints. There are also [13 mandatory early diagnostics tasks](tasks/diagnostics.md) and a diagnostics gate before LT-009. All application tasks are pending; start with LT-001.
+**Development tasks:** [Implementation plan](tasks/plan.md) · [Task checklist](tasks/todo.md). W-01–W-03 are split into 24 tasks, plus [2 architecture prerequisites](tasks/architecture.md), followed by 6 phase-level items and 9 checkpoints. There are also [13 mandatory early diagnostics tasks](tasks/diagnostics.md) and a diagnostics gate before LT-009. The application checkout and native test environment are established. Loretide business features remain pending; see the task ledger and records for verified checks and remaining gaps.
 
 The detailed development documents are currently in Chinese.
 
@@ -133,3 +135,7 @@ The planned implementation is a modular monolith with explicit data ownership an
 ## Full diagnostics from the start
 
 [Diagnostics specification](docs/13-完整开发诊断与操作日志需求.md) covers operation audit logs, technical errors/logs, cross-layer traces, a browser diagnostics panel, input snapshots, reproducible simulated failures, and regression results. All capabilities are required early, not a reduced version. Subsequent features must ship their instrumentation and tests together. This is planned work, not an implemented monitoring system.
+
+## AI development workflow
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md). Claim an unassigned ready [Issue](https://github.com/899ms/loretide/issues), confirm unique ownership, work in an isolated branch/worktree with a separate test database and ports, then deliver a Draft PR. The main task reviews and merges; executors do not close Issues themselves. Code tasks cannot become ready until their application repository and baseline commit are available. GitHub does not automatically start AI workers.

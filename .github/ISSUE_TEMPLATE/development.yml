@@ -1,0 +1,38 @@
+name: Development task / 开发任务
+description: 主任务填写范围、依赖与验收后再设置 ready
+title: "[Task] "
+labels: ["triage"]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Goal and exclusions / 目标与排除项
+    validations:
+      required: true
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Code repository, base commit and dependencies / 代码基线及依赖
+      description: 代码仓库URL、提交SHA、依赖Issue、执行者和分支；缺失时不得ready。
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Allowed modules and forbidden changes / 修改边界
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and isolation / 环境与隔离
+      description: 独立worktree、数据库、端口、共享服务操作窗口；不得填写凭据。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance and delivery / 验收与交付
+      description: 实际命令、预期行为、浏览器证据、回滚方式及记录路径。
+    validations:
+      required: true
