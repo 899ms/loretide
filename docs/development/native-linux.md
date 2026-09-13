@@ -20,9 +20,25 @@ curl -f http://127.0.0.1:18000/health
 
 Web listens only on Tailscale IP port 13000. The upstream API listens on all interfaces port 18000; database remains loopback-only. No public ingress or daemon has been configured by this project. Application authentication is still required; Tailscale connectivity is not application authorization.
 
-## Manual lifecycle
+## Supervised lifecycle
 
-The current API and Web run as `box` background processes, with PID files `data/native/api.pid` and `web.pid`. Before stopping either, verify `/proc/<pid>/cmdline`, `/proc/<pid>/cwd` and process ownership match this project; do not blindly trust a stale PID file. Do not launch duplicates when the ports are occupied.
+Supervisor 4.2.5 now manages all three foreground services as `box`, using `scripts/native-supervisor.conf`. Its control socket is private (0600), with no HTTP management port. Logs rotate at 10 MB with three backups. PostgreSQL starts first; API and Web retry startup failures up to ten times and restart after unexpected exits. A persistent startup failure becomes FATAL instead of looping forever. Process groups are stopped together so Next.js child processes are included.
+
+```bash
+cd /home/box/loretide-dev
+supervisorctl -c scripts/native-supervisor.conf status
+supervisorctl -c scripts/native-supervisor.conf restart api
+supervisorctl -c scripts/native-supervisor.conf stop all
+supervisorctl -c scripts/native-supervisor.conf start all
+```
+
+An explicit `stop` remains stopped. After the supervisor itself has been shut down, start it with `supervisord -c scripts/native-supervisor.conf`. Do not launch the former background commands while Supervisor is managing the services. The platform uses tini, not systemd: recovery of supervised processes is configured; platform boot integration and automatic recovery of the supervisor itself are not claimed.
+
+`python3 scripts/native-recovery-check.py` deliberately SIGKILLs each project's service process group in sequence, checks changed PIDs and RUNNING state, then requests HTTP health/login. Only run it when a brief development interruption is acceptable. Results are stored at `data/native/recovery-check.json`.
+
+## Previous manual lifecycle (recovery reference only)
+
+The former manual API/Web PID files `data/native/api.pid` and `web.pid` are obsolete after Supervisor takeover. Use supervisorctl for current ownership and lifecycle. The following describes the previous launch mechanism only.
 
 After stopping the matching services, start PostgreSQL if needed:
 
