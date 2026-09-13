@@ -27,14 +27,15 @@ function Invoke-SelectedGoTests {
   $exitCode = $LASTEXITCODE
   $events = @()
   foreach ($line in $lines) {
-    Write-Host $line
     try { $events += ($line | ConvertFrom-Json) } catch { }
   }
-  if ($exitCode -ne 0) { throw "Selected Go tests failed with exit code $exitCode." }
+  if ($exitCode -ne 0) { throw "Selected Go tests failed with exit code $exitCode; inspect local test output without sharing connection details." }
   foreach ($name in $ExpectedTests) {
     $runs = @($events | Where-Object { $_.Action -eq "run" -and $_.Test -eq $name })
-    if ($runs.Count -ne 1) {
-      throw "Expected exactly one Go test run for $name; observed $($runs.Count)."
+    $passes = @($events | Where-Object { $_.Action -eq "pass" -and $_.Test -eq $name })
+    $nonPasses = @($events | Where-Object { $_.Test -eq $name -and $_.Action -in @("skip", "fail") })
+    if ($runs.Count -ne 1 -or $passes.Count -ne 1 -or $nonPasses.Count -ne 0) {
+      throw "Expected exactly one non-skipped pass for $name; observed run=$($runs.Count), pass=$($passes.Count), skip-or-fail=$($nonPasses.Count)."
     }
   }
   Write-Host "PASS Go behavior tests: $($ExpectedTests.Count) named tests ran exactly once"
@@ -87,7 +88,8 @@ try {
   if ($DatabaseUrl) {
     $uri = [Uri]$DatabaseUrl
     $databaseName = $uri.AbsolutePath.TrimStart("/")
-    if ($uri.Scheme -notin @("postgres", "postgresql") -or $uri.Host -notin @("localhost", "127.0.0.1", "::1") -or $uri.Port -ne 15402 -or $databaseName -notmatch '^loretide_diag_acceptance_[a-z0-9_]+$' -or -not $uri.UserInfo) {
+    $queryKeys = @($uri.Query.TrimStart("?").Split("&", [System.StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { [Uri]::UnescapeDataString(($_ -split "=", 2)[0]) })
+    if ($uri.Scheme -notin @("postgres", "postgresql") -or $uri.Host -notin @("localhost", "127.0.0.1", "::1") -or $uri.Port -ne 15402 -or $databaseName -notmatch '^loretide_diag_acceptance_[a-z0-9_]+$' -or -not $uri.UserInfo -or @($queryKeys | Where-Object { $_ -ne "sslmode" }).Count -ne 0) {
       throw "DatabaseUrl must name a credentialed localhost:15402 loretide_diag_acceptance_* database."
     }
     $psql = Get-Command psql -ErrorAction SilentlyContinue
