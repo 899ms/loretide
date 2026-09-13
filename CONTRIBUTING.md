@@ -1,6 +1,6 @@
 # Contributing to Loretide / AI 开发协作
 
-本规范适用于所有人类与 AI 开发者。当前 GitHub 仓库保存项目文档；本地 app 是独立应用仓库，尚未发布代码基线。没有明确代码仓库和基线提交的代码任务不得标记 ready。
+本规范适用于所有人类与 AI 开发者。同一私有 GitHub 仓库中，main 保存项目文档，app-main 保存应用代码。应用 PR 必须以 app-main 为目标，文档 PR 以 main 为目标；不得合并两条历史。没有明确代码仓库和基线提交的代码任务不得标记 ready。
 
 ## 领取与状态
 

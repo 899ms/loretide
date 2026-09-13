@@ -12,7 +12,7 @@ Repository: [899ms/loretide](https://github.com/899ms/loretide)
 
 Loretide connects source materials, account-specific writing instructions, research and rewriting, editable works, human review, manual publication records, and AI retrospectives. It is designed to validate a repeatable content operating workflow for Chinese social media.
 
-**Status: the Multica-derived application now runs in native Windows development. Local login, the diagnostics overview and API/Web process recovery have been verified; full business and executor acceptance remain incomplete.** This GitHub repository contains specifications, tasks and records; application source is not yet published here. See the [local migration record](records/2026-09-13-Windows本机开发环境迁移.md).
+**Status: the Multica-derived application now runs in native Windows development. Local login, the diagnostics overview and API/Web process recovery have been verified; full business and executor acceptance remain incomplete.** The main branch contains specifications, tasks and records; application source is available on [app-main](https://github.com/899ms/loretide/tree/app-main), baseline bb3a4b4. Application PRs must target app-main. See the [local migration record](records/2026-09-13-Windows本机开发环境迁移.md).
 
 Documentation baseline: v0.6.0 · Updated: 2026-09-13
 
