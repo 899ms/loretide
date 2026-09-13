@@ -3,8 +3,8 @@ package diagnostics
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
-	"time"
 )
 
 // TestSimulatorRegressionReceiverContracts validates the standalone behavior of Receiver:
@@ -61,137 +61,254 @@ func TestSimulatorRegressionReceiverContracts(t *testing.T) {
 
 // TestSimulatorRegressionScenarioContracts verifies individual scenario failure contracts
 // without relying on s.Expected from Scenarios:
-// - Verifies failing component, actual result code, attempt count, and event sequence
+// - Verifies exact event component sequences, event counts, Sequence numbers, and termination points
+// - Checks exact failing component and specific outcome ("failed", "cancelled", or "ignored")
+// - Verifies reconnect attempt transition point (attempt 1 before daemon, attempt 2 at daemon and onwards)
 func TestSimulatorRegressionScenarioContracts(t *testing.T) {
 	scope := Scope{Workspace: "ws-test", Actor: "actor-test"}
+
+	allComponents := []string{"web", "api", "database", "queue", "daemon", "executor", "tool", "result", "database"}
 
 	testCases := []struct {
 		scenario          string
 		expectedCode      string
 		expectedStatus    string
-		expectedFailingAt string // step component where failure occurred
-		minEvents         int
-		expectedAttempt   int
+		expectedComponents []string
+		failingIndex      int // index in expectedComponents where failure occurs (-1 for success)
+		failingOutcome    string
+		verifyAttempts    func(t *testing.T, events []Event)
 	}{
 		{
-			scenario:          "normal",
-			expectedCode:      "",
-			expectedStatus:    "completed",
-			expectedFailingAt: "",
-			minEvents:         9, // all 9 steps complete
-			expectedAttempt:   1,
+			scenario:           "normal",
+			expectedCode:       "",
+			expectedStatus:     "completed",
+			expectedComponents: allComponents,
+			failingIndex:       -1,
+			failingOutcome:     "",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				for i, e := range events {
+					if e.Attempt != 1 {
+						t.Errorf("event[%d] attempt should be 1, got %d", i, e.Attempt)
+					}
+				}
+			},
 		},
 		{
-			scenario:          "slow",
-			expectedCode:      "",
-			expectedStatus:    "completed",
-			expectedFailingAt: "",
-			minEvents:         9,
-			expectedAttempt:   1,
+			scenario:           "slow",
+			expectedCode:       "",
+			expectedStatus:     "completed",
+			expectedComponents: allComponents,
+			failingIndex:       -1,
+			failingOutcome:     "",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				for i, e := range events {
+					if e.Attempt != 1 {
+						t.Errorf("event[%d] attempt should be 1, got %d", i, e.Attempt)
+					}
+				}
+			},
 		},
 		{
-			scenario:          "timeout",
-			expectedCode:      "TIMEOUT",
-			expectedStatus:    "failed",
-			expectedFailingAt: "executor",
-			minEvents:         6, // 00-web .. 05-executor (breaks after executor)
-			expectedAttempt:   1,
+			scenario:           "timeout",
+			expectedCode:       "TIMEOUT",
+			expectedStatus:     "failed",
+			expectedComponents: []string{"web", "api", "database", "queue", "daemon", "executor"}, // breaks after executor (index 5)
+			failingIndex:       5,
+			failingOutcome:     "failed",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				for i, e := range events {
+					if e.Attempt != 1 {
+						t.Errorf("event[%d] attempt should be 1, got %d", i, e.Attempt)
+					}
+				}
+			},
 		},
 		{
-			scenario:          "cancel",
-			expectedCode:      "CANCELLED",
-			expectedStatus:    "failed",
-			expectedFailingAt: "executor",
-			minEvents:         6, // breaks after executor
-			expectedAttempt:   1,
+			scenario:           "cancel",
+			expectedCode:       "CANCELLED",
+			expectedStatus:     "failed",
+			expectedComponents: []string{"web", "api", "database", "queue", "daemon", "executor"}, // breaks after executor (index 5)
+			failingIndex:       5,
+			failingOutcome:     "cancelled",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				for i, e := range events {
+					if e.Attempt != 1 {
+						t.Errorf("event[%d] attempt should be 1, got %d", i, e.Attempt)
+					}
+				}
+			},
 		},
 		{
-			scenario:          "reconnect",
-			expectedCode:      "NETWORK_UNAVAILABLE",
-			expectedStatus:    "failed",
-			expectedFailingAt: "daemon",
-			minEvents:         9, // does not break, finishes remaining steps
-			expectedAttempt:   2, // attempt incremented on reconnect
+			scenario:           "reconnect",
+			expectedCode:       "NETWORK_UNAVAILABLE",
+			expectedStatus:     "failed",
+			expectedComponents: allComponents, // does not break on NETWORK_UNAVAILABLE
+			failingIndex:       4,             // daemon at index 4
+			failingOutcome:     "failed",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				// Steps before daemon (indices 0..3: web, api, database, queue) must have attempt 1
+				for i := 0; i <= 3; i++ {
+					if events[i].Attempt != 1 {
+						t.Errorf("event[%d] (%s) attempt expected 1 before reconnect, got %d", i, events[i].Component, events[i].Attempt)
+					}
+				}
+				// Reconnect occurs in daemon (index 4); from daemon onwards (indices 4..8), attempt must be 2
+				for i := 4; i < len(events); i++ {
+					if events[i].Attempt != 2 {
+						t.Errorf("event[%d] (%s) attempt expected 2 at/after reconnect, got %d", i, events[i].Component, events[i].Attempt)
+					}
+				}
+			},
 		},
 		{
-			scenario:          "duplicate",
-			expectedCode:      "DUPLICATE",
-			expectedStatus:    "failed",
-			expectedFailingAt: "result",
-			minEvents:         9, // does not break
-			expectedAttempt:   1,
+			scenario:           "duplicate",
+			expectedCode:       "DUPLICATE",
+			expectedStatus:     "failed",
+			expectedComponents: allComponents, // does not break on DUPLICATE
+			failingIndex:       7,             // result at index 7
+			failingOutcome:     "ignored",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				for i, e := range events {
+					if e.Attempt != 1 {
+						t.Errorf("event[%d] attempt should be 1, got %d", i, e.Attempt)
+					}
+				}
+			},
 		},
 		{
-			scenario:          "late",
-			expectedCode:      "LATE_RESULT",
-			expectedStatus:    "failed",
-			expectedFailingAt: "result",
-			minEvents:         8, // breaks after result
-			expectedAttempt:   1,
+			scenario:           "late",
+			expectedCode:       "LATE_RESULT",
+			expectedStatus:     "failed",
+			expectedComponents: []string{"web", "api", "database", "queue", "daemon", "executor", "tool", "result"}, // breaks after result (index 7)
+			failingIndex:       7,
+			failingOutcome:     "ignored",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				for i, e := range events {
+					if e.Attempt != 1 {
+						t.Errorf("event[%d] attempt should be 1, got %d", i, e.Attempt)
+					}
+				}
+			},
 		},
 		{
-			scenario:          "file_missing",
-			expectedCode:      "FILE_MISSING",
-			expectedStatus:    "failed",
-			expectedFailingAt: "tool",
-			minEvents:         7, // breaks after tool
-			expectedAttempt:   1,
+			scenario:           "file_missing",
+			expectedCode:       "FILE_MISSING",
+			expectedStatus:     "failed",
+			expectedComponents: []string{"web", "api", "database", "queue", "daemon", "executor", "tool"}, // breaks after tool (index 6)
+			failingIndex:       6,
+			failingOutcome:     "failed",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				for i, e := range events {
+					if e.Attempt != 1 {
+						t.Errorf("event[%d] attempt should be 1, got %d", i, e.Attempt)
+					}
+				}
+			},
 		},
 		{
-			scenario:          "file_changed",
-			expectedCode:      "FILE_CHANGED",
-			expectedStatus:    "failed",
-			expectedFailingAt: "tool",
-			minEvents:         7, // breaks after tool
-			expectedAttempt:   1,
+			scenario:           "file_changed",
+			expectedCode:       "FILE_CHANGED",
+			expectedStatus:     "failed",
+			expectedComponents: []string{"web", "api", "database", "queue", "daemon", "executor", "tool"}, // breaks after tool (index 6)
+			failingIndex:       6,
+			failingOutcome:     "failed",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				for i, e := range events {
+					if e.Attempt != 1 {
+						t.Errorf("event[%d] attempt should be 1, got %d", i, e.Attempt)
+					}
+				}
+			},
 		},
 		{
-			scenario:          "denied",
-			expectedCode:      "AUTHORIZATION_DENIED",
-			expectedStatus:    "failed",
-			expectedFailingAt: "tool",
-			minEvents:         7, // breaks after tool
-			expectedAttempt:   1,
+			scenario:           "denied",
+			expectedCode:       "AUTHORIZATION_DENIED",
+			expectedStatus:     "failed",
+			expectedComponents: []string{"web", "api", "database", "queue", "daemon", "executor", "tool"}, // breaks after tool (index 6)
+			failingIndex:       6,
+			failingOutcome:     "failed",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				for i, e := range events {
+					if e.Attempt != 1 {
+						t.Errorf("event[%d] attempt should be 1, got %d", i, e.Attempt)
+					}
+				}
+			},
 		},
 		{
-			scenario:          "model_auth",
-			expectedCode:      "MODEL_AUTH",
-			expectedStatus:    "failed",
-			expectedFailingAt: "executor",
-			minEvents:         6, // breaks after executor
-			expectedAttempt:   1,
+			scenario:           "model_auth",
+			expectedCode:       "MODEL_AUTH",
+			expectedStatus:     "failed",
+			expectedComponents: []string{"web", "api", "database", "queue", "daemon", "executor"}, // breaks after executor (index 5)
+			failingIndex:       5,
+			failingOutcome:     "failed",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				for i, e := range events {
+					if e.Attempt != 1 {
+						t.Errorf("event[%d] attempt should be 1, got %d", i, e.Attempt)
+					}
+				}
+			},
 		},
 		{
-			scenario:          "model_quota",
-			expectedCode:      "MODEL_QUOTA",
-			expectedStatus:    "failed",
-			expectedFailingAt: "executor",
-			minEvents:         6, // breaks after executor
-			expectedAttempt:   1,
+			scenario:           "model_quota",
+			expectedCode:       "MODEL_QUOTA",
+			expectedStatus:     "failed",
+			expectedComponents: []string{"web", "api", "database", "queue", "daemon", "executor"}, // breaks after executor (index 5)
+			failingIndex:       5,
+			failingOutcome:     "failed",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				for i, e := range events {
+					if e.Attempt != 1 {
+						t.Errorf("event[%d] attempt should be 1, got %d", i, e.Attempt)
+					}
+				}
+			},
 		},
 		{
-			scenario:          "schema",
-			expectedCode:      "OUTPUT_SCHEMA",
-			expectedStatus:    "failed",
-			expectedFailingAt: "result",
-			minEvents:         8, // breaks after result
-			expectedAttempt:   1,
+			scenario:           "schema",
+			expectedCode:       "OUTPUT_SCHEMA",
+			expectedStatus:     "failed",
+			expectedComponents: []string{"web", "api", "database", "queue", "daemon", "executor", "tool", "result"}, // breaks after result (index 7)
+			failingIndex:       7,
+			failingOutcome:     "failed",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				for i, e := range events {
+					if e.Attempt != 1 {
+						t.Errorf("event[%d] attempt should be 1, got %d", i, e.Attempt)
+					}
+				}
+			},
 		},
 		{
-			scenario:          "search",
-			expectedCode:      "SEARCH_FAILED",
-			expectedStatus:    "failed",
-			expectedFailingAt: "tool",
-			minEvents:         7, // breaks after tool
-			expectedAttempt:   1,
+			scenario:           "search",
+			expectedCode:       "SEARCH_FAILED",
+			expectedStatus:     "failed",
+			expectedComponents: []string{"web", "api", "database", "queue", "daemon", "executor", "tool"}, // breaks after tool (index 6)
+			failingIndex:       6,
+			failingOutcome:     "failed",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				for i, e := range events {
+					if e.Attempt != 1 {
+						t.Errorf("event[%d] attempt should be 1, got %d", i, e.Attempt)
+					}
+				}
+			},
 		},
 		{
-			scenario:          "clock_skew",
-			expectedCode:      "CLOCK_SKEW",
-			expectedStatus:    "failed",
-			expectedFailingAt: "daemon",
-			minEvents:         9, // does not break
-			expectedAttempt:   1,
+			scenario:           "clock_skew",
+			expectedCode:       "CLOCK_SKEW",
+			expectedStatus:     "failed",
+			expectedComponents: allComponents, // does not break on CLOCK_SKEW
+			failingIndex:       4,             // daemon at index 4
+			failingOutcome:     "failed",
+			verifyAttempts: func(t *testing.T, events []Event) {
+				for i, e := range events {
+					if e.Attempt != 1 {
+						t.Errorf("event[%d] attempt should be 1, got %d", i, e.Attempt)
+					}
+				}
+			},
 		},
 	}
 
@@ -202,46 +319,61 @@ func TestSimulatorRegressionScenarioContracts(t *testing.T) {
 				t.Fatalf("Simulate failed unexpectedly: %v", err)
 			}
 
-			// Assert independently without referencing tc.scenario in Scenarios
+			// Assert code and status independently
 			if run.Actual != tc.expectedCode {
 				t.Errorf("expected Actual code %q, got %q", tc.expectedCode, run.Actual)
 			}
 			if run.Status != tc.expectedStatus {
 				t.Errorf("expected Status %q, got %q", tc.expectedStatus, run.Status)
 			}
-			if len(run.Events) < tc.minEvents {
-				t.Errorf("expected at least %d events, got %d", tc.minEvents, len(run.Events))
+
+			// Validate exact event count and prevent empty-slice panic
+			if len(run.Events) != len(tc.expectedComponents) {
+				t.Fatalf("exact event count mismatch: expected %d, got %d", len(tc.expectedComponents), len(run.Events))
 			}
 
-			// If a failure was expected, inspect the event where it occurred
-			if tc.expectedFailingAt != "" {
-				var failingEvent *Event
-				for i := range run.Events {
-					if run.Events[i].Component == tc.expectedFailingAt && run.Events[i].Code == tc.expectedCode {
-						failingEvent = &run.Events[i]
-						break
+			// Extract components and verify sequence numbers (strictly 1..N)
+			actualComponents := make([]string, len(run.Events))
+			for i, ev := range run.Events {
+				actualComponents[i] = ev.Component
+				expectedSeq := int64(i + 1)
+				if ev.Sequence != expectedSeq {
+					t.Errorf("event[%d] sequence expected %d, got %d", i, expectedSeq, ev.Sequence)
+				}
+			}
+
+			// Validate exact component sequence and termination point
+			if !reflect.DeepEqual(actualComponents, tc.expectedComponents) {
+				t.Fatalf("component sequence mismatch:\nexpected: %v\ngot:      %v", tc.expectedComponents, actualComponents)
+			}
+
+			// Validate outcomes and failing event specifics
+			for i, ev := range run.Events {
+				if i == tc.failingIndex {
+					if ev.Code != tc.expectedCode {
+						t.Errorf("failing event[%d] code mismatch: expected %q, got %q", i, tc.expectedCode, ev.Code)
+					}
+					if ev.Outcome != tc.failingOutcome {
+						t.Errorf("failing event[%d] outcome mismatch: expected %q, got %q", i, tc.failingOutcome, ev.Outcome)
+					}
+				} else {
+					if ev.Outcome != "success" {
+						t.Errorf("non-failing event[%d] (%s) expected outcome 'success', got %q", i, ev.Component, ev.Outcome)
 					}
 				}
-				if failingEvent == nil {
-					t.Fatalf("failed to find event with component %q and code %q", tc.expectedFailingAt, tc.expectedCode)
-				}
-				if failingEvent.Outcome != "failed" && failingEvent.Outcome != "cancelled" && failingEvent.Outcome != "ignored" {
-					t.Errorf("unexpected outcome for failing event: %q", failingEvent.Outcome)
-				}
 			}
 
-			// Check attempt count
-			lastEvent := run.Events[len(run.Events)-1]
-			if lastEvent.Attempt != tc.expectedAttempt {
-				t.Errorf("expected attempt %d, got %d", tc.expectedAttempt, lastEvent.Attempt)
+			// Verify attempt transitions and counts
+			if tc.verifyAttempts != nil {
+				tc.verifyAttempts(t, run.Events)
 			}
 		})
 	}
 }
 
 // TestSimulatorRegressionDeterministicTimeAndIdentifiers verifies:
-// - Same seed produces identical virtual event duration and timeline progression
-// - Random IDs (ID, Trace, Span, Operation) are unique per run and not verbatim identical across runs
+// - Same seed produces identical virtual event durations and virtual timeline progression
+// - Random IDs (ID, Trace, Span, Operation) are unique across distinct runs
 // - All events within a single run share the same Operation ID and Trace correlation
 func TestSimulatorRegressionDeterministicTimeAndIdentifiers(t *testing.T) {
 	scope := Scope{Workspace: "ws-det", Actor: "actor-det"}
@@ -252,20 +384,14 @@ func TestSimulatorRegressionDeterministicTimeAndIdentifiers(t *testing.T) {
 		t.Fatalf("run1 failed: %v", err)
 	}
 
-	// Sleep slightly to ensure real wall-clock time differs
-	time.Sleep(2 * time.Millisecond)
-
 	run2, err := Simulate(context.Background(), scope, "", "normal", testSeed, "build-1", true)
 	if err != nil {
 		t.Fatalf("run2 failed: %v", err)
 	}
 
-	// 1. Unique run identifiers
+	// 1. Run ID uniqueness across distinct runs
 	if run1.ID == run2.ID {
 		t.Errorf("run1.ID and run2.ID should be unique, but got identical %q", run1.ID)
-	}
-	if run1.Created.Equal(run2.Created) {
-		t.Errorf("real Created timestamp should not be verbatim identical")
 	}
 
 	// 2. Deterministic virtual time across identical seeds
@@ -283,13 +409,25 @@ func TestSimulatorRegressionDeterministicTimeAndIdentifiers(t *testing.T) {
 			t.Errorf("event[%d] virtual Occurred time mismatch: %v vs %v", i, e1.Occurred, e2.Occurred)
 		}
 
-		// Random per-event IDs must differ between runs
+		// Random per-event IDs must differ across distinct runs
 		if e1.ID == e2.ID {
 			t.Errorf("event[%d].ID should be unique between runs, got identical %q", i, e1.ID)
 		}
+		if e1.Span == e2.Span {
+			t.Errorf("event[%d].Span should be unique between runs, got identical %q", i, e1.Span)
+		}
 	}
 
-	// 3. Operation and Trace association within a single run
+	// 3. Operation, Trace, and Span correlation
+	// Across distinct runs, generated Operation and Trace IDs must differ
+	if run1.Events[0].Operation == run2.Events[0].Operation {
+		t.Errorf("Operation ID should be unique across distinct runs, got identical %q", run1.Events[0].Operation)
+	}
+	if run1.Events[0].Trace == run2.Events[0].Trace {
+		t.Errorf("Trace ID should be unique across distinct runs, got identical %q", run1.Events[0].Trace)
+	}
+
+	// Within a single run, all events share the exact same Operation and Trace
 	op1 := run1.Events[0].Operation
 	trace1 := run1.Events[0].Trace
 	if op1 == "" || trace1 == "" {
