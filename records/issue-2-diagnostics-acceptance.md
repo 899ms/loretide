@@ -28,6 +28,17 @@ Verifier self-test result: `pwsh -NoProfile -File tests/diagnostics-acceptance/v
 
 Post-refactor non-database result: `pwsh -NoProfile -File tests/diagnostics-acceptance/verify.ps1` exited `0`; the same five source-presence checks, eight exact Go passes, and two exact Vitest passes completed. PostgreSQL remained explicitly skipped because no isolated URL was supplied; no service or browser was started.
 
+## User-supplied manual UI observation (not agent UI acceptance)
+
+The user manually observed the eight diagnostics panels on the separate `miranda-qu6a` instance at Web `13101`; API and database showed healthy, build showed `unknown`, Web heartbeat showed `unverified`, the sample count was zero, and the stream was paused. The user had not simulated a run or downloaded a bundle. This is user-provided UI evidence only: this Issue did not run a browser/UI test, computer-use check, API request, database query, or process inspection against `13101`/`18101`/`15401`, and it does not establish Issue #1 completion.
+
+Read-only source attribution:
+
+- `server/cmd/server/router.go` constructs diagnostics with `os.Getenv("LORETIDE_BUILD")`; `diagnostics.NewService` preserves an empty value because `safeToken("")` is valid. Therefore a blank launcher environment reaches the overview, and the UI's `build || "unknown"` fallback displays `unknown`. The appropriate owner is the isolated-environment launcher/configuration work in Issue #1 (set a safe build identifier); do not change production behavior under this acceptance Issue.
+- `packages/core/content/diagnostics/queries.ts` calls `POST /api/content-diagnostics/client` once on diagnostics mount and every 10 seconds, but catches and suppresses failures. `server/internal/handler/content_diagnostics.go` records Web healthy only after that authenticated, owner/admin-gated request succeeds. `service.go` otherwise emits `unverified` for absent heartbeats. The observation can therefore mean the view was observed before a successful beat, or that the POST failed/scope was rejected; current evidence cannot distinguish those cases. Treat it as a remaining Issue #1/API integration check, not as an actual Web-health pass.
+
+Non-UI preparation remaining after the launcher is available: use a fresh `loretide_diag_acceptance_*` non-superuser database on the reserved acceptance port; pass the verifier's protocol/identity gate; then record endpoint results, a downloaded JSON artifact parsed against its selected run ID, scoped denial, stream resume/de-duplication, and retention-gap results. UI observations and manual Todo steps remain user-owned and are not substituted by agent tests.
+
 ## Acceptance matrix
 
 | Requirement | Evidence location | Status | Evidence / boundary |
