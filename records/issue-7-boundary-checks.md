@@ -54,12 +54,15 @@ TypeScript 5.9.3（与仓库 catalog 一致），独立 scratchpad 环境：
 
 ## 真实 CI 运行证据
 
-<!-- 推送并创建 Draft PR 后按 head SHA 补齐 -->
+- PR：https://github.com/899ms/loretide/pull/8 （Draft，base `app-main`）
+- head SHA：`4f9d5fe91b96e673157c943c0f5a7cb5508d272d`
+- Actions run（成功）：https://github.com/899ms/loretide/actions/runs/34759796386
+  workflow `Loretide content contracts`，conclusion `success`。
+- 关键步骤（真实日志）：
+  - `node --test scripts/check-content-boundaries.test.mjs` → `# tests 11 / # pass 11 / # fail 0`。
+  - `node scripts/check-content-boundaries.mjs` → `Content boundaries passed (3520 files; 12 registered modules)`。
 
-- PR：<待补>
-- head SHA：<待补>
-- Actions run：<待补>
-- 结果：<待补>
+（后续仅追加本记录的提交会再触发一次同 workflow 的运行，内容等价、同样通过。）
 
 ## 覆盖 / 仍不支持
 
