@@ -12,7 +12,7 @@ case "${1:-}" in
     ;;
   web)
     cd apps/web
-    exec node node_modules/next/dist/bin/next dev --webpack --hostname 100.109.104.61 --port 13000
+    exec node node_modules/next/dist/bin/next dev --webpack --hostname "$LORETIDE_TAILSCALE_IP" --port 13000
     ;;
   *) echo 'Usage: native-service.sh postgres|api|web' >&2; exit 2 ;;
 esac
