@@ -9,3 +9,7 @@
 关联文件：本文件记录安装、系统依赖变更和验证；[迁移与私网评估](2026-09-13-开发环境迁移与Grok私网接入评估.md)记录整体接入方案。安装程序位于 C:/Program Files/Tailscale；首次失败日志位于 Windows AppInstaller DiagOutputDir 的 Tailscale.Tailscale.1.102.4-26-09-13-13-53-13.log。设备登录链接不持久化到文档。
 
 官方来源：https://tailscale.com/download/windows 。
+
+## 后续用户决定：仅 Tailscale
+
+用户明确只需要 Tailscale，不需要 OpenSSH。本机未安装 OpenSSH Server，本次不新增。远端接入方案由普通 openssh-server 改为优先验证 Tailscale 内置 SSH：需要受支持的远端环境、启用 Tailscale SSH、允许对应用户的访问规则及实际登录测试。仅安装 Tailscale 不表示远端命令执行已经可用；当前尚未验证。现有 Windows SSH 客户端与 OpenSSH Server 不同，不因该决定擅自卸载既有客户端。
