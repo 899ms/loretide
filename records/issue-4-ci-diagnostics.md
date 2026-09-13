@@ -37,12 +37,39 @@
 
 ## 真实 CI 运行证据
 
-<!-- 推送并创建 Draft PR 后，按 head SHA 记录真实 GitHub Actions run -->
+- PR：https://github.com/899ms/loretide/pull/5 （Draft，base `app-main`）
+- head SHA：`77d6d6b15f79ef6b381fd50718cef7e4e9452b78`
+- Actions run（成功）：https://github.com/899ms/loretide/actions/runs/34758256708
+  workflow `Loretide content contracts`，事件 `pull_request`，conclusion `success`。
 
-- PR：<待补>
-- head SHA：<待补>
-- Actions run：<待补>
-- 各检查结果：<待补>
+各检查结果（均在同一 run 内，来自真实日志）：
+
+| 检查 | 结果 |
+| --- | --- |
+| check-content-boundaries.test.mjs | ✓ |
+| check-content-boundaries.mjs | ✓ |
+| contract.test.ts | ✓ Tests 2 passed |
+| **queries.test.tsx（新增执行）** | ✓ Test Files 1 passed / Tests 1 passed |
+| **content-diagnostics.test.ts（新增执行）** | ✓ Test Files 1 passed / Tests 1 passed |
+| locales/parity.test.ts | ✓ Tests 160 passed |
+| Web typecheck | ✓ |
+| Provision dedicated DB + least-privilege role | ✓ |
+| **身份/权限失败即停止核验** | ✓ 打印 `false false false true`（非超级用户、不能建库/建角色、拥有自身数据库）|
+| Go diagnostics 集成（含 -race，以受限角色连接） | ✓ `ok github.com/.../server/internal/content/diagnostics 3.300s` |
+| 执行器拒绝门禁 + 迁移不变量 | ✓ |
+| `go build ./cmd/server` | ✓ |
+
+密钥核验：日志中未出现解析后的密码或完整连接串；仅出现脚本源码里未展开的
+`$PGPW` / `${PGPW}` 变量行（`::add-mask::` 生效）。
+
+### 首次运行的失败与修复（同一 PR 内）
+
+- 首个 run（SHA `3e290d4`，https://github.com/899ms/loretide/actions/runs/34758101712）
+  在身份核验步骤失败并停止（打印 `false false false false`）。原因：第 4 项
+  误用 `current_user = current_database()` 比较，而角色名 `loretide_diag` 与库名
+  `loretide_diag_ci` 本就不同。已改为比较数据库属主
+  `pg_get_userbyid(datdba) = current_user`，SHA `77d6d6b1` 通过。
+  该失败也正向证明了“失败即停止、不吞掉”这条门禁本身生效。
 
 ## 跳过项 / 未完成项
 
