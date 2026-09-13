@@ -1,8 +1,8 @@
 # Remote Docker development
 
-Instance directory: `/home/opsadmin/loretide-dev`; Compose project: `loretide-dev`.
+Current host: `78.47.42.189`; instance directory: `/root/loretide-dev`; Compose project: `loretide-dev`.
 
-Use the dedicated opsadmin SSH key and verified host key file. No root or password SSH login. Docker operations use `sudo -n` inside that authenticated session.
+For this new host, the operator explicitly chose root password authentication. Enter the password interactively; never store it in scripts, command arguments, or version control. The old host `78.47.43.8` still uses opsadmin and its dedicated SSH key, but its Loretide development deployment was removed on 2026-09-13 and the original services restored.
 
 From the instance directory:
 
@@ -21,7 +21,7 @@ Source is mounted from the dedicated directory. Web uses the pinned pnpm version
 
 ## Attachment persistence
 
-`LOCAL_UPLOAD_DIR=/workspace/server/data/uploads` resolves through the existing source bind mount to `/home/opsadmin/loretide-dev/server/data/uploads`. This explicitly preserves the upstream default location and existing files. It is separate from the original Multica instance and ignored by Git. Container recreation retains files; deleting the host directory does not. Back up this directory alongside the database when backups are implemented.
+`LOCAL_UPLOAD_DIR=/workspace/server/data/uploads` resolves through the existing source bind mount to `/root/loretide-dev/server/data/uploads`. This preserves the upstream default location and restored files. It is separate from the original Multica instance and ignored by Git. Container recreation retains files; deleting the host directory does not. Back up this directory alongside the database.
 
 This is storage for explicitly uploaded application attachments. It does not scan or upload the operator's local media folders. The planned local asset references remain a separate, authorized daemon capability.
 
