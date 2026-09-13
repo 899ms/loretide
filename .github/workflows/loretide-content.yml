@@ -20,6 +20,8 @@ jobs:
       - run: node --test scripts/check-content-boundaries.test.mjs
       - run: node scripts/check-content-boundaries.mjs
       - run: pnpm --filter @multica/core exec vitest run content/diagnostics/contract.test.ts
+      - run: pnpm --filter @multica/core exec vitest run content/diagnostics/queries.test.tsx
+      - run: pnpm --filter @multica/web exec vitest run platform/content-diagnostics.test.ts
       - run: pnpm --filter @multica/views exec vitest run locales/parity.test.ts
       - run: pnpm --filter @multica/web typecheck
       - uses: actions/setup-go@v5
@@ -27,14 +29,50 @@ jobs:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
       - name: Native PostgreSQL fixture (no Docker)
+        run: sudo systemctl start postgresql
+      - name: Provision dedicated diagnostics database and least-privilege role
         run: |
-          sudo systemctl start postgresql
-          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'diagnostics-ci-only'"
+          set -euo pipefail
+          # Random per-run credential; never echoed. Registered as a log mask so
+          # any accidental downstream print is redacted by the runner.
+          PGPW="$(openssl rand -hex 24)"
+          echo "::add-mask::$PGPW"
+          # Admin (postgres) is used ONLY to provision. The diagnostics role is
+          # NOSUPERUSER/NOCREATEDB/NOCREATEROLE and owns just its own database,
+          # which lets the integration test create/drop its temporary schema and
+          # objects without any cluster-wide privilege.
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -q -v pw="$PGPW" <<'SQL'
+          DROP DATABASE IF EXISTS loretide_diag_ci;
+          DROP ROLE IF EXISTS loretide_diag;
+          CREATE ROLE loretide_diag LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD :'pw';
+          CREATE DATABASE loretide_diag_ci OWNER loretide_diag;
+          SQL
+          DIAG_URL="postgres://loretide_diag:${PGPW}@127.0.0.1:5432/loretide_diag_ci?sslmode=disable"
+          echo "::add-mask::$DIAG_URL"
+          # Exported to later steps via the environment file; the value is masked
+          # so it is not printed even if a later step dumps the environment.
+          printf 'LORETIDE_DIAG_TEST_DATABASE_URL=%s\n' "$DIAG_URL" >> "$GITHUB_ENV"
+      - name: Verify least-privilege database identity (fail closed)
+        run: |
+          set -euo pipefail
+          # Read-only verification, run AS the diagnostics role. Prints only the
+          # boolean role attributes (no user, host, database name or password on
+          # the connection string). Any deviation stops the job before tests run,
+          # so a superuser or over-privileged role can never reach the suite.
+          attrs="$(psql "$LORETIDE_DIAG_TEST_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 \
+            -c "SELECT r.rolsuper::text||' '||r.rolcreatedb::text||' '||r.rolcreaterole::text||' '||(pg_get_userbyid((SELECT datdba FROM pg_database WHERE datname = current_database())) = current_user)::text FROM pg_roles r WHERE r.rolname = current_user")"
+          echo "diagnostics role (rolsuper rolcreatedb rolcreaterole own_db): $attrs"
+          if [ "$attrs" != "false false false true" ]; then
+            echo "::error::diagnostics database identity/permission check failed; refusing to run integration tests"
+            exit 1
+          fi
       - name: Isolated diagnostic contracts and execution gates
         working-directory: server
-        env:
-          LORETIDE_DIAG_TEST_DATABASE_URL: postgres://postgres:diagnostics-ci-only@127.0.0.1:5432/postgres?sslmode=disable
         run: |
+          set -euo pipefail
+          # LORETIDE_DIAG_TEST_DATABASE_URL comes from the provisioning step via
+          # $GITHUB_ENV and points at the least-privilege role. -race surfaces any
+          # concurrency defect; failures are not swallowed (set -e + non-zero exit).
           go test -race ./internal/content/diagnostics -count=1
           go test ./pkg/executionpolicy ./pkg/agent ./internal/daemon/execenv -run 'TestMissingPolicy|TestConfiguredPolicy|TestLoretide' -count=1
           go test ./internal/migrations -run 'TestMigrationNumericPrefixesAreUnique|TestMigrationFilesHaveMatchingDirections' -count=1
