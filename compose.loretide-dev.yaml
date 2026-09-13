@@ -48,7 +48,7 @@ services:
       FRONTEND_PORT: "3000"
       REMOTE_API_URL: http://api:8080
       NEXT_TELEMETRY_DISABLED: "1"
-      NODE_OPTIONS: --max-old-space-size=2048
+      NODE_OPTIONS: --max-old-space-size=2560
       CI: "true"
     ports:
       - "127.0.0.1:13000:3000"
@@ -56,7 +56,7 @@ services:
       - .:/workspace
     depends_on:
       - api
-    mem_limit: 2560m
+    mem_limit: 3584m
     cpus: 2.0
 volumes:
   database:
