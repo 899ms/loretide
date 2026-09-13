@@ -64,6 +64,13 @@ TypeScript 5.9.3（与仓库 catalog 一致），独立 scratchpad 环境：
 
 （后续仅追加本记录的提交会再触发一次同 workflow 的运行，内容等价、同样通过。）
 
+### 二次修复后的真实 CI（主任务复审反馈修复）
+
+- head SHA：`73a0804bd0cce7502daf97b64793a3bdce26ea4b`
+- Actions run（成功）：https://github.com/899ms/loretide/actions/runs/34761413822
+  - `node --test scripts/check-content-boundaries.test.mjs` → `# tests 13 / # pass 13 / # fail 0`
+  - `node scripts/check-content-boundaries.mjs` → `Content boundaries passed (3520 files; 12 registered modules)`
+
 ## 主任务复审反馈与二次修复（2026-09-13）
 
 主任务在 head `332a37a1` 上独立执行 `check()`，指出 Go 词法器两处**漏报**（现已本地复现确认有效）：
