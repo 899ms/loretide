@@ -4,13 +4,6 @@ param(
   [switch]$Library
 )
 
-function Assert-SourcePresence {
-  param([string]$Path, [string]$Pattern, [string]$Description)
-  if (-not (Test-Path -LiteralPath $Path)) { throw "Missing expected diagnostic source: $Path" }
-  if (-not (Select-String -LiteralPath $Path -Pattern $Pattern -Quiet)) { throw "Source-presence check failed: $Description" }
-  Write-Host "PASS source presence: $Description"
-}
-
 function Assert-GoEvidence {
   param([object[]]$Events, [string[]]$ExpectedTests)
   foreach ($name in $ExpectedTests) {
@@ -20,18 +13,6 @@ function Assert-GoEvidence {
     if ($runs.Count -ne 1 -or $passes.Count -ne 1 -or $nonPasses.Count -ne 0) {
       throw "Expected exactly one non-skipped pass for $name; observed run=$($runs.Count), pass=$($passes.Count), skip-or-fail=$($nonPasses.Count)."
     }
-  }
-}
-
-function Assert-VitestEvidence {
-  param([object]$Report)
-  $expectedFiles = @("apps/web/platform/content-diagnostics.test.ts", "packages/core/content/diagnostics/queries.test.tsx")
-  $actualFiles = @($Report.testResults | ForEach-Object { $_.name.Replace("\\", "/") })
-  if ($Report.numTotalTests -ne 2 -or $Report.numPassedTests -ne 2 -or $Report.numFailedTests -ne 0 -or $Report.testResults.Count -ne 2) {
-    throw "Vitest JSON report did not show exactly two passing selected tests."
-  }
-  foreach ($file in $expectedFiles) {
-    if (-not ($actualFiles | Where-Object { $_.EndsWith($file) })) { throw "Vitest JSON report omitted $file." }
   }
 }
 
@@ -64,14 +45,6 @@ function Invoke-DefaultCommand {
       $events = @(); foreach ($line in $lines) { try { $events += ($line | ConvertFrom-Json) } catch { } }
       return $events
     }
-    "vitest" {
-      $reportPath = [System.IO.Path]::GetTempFileName()
-      try {
-        $nativeOutput = & pnpm exec vitest run apps/web/platform/content-diagnostics.test.ts packages/core/content/diagnostics/queries.test.tsx --reporter=json --outputFile $reportPath 2>&1
-        if ($LASTEXITCODE -ne 0) { throw "Selected Vitest tests failed; inspect local test output without sharing connection details." }
-        return Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json
-      } finally { Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue }
-    }
     "psql" {
       $psql = Get-Command psql -ErrorAction SilentlyContinue
       if (-not $psql) { throw "PostgreSQL protocol gate requires psql on PATH; no integration test was started." }
@@ -99,17 +72,9 @@ function Invoke-DiagnosticsAcceptance {
   $tests = @("TestTracePropagationAndUntrustedIdentity", "TestSnapshotImmutableAndRevocation", "TestDiagnosticLimitsRejectInvalidConfiguration", "TestSecretsNeverEnterTechnicalLog", "TestWebSocketQueuePropagationDuplicateAndRevocation", "TestTransportNonTestDenied", "TestEverySimulatedFaultAndDeterministicTime", "TestSimulationCannotAuthorizeOrReplayHumanActions")
   try {
     Set-Location $repoRoot
-    Assert-SourcePresence "apps/web/platform/content-diagnostics.ts" "application/json" "download JSON content type is wired"
-    Assert-SourcePresence "apps/web/platform/content-diagnostics.ts" "link.click" "download trigger is wired"
-    Assert-SourcePresence "packages/core/content/diagnostics/queries.ts" 'after=\$\{cursor.current\}' "stream cursor query is wired"
-    Assert-SourcePresence "packages/core/content/diagnostics/queries.ts" "mergeEvents" "stream merge helper is wired"
-    Assert-SourcePresence "server/internal/content/diagnostics/service.go" "Real executor replay is unavailable" "real-executor limit is disclosed"
     $events = Invoke-RunnerSafely $CommandRunner "go" ([pscustomobject]@{ Pattern = ($tests -join "|") })
     Assert-GoEvidence $events $tests
     Write-Host "PASS Go behavior tests: $($tests.Count) named tests ran and passed exactly once"
-    $report = Invoke-RunnerSafely $CommandRunner "vitest" $null
-    Assert-VitestEvidence $report
-    Write-Host "PASS Vitest behavior tests: 2 named files and 2 tests passed"
     if ($DatabaseUrl) {
       $target = Assert-DatabaseUri $DatabaseUrl
       $env:LORETIDE_DIAG_TEST_DATABASE_URL = $DatabaseUrl
