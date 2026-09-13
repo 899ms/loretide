@@ -37,13 +37,14 @@ function Assert-VitestEvidence {
 
 function Assert-DatabaseUri {
   param([string]$Value)
-  $uri = [Uri]$Value
+  try { $uri = [Uri]$Value } catch { throw "DatabaseUrl has invalid format." }
   $databaseName = $uri.AbsolutePath.TrimStart("/")
   $queryKeys = @($uri.Query.TrimStart("?").Split("&", [System.StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { [Uri]::UnescapeDataString(($_ -split "=", 2)[0]) })
-  if ($uri.Scheme -notin @("postgres", "postgresql") -or $uri.Host -notin @("localhost", "127.0.0.1", "::1") -or $uri.Port -ne 15402 -or $databaseName -notmatch '^loretide_diag_acceptance_[a-z0-9_]+$' -or -not $uri.UserInfo -or @($queryKeys | Where-Object { $_ -ne "sslmode" }).Count -ne 0) {
+  $rawCredentials = $uri.UserInfo.Split(":", 2)
+  if ($uri.Scheme -notin @("postgres", "postgresql") -or $uri.Host -notin @("localhost", "127.0.0.1", "::1") -or $uri.Port -ne 15402 -or $databaseName -notmatch '^loretide_diag_acceptance_[a-z0-9_]+$' -or $rawCredentials.Count -ne 2 -or -not $rawCredentials[0] -or -not $rawCredentials[1] -or @($queryKeys | Where-Object { $_ -ne "sslmode" }).Count -ne 0) {
     throw "DatabaseUrl must name a credentialed localhost:15402 loretide_diag_acceptance_* database."
   }
-  return [pscustomobject]@{ Uri = $uri; DatabaseName = $databaseName; User = [Uri]::UnescapeDataString($uri.UserInfo).Split(":", 2)[0] }
+  return [pscustomobject]@{ Uri = $uri; DatabaseName = $databaseName; User = [Uri]::UnescapeDataString($rawCredentials[0]); Password = [Uri]::UnescapeDataString($rawCredentials[1]) }
 }
 
 function Assert-DatabaseIdentity {
@@ -66,7 +67,7 @@ function Invoke-DefaultCommand {
     "vitest" {
       $reportPath = [System.IO.Path]::GetTempFileName()
       try {
-        & pnpm exec vitest run apps/web/platform/content-diagnostics.test.ts packages/core/content/diagnostics/queries.test.tsx --reporter=json --outputFile $reportPath
+        $nativeOutput = & pnpm exec vitest run apps/web/platform/content-diagnostics.test.ts packages/core/content/diagnostics/queries.test.tsx --reporter=json --outputFile $reportPath 2>&1
         if ($LASTEXITCODE -ne 0) { throw "Selected Vitest tests failed; inspect local test output without sharing connection details." }
         return Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json
       } finally { Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue }
@@ -112,7 +113,7 @@ function Invoke-DiagnosticsAcceptance {
     if ($DatabaseUrl) {
       $target = Assert-DatabaseUri $DatabaseUrl
       $env:LORETIDE_DIAG_TEST_DATABASE_URL = $DatabaseUrl
-      $env:PGPASSWORD = [Uri]::UnescapeDataString($target.Uri.UserInfo).Split(":", 2)[1]
+      $env:PGPASSWORD = $target.Password
       $identity = Invoke-RunnerSafely $CommandRunner "psql" ([pscustomobject]@{ Target = $target })
       Assert-DatabaseIdentity $identity $target
       $dbEvents = Invoke-RunnerSafely $CommandRunner "go" ([pscustomobject]@{ Pattern = "TestPostgresAuditRollbackIsolationAndRetention|TestPostgresFullScenariosExportAndHealth" })

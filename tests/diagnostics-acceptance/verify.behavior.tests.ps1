@@ -32,7 +32,24 @@ foreach ($url in @("postgres://u:p@localhost:15403/loretide_diag_acceptance_x", 
 $target = Assert-DatabaseUri "postgres://u:p@localhost:15402/loretide_diag_acceptance_x?sslmode=disable"
 Assert-DatabaseIdentity @("loretide_diag_acceptance_x|u|f") $target
 Assert-Throws { Assert-DatabaseIdentity @("wrong|u|f") $target } "mismatched database identity"
+Assert-Throws { Assert-DatabaseIdentity @("loretide_diag_acceptance_x|other_user|f") $target } "mismatched database user"
 Assert-Throws { Assert-DatabaseIdentity @("loretide_diag_acceptance_x|u|t") $target } "superuser identity"
+Assert-Throws { Assert-DatabaseUri "postgres://u:not-for-output@[" } "malformed database URI" "not-for-output"
+Assert-Throws { Assert-DatabaseUri "postgres://u@localhost:15402/loretide_diag_acceptance_x" } "missing database password"
+
+function global:pnpm {
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+  Write-Output "ordinary Vitest log"
+  $outputIndex = [Array]::IndexOf($Arguments, "--outputFile")
+  Set-Content -LiteralPath $Arguments[$outputIndex + 1] -NoNewline -Value '{"numTotalTests":2,"numPassedTests":2,"numFailedTests":0,"testResults":[{"name":"C:/repo/apps/web/platform/content-diagnostics.test.ts"},{"name":"C:/repo/packages/core/content/diagnostics/queries.test.tsx"}]}'
+  $global:LASTEXITCODE = 0
+}
+try {
+  $defaultReport = Invoke-DefaultCommand "vitest" $null
+  if ($defaultReport -is [array] -or $defaultReport.numPassedTests -ne 2) { throw "default Vitest runner mixed native output with its JSON report" }
+} finally {
+  Remove-Item function:global:pnpm -Force
+}
 
 $saved = Get-Location; $oldDb = $env:LORETIDE_DIAG_TEST_DATABASE_URL; $oldPassword = $env:PGPASSWORD
 $fakeSecret = "not-for-output"
