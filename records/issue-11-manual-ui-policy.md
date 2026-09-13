@@ -60,12 +60,18 @@ Go 诊断 `-race`、执行器门禁、迁移不变量、数据库最小权限（
 
 ## 真实 CI 运行证据
 
-<!-- 推送并创建 Draft PR 后按 head SHA 补齐 -->
+- PR：https://github.com/899ms/loretide/pull/12 （Draft，base `app-main`）
+- head SHA：`f19d99adad7f8e56402d208fedbb889be8d3ac59`
+- Actions run（成功）：https://github.com/899ms/loretide/actions/runs/34765284507
+  workflow `Loretide content contracts`，conclusion `success`。
+- 日志核对（真实日志）：
+  - vitest 仅执行 `content/diagnostics/contract.test.ts`（2 passed）与
+    `locales/parity.test.ts`（160 passed）。
+  - `queries.test.tsx` 与 `platform/content-diagnostics.test.ts` 的执行行数 = **0**（CI 未运行）。
+  - 非 UI 检查保留：`Content boundaries passed`、数据库最小权限身份核验（`diagnostics role (...)`）、
+    Go 诊断/门禁/迁移、`go build ./cmd/server`、Web typecheck 均在。
 
-- PR：<待补>
-- head SHA：<待补>
-- Actions run：<待补>
-- 日志核对：<待补：不执行两条 UI 单测；非 UI 检查保留>
+（后续仅追加本记录的提交会再触发一次同 workflow 运行，内容等价、同样通过。）
 
 ## 未覆盖风险 / 限制
 
