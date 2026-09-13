@@ -1,0 +1,41 @@
+name: Loretide content contracts
+on:
+  push:
+    branches: [app-main]
+  pull_request:
+    branches: [app-main]
+permissions:
+  contents: read
+jobs:
+  boundaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @multica/web...
+      - run: node --test scripts/check-content-boundaries.test.mjs
+      - run: node scripts/check-content-boundaries.mjs
+      - run: pnpm --filter @multica/core exec vitest run content/diagnostics/contract.test.ts
+      - run: pnpm --filter @multica/views exec vitest run locales/parity.test.ts
+      - run: pnpm --filter @multica/web typecheck
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Native PostgreSQL fixture (no Docker)
+        run: |
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'diagnostics-ci-only'"
+      - name: Isolated diagnostic contracts and execution gates
+        working-directory: server
+        env:
+          LORETIDE_DIAG_TEST_DATABASE_URL: postgres://postgres:diagnostics-ci-only@127.0.0.1:5432/postgres?sslmode=disable
+        run: |
+          go test -race ./internal/content/diagnostics -count=1
+          go test ./pkg/executionpolicy ./pkg/agent ./internal/daemon/execenv -run 'TestMissingPolicy|TestConfiguredPolicy|TestLoretide' -count=1
+          go test ./internal/migrations -run 'TestMigrationNumericPrefixesAreUnique|TestMigrationFilesHaveMatchingDirections' -count=1
+          go build ./cmd/server

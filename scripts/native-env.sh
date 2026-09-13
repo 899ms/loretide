@@ -11,6 +11,9 @@ if [[ -f "$LORETIDE_ROOT/data/native/network.env" ]]; then
   source "$LORETIDE_ROOT/data/native/network.env"
 fi
 export APP_ENV=development PORT=18000 FRONTEND_PORT=13000
+export LORETIDE_EXECUTION_POLICY=disabled
+export LORETIDE_DIAGNOSTICS_TEST=1
+export LORETIDE_BUILD="$(cat "$LORETIDE_ROOT/data/native/build-id" 2>/dev/null || echo unknown)"
 export LORETIDE_TAILSCALE_IP="${LORETIDE_TAILSCALE_IP:-100.109.104.61}"
 export FRONTEND_ORIGIN="http://$LORETIDE_TAILSCALE_IP:13000"
 export CORS_ALLOWED_ORIGINS="$FRONTEND_ORIGIN"

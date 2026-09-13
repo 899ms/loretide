@@ -21,6 +21,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/analytics"
 	"github.com/multica-ai/multica/server/internal/auth"
 	"github.com/multica-ai/multica/server/internal/cloudruntime"
+	"github.com/multica-ai/multica/server/internal/content/diagnostics"
 	"github.com/multica-ai/multica/server/internal/daemonws"
 	"github.com/multica-ai/multica/server/internal/entitlement"
 	"github.com/multica-ai/multica/server/internal/events"
@@ -439,6 +440,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		ServerVersion:            normalizeServerVersion(version),
 	}
 	h := handler.New(queries, pool, hub, bus, emailSvc, store, cfSigner, analyticsClient, signupConfig, daemonHub)
+	h.ContentDiagnostics = diagnostics.NewService(h.NewContentDiagnosticsStore(pool), os.Getenv("LORETIDE_BUILD"), os.Getenv("APP_ENV") == "development" && os.Getenv("LORETIDE_DIAGNOSTICS_TEST") == "1")
+	if err := h.ContentDiagnostics.Store.ConfigureLimits(os.Getenv("LORETIDE_DIAG_MAX_LOGS"), os.Getenv("LORETIDE_DIAG_RETENTION_DAYS")); err != nil {
+		panic(err)
+	}
 	invitationRateLimits := handler.DefaultInvitationRateLimits()
 	invitationRateLimits.Actor.Limit = envNonNegativeInt("RATE_LIMIT_INVITATION_ACTOR_10M", invitationRateLimits.Actor.Limit)
 	invitationRateLimits.Workspace.Limit = envNonNegativeInt("RATE_LIMIT_INVITATION_WORKSPACE_24H", invitationRateLimits.Workspace.Limit)
@@ -1859,6 +1864,18 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Use(middleware.RequireWorkspaceMember(queries))
 
 			// Assignee frequency
+			r.Route("/api/content-diagnostics", func(r chi.Router) {
+				r.Use(h.DiagnosticTrace)
+				r.Use(handler.RequireHumanActor)
+				r.Get("/overview", h.ContentDiagnosticOverview)
+				r.Get("/runs", h.ContentDiagnosticRuns)
+				r.Get("/events", h.ContentDiagnosticEvents)
+				r.Get("/stream", h.ContentDiagnosticStream)
+				r.Post("/simulate", h.ContentDiagnosticSimulate)
+				r.Get("/export", h.ContentDiagnosticExport)
+				r.Post("/export", h.ContentDiagnosticExport)
+				r.Post("/client", h.ContentDiagnosticClient)
+			})
 			r.Get("/api/assignee-frequency", h.GetAssigneeFrequency)
 
 			// Issues

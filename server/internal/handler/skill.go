@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -302,13 +303,16 @@ type AddAgentSkillsRequest struct {
 
 // validateFilePath checks that a file path is safe (no traversal, no absolute paths).
 func validateFilePath(p string) bool {
-	if p == "" {
+	if p == "" || strings.ContainsAny(p, ":\x00") {
 		return false
 	}
-	if filepath.IsAbs(p) {
+	// Skill paths can move between Windows and Unix hosts. Check both separator
+	// forms independently of the server OS, including Windows rooted paths.
+	portable := strings.ReplaceAll(p, "\\", "/")
+	if path.IsAbs(portable) {
 		return false
 	}
-	cleaned := filepath.Clean(p)
+	cleaned := path.Clean(portable)
 	if strings.HasPrefix(cleaned, "..") {
 		return false
 	}

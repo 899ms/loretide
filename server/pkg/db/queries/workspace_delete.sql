@@ -320,6 +320,19 @@ deleted_hourly AS (
 deleted_attachments AS (
     DELETE FROM attachment WHERE workspace_id = $1
 ),
+-- The explicit workspace-delete transaction removes diagnostic state only when
+-- an owner deletes the whole workspace; ordinary technical-log retention never
+-- touches content_operation_audit. These tables store workspace ids as text, so
+-- cast the handler UUID parameter at this boundary.
+deleted_content_diagnostic_runs AS (
+    DELETE FROM content_diagnostic_run WHERE workspace_id = $1::text
+),
+deleted_content_operation_audit AS (
+    DELETE FROM content_operation_audit WHERE workspace_id = $1::text
+),
+deleted_content_technical_logs AS (
+    DELETE FROM content_technical_log WHERE workspace_id = $1::text
+),
 deleted_channel_outbound_cards AS (
     DELETE FROM channel_outbound_card_message
     WHERE chat_session_id IN (SELECT id FROM ws_sessions)

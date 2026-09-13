@@ -29,6 +29,7 @@ import { cn } from "@multica/ui/lib/utils";
 import { resolveSettingsLocation, settingsHref } from "./settings-navigation";
 import { AppLink, useNavigation } from "../../navigation";
 import { AccountTab } from "./account-tab";
+import { SettingsContent } from "./settings-layout";
 import { PreferencesTab } from "./preferences-tab";
 import { TokensTab } from "./tokens-tab";
 import { WorkspaceTab } from "./workspace-tab";
@@ -310,28 +311,21 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
           ))}
         </nav>
       </aside>
-      <div
+      <SettingsContent
         key={`${active.value}:${location.integration ?? ""}`}
-        className="min-w-0 flex-1 overflow-y-auto overscroll-contain"
+        wide={active.wide}
       >
-        <div
-          className={cn(
-            "mx-auto w-full px-4 py-6 sm:px-6 md:px-10 md:py-8",
-            active.wide ? "max-w-5xl" : "max-w-4xl",
+        <div className="mb-3 flex min-w-0 items-center gap-2 text-caption text-muted-foreground">
+          <span className="truncate">{activeGroup.scope}</span>
+          {activeGroup.scope !== activeGroup.label && (
+            <>
+              <ChevronRight aria-hidden="true" className="size-3 shrink-0" />
+              <span className="shrink-0">{activeGroup.label}</span>
+            </>
           )}
-        >
-          <div className="mb-3 flex min-w-0 items-center gap-2 text-caption text-muted-foreground">
-            <span className="truncate">{activeGroup.scope}</span>
-            {activeGroup.scope !== activeGroup.label && (
-              <>
-                <ChevronRight aria-hidden="true" className="size-3 shrink-0" />
-                <span className="shrink-0">{activeGroup.label}</span>
-              </>
-            )}
-          </div>
-          {active.content}
         </div>
-      </div>
+        {active.content}
+      </SettingsContent>
     </div>
   );
 }

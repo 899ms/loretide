@@ -192,6 +192,8 @@ Root-level reminders:
 
 ## UI Rules
 
+- Loretide mandatory UI policy: read `docs/development/design/README.md` before changing any Web page. Fully reuse Multica components, layouts, typography and design tokens; do not hand-build new page controls or layouts. This also applies to diagnostics and test pages.
+
 - Prefer shadcn/Base UI components over custom implementations. Add them with `pnpm ui:add <component>` from the repo root.
 - The Pro `@reui` registry is configured in `packages/ui/components.json`; add items with `pnpm ui:add @reui/<name>` and answer `n` to every overwrite prompt so local component customizations survive. It reads `REUI_LICENSE_KEY` from the environment — agents get it from their Multica agent environment, humans export it in their own shell. Never write the key into a repo file.
 - ReUI ships source, not a dependency: route the vendored output to our layout (new primitives to `packages/ui/components/ui/`, compositions to `packages/views/<domain>/`) and rewrite it to our conventions before committing.
@@ -257,3 +259,6 @@ Do not claim verification passed unless you ran it. If you skip checks because t
 
 - All queries filter by `workspace_id`; membership gates access; `X-Workspace-ID` selects the workspace.
 - Issue assignees are polymorphic: `assignee_type` plus `assignee_id` can reference a member or an agent.
+
+## AI task collaboration
+Follow docs/development/ai-collaboration.md: claim a ready Issue, confirm unique ownership, use an isolated worktree/database/ports, deliver a Draft PR for main-task review. Never run cleanup tests against development data.

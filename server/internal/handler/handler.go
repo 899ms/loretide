@@ -21,6 +21,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/analytics"
 	"github.com/multica-ai/multica/server/internal/auth"
 	"github.com/multica-ai/multica/server/internal/cloudruntime"
+	"github.com/multica-ai/multica/server/internal/content/diagnostics"
 	"github.com/multica-ai/multica/server/internal/daemonws"
 	"github.com/multica-ai/multica/server/internal/dbreader"
 	"github.com/multica-ai/multica/server/internal/entitlement"
@@ -189,6 +190,7 @@ type RuntimeRecoveryNotifier interface {
 }
 
 type Handler struct {
+	ContentDiagnostics *diagnostics.Service
 	Queries                *db.Queries
 	ReadSelector           *dbreader.Selector
 	DB                     dbExecutor

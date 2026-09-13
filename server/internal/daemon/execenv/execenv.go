@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/multica-ai/multica/server/internal/runtimeapps"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy"
 )
 
 // RepoContextForEnv describes a workspace repo available for checkout.
@@ -410,6 +411,7 @@ func readablePathSegment(label, fallback, id string) string {
 // The workdir starts empty (no repo checkouts). The agent checks out repos
 // on demand via `multica repo checkout <url>`.
 func Prepare(params PrepareParams, logger *slog.Logger) (*Environment, error) {
+	if err := executionpolicy.Check(); err != nil { return nil, err }
 	if params.WorkspacesRoot == "" {
 		return nil, fmt.Errorf("execenv: workspaces root is required")
 	}
@@ -807,6 +809,7 @@ type ReuseParams struct {
 // Returns nil if the workdir does not exist or required provider setup fails
 // (caller should fall back to Prepare).
 func Reuse(params ReuseParams, logger *slog.Logger) *Environment {
+	if executionpolicy.Check() != nil { return nil }
 	if _, err := os.Stat(params.WorkDir); err != nil {
 		return nil
 	}

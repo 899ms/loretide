@@ -5,6 +5,28 @@ import { cn } from "@multica/ui/lib/utils";
 
 export type SettingsSaveStatus = "idle" | "saving" | "saved" | "error";
 
+/** Shared settings content rail, also used by workspace diagnostics. */
+export function SettingsContent({
+  children,
+  wide = false,
+}: {
+  children: ReactNode;
+  wide?: boolean;
+}) {
+  return (
+    <div className="min-w-0 flex-1 overflow-y-auto overscroll-contain">
+      <div
+        className={cn(
+          "mx-auto w-full px-4 py-6 sm:px-6 md:px-10 md:py-8",
+          wide ? "max-w-5xl" : "max-w-4xl",
+        )}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function SettingsTab({
   title,
   description,

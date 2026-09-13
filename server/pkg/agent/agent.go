@@ -12,6 +12,8 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/multica-ai/multica/server/pkg/executionpolicy"
 )
 
 // Backend is the unified interface for executing prompts via coding agents.
@@ -412,6 +414,7 @@ func ResumeRejectionUndetectable(agentType string) bool {
 }
 
 func New(agentType string, cfg Config) (Backend, error) {
+	if err := executionpolicy.Check(); err != nil { return nil, err }
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}

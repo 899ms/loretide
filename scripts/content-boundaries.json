@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "roots": [
+    "server/internal/content",
+    "packages/core/content",
+    "packages/views/content"
+  ],
+  "modules": {
+    "diagnostics": [],
+    "workspace-core": [
+      "diagnostics"
+    ],
+    "ip-profile": [
+      "workspace-core",
+      "diagnostics"
+    ],
+    "source-inbox": [
+      "workspace-core",
+      "diagnostics"
+    ],
+    "knowledge-base": [
+      "workspace-core",
+      "source-inbox",
+      "diagnostics"
+    ],
+    "topic-planning": [
+      "workspace-core",
+      "ip-profile",
+      "knowledge-base",
+      "diagnostics"
+    ],
+    "work-editor": [
+      "workspace-core",
+      "diagnostics"
+    ],
+    "agent-workflow": [
+      "workspace-core",
+      "ip-profile",
+      "knowledge-base",
+      "topic-planning",
+      "work-editor",
+      "diagnostics"
+    ],
+    "review-delivery": [
+      "workspace-core",
+      "source-inbox",
+      "work-editor",
+      "diagnostics"
+    ],
+    "feedback-learning": [
+      "workspace-core",
+      "review-delivery",
+      "diagnostics"
+    ],
+    "project-collab": [
+      "workspace-core",
+      "topic-planning",
+      "work-editor",
+      "review-delivery",
+      "diagnostics"
+    ],
+    "agent-gateway": [
+      "workspace-core",
+      "agent-workflow",
+      "diagnostics"
+    ]
+  },
+  "upstreamImports": {
+    "server/internal/content": [
+      "github.com/jackc/pgx/v5",
+      "github.com/google/uuid",
+      "github.com/gorilla/websocket",
+      "go.opentelemetry.io/otel"
+    ],
+    "packages/core/content": [
+      "react",
+      "@tanstack/react-query",
+      "zod",
+      "@multica/core/api",
+      "@multica/core/api/schema"
+    ],
+    "packages/views/content": [
+      "react",
+      "@multica/ui",
+      "@multica/core/workspace",
+      "@multica/core/platform",
+      "@multica/views/navigation",
+      "@multica/views/i18n",
+      "react-i18next",
+      "@multica/views/settings/layout",
+      "@multica/views/layout/page-header"
+    ]
+  },
+  "adapters": [
+    "server/internal/handler/content_diagnostics.go",
+    "server/internal/handler/content_diagnostics_workspace_guard.go",
+    "server/internal/handler/handler.go",
+    "server/cmd/server/router.go",
+    "apps/web/app/[workspaceSlug]/(dashboard)/diagnostics/page.tsx"
+  ]
+}

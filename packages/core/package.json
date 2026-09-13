@@ -159,7 +159,8 @@
     "./skills/frontmatter": "./skills/frontmatter.ts",
     "./skills/pack-archive": "./skills/pack-archive.ts",
     "./skills/stores": "./skills/stores/index.ts",
-    "./autopilots/stores": "./autopilots/stores/index.ts"
+    "./autopilots/stores": "./autopilots/stores/index.ts",
+    "./content/diagnostics": "./content/diagnostics/index.ts"
   },
   "dependencies": {
     "@formatjs/intl-localematcher": "catalog:",

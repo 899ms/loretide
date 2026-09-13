@@ -405,6 +405,23 @@ func (q *Queries) LockWorkspaceForChatSessionCreate(ctx context.Context, id pgty
 	return id_2, err
 }
 
+const lockWorkspaceForContentDiagnosticWrite = `-- name: LockWorkspaceForContentDiagnosticWrite :one
+SELECT id FROM workspace WHERE id = $1 FOR KEY SHARE
+`
+
+// The diagnostics half of the workspace delete/write protocol. Diagnostic
+// tables intentionally carry text workspace ids and no FK, so every production
+// run, audit and technical write explicitly holds this lock in the same
+// transaction as its insert. DeleteWorkspace's FOR UPDATE either waits and then
+// sweeps the committed diagnostic row, or commits first and makes this return no
+// rows so the diagnostic write is rejected.
+func (q *Queries) LockWorkspaceForContentDiagnosticWrite(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockWorkspaceForContentDiagnosticWrite, id)
+	var id_2 pgtype.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const lockWorkspaceForDelete = `-- name: LockWorkspaceForDelete :one
 SELECT id FROM workspace WHERE id = $1 FOR UPDATE
 `

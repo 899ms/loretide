@@ -51,19 +51,25 @@ Build API in `server` using `go run ./cmd/migrate up`, then `go build -o ../data
 
 ## Backup and acceptance boundary
 
-### Platform Update and Reset
-
-Operator-supplied platform guidance distinguishes normal session/reboot recovery from **Update Grok Bot's Computer**: `/workspace` and `/home/box` files are generally retained, while system-installed packages and network clients may need reinstalling. Reset may discard unsynced data. This is supplied guidance, not a destructive test performed by this project. Do not use Update/Reset merely to test recovery.
-
-After Update, restore Tailscale from inside the Bot environment and complete any required device authorization first. The remote SSH channel cannot repair its own missing Tailscale installation. Then run:
-
-```bash
-cd /home/box/loretide-dev
-bash scripts/native-restore.sh --repair
-```
-
-The script requires preserved PostgreSQL 17 data, credentials, and project-local Go/Node toolchains. It installs missing PostgreSQL/pgvector/Supervisor packages, reinstalls pnpm dependencies from the lockfile, rebuilds API and starts Supervisor. It does not initialize, wipe, migrate, or restore over an existing database. It records the current Tailscale IP for the restarted services. If Supervisor is already running, it only reports status; for a changed IP, stop the project Supervisor before running recovery. Missing preserved data or runtimes require backup restoration, not automatic replacement. This is an existing-installation recovery command, not a bare-machine installer.
-
 `data/native/acceptance.dump` is a custom-format pg_dump, restored successfully to separate database `loretide_restore_check_20260913`. An off-host copy is held on the operator's Windows computer; never commit it. Preserve local application Git history and attachment backups as well. Web/API/DB restart survival does not establish persistence after the platform destroys or recreates its overlay filesystem. Do not delete the fallback VPS based solely on this smoke test.
 
 This is environment acceptance, not acceptance of the planned Loretide business features or all upstream tests. Browser evidence and any typecheck failures are recorded in the parent repository's dated acceptance report.
+
+
+## API/Web-only recovery drill
+
+`python3 scripts/native-api-web-recovery-check.py` SIGKILLs only the supervised API and Web process groups, waits for RUNNING + HTTP, and writes `data/native/api-web-recovery-check.json`. PostgreSQL is left alone. Prefer this when validating app restart without touching the database process.
+
+Status helper: `bash scripts/native-status.sh`.
+
+Post-Update recovery: `bash scripts/native-restore.sh --repair` (refuses wipe/docker/initdb; never drops the preserved cluster).
+
+Dated environment acceptance: `docs/development/native-env-acceptance-2026-09-13.md`.
+
+## Reliability pack (2026-09-13)
+
+- Update recovery runbook: `docs/development/native-update-runbook.md`
+- Dated reliability report: `docs/development/native-env-reliability-2026-09-13.md`
+- Read-only aggregator: `bash scripts/native-doctor.sh`
+- Status: `bash scripts/native-status.sh`
+- Acceptance artifacts: `data/native/acceptance/`

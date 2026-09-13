@@ -18,6 +18,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/cli"
 	"github.com/multica-ai/multica/server/internal/daemon/execenv"
 	"github.com/multica-ai/multica/server/pkg/agent"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy"
 )
 
 const (
@@ -203,6 +204,7 @@ type Overrides struct {
 // LoadConfig builds the daemon configuration from environment variables
 // and optional CLI flag overrides.
 func LoadConfig(overrides Overrides) (Config, error) {
+	if err := executionpolicy.Check(); err != nil { return Config{}, err }
 	// Server URL: override > env > default
 	rawServerURL := envOrDefault("MULTICA_SERVER_URL", DefaultServerURL)
 	if overrides.ServerURL != "" {

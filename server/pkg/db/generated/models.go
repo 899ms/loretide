@@ -591,6 +591,32 @@ type ContactSalesInquiry struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentDiagnosticRun struct {
+	RunID       string             `json:"run_id"`
+	WorkspaceID string             `json:"workspace_id"`
+	AccountID   string             `json:"account_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Payload     []byte             `json:"payload"`
+}
+
+type ContentOperationAudit struct {
+	Sequence    pgtype.Int8        `json:"sequence"`
+	EventID     string             `json:"event_id"`
+	WorkspaceID string             `json:"workspace_id"`
+	AccountID   string             `json:"account_id"`
+	ReceivedAt  pgtype.Timestamptz `json:"received_at"`
+	Payload     []byte             `json:"payload"`
+}
+
+type ContentTechnicalLog struct {
+	Sequence    pgtype.Int8        `json:"sequence"`
+	EventID     string             `json:"event_id"`
+	WorkspaceID string             `json:"workspace_id"`
+	AccountID   string             `json:"account_id"`
+	ReceivedAt  pgtype.Timestamptz `json:"received_at"`
+	Payload     []byte             `json:"payload"`
+}
+
 type DaemonConnection struct {
 	ID              pgtype.UUID        `json:"id"`
 	AgentID         pgtype.UUID        `json:"agent_id"`

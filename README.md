@@ -1,3 +1,5 @@
+> **Loretide application branch:** start with [LORETIDE.md](LORETIDE.md) for the development baseline, branch workflow, verified state and local setup limitations. The upstream README and license are retained below.
+
 <div align="center">
 
 <picture>

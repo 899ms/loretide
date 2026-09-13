@@ -90,6 +90,15 @@ SELECT id FROM workspace WHERE id = $1 FOR UPDATE;
 -- implicit FOR KEY SHARE, which would vanish if that FK is dropped.
 SELECT id FROM workspace WHERE id = $1 FOR KEY SHARE;
 
+-- name: LockWorkspaceForContentDiagnosticWrite :one
+-- The diagnostics half of the workspace delete/write protocol. Diagnostic
+-- tables intentionally carry text workspace ids and no FK, so every production
+-- run, audit and technical write explicitly holds this lock in the same
+-- transaction as its insert. DeleteWorkspace's FOR UPDATE either waits and then
+-- sweeps the committed diagnostic row, or commits first and makes this return no
+-- rows so the diagnostic write is rejected.
+SELECT id FROM workspace WHERE id = $1 FOR KEY SHARE;
+
 -- name: DeleteWorkspace :exec
 -- The channel_* tables (MUL-3515 §4), resource-label junctions, custom issue
 -- property definitions, and quick actions carry NO FK to workspace, so — unlike the CASCADE-backed

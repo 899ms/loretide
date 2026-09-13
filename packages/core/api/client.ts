@@ -663,6 +663,13 @@ function dingTalkGroupSearch(params: ListDingTalkGroupsParams): string {
 }
 
 export class ApiClient {
+  async contentDiagnosticRequest(endpoint: "overview" | "runs" | "events" | "simulate" | "export" | "client", query = "", body?: unknown): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-diagnostics/${endpoint}${query ? `?${query}` : ""}`, body === undefined ? undefined : {method: "POST", body: JSON.stringify(body)});
+  }
+
+  async contentDiagnosticStream(query: string, signal: AbortSignal): Promise<Response> {
+    return this.fetchRaw(`/api/content-diagnostics/stream?${query}`, {signal});
+  }
   private baseUrl: string;
   private token: string | null = null;
   private logger: Logger;
