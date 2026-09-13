@@ -1,6 +1,7 @@
 # Issue #2 diagnostics acceptance matrix
 
 Date: 2026-09-13
+Last reviewed: 2026-09-14
 Executor: Terra-DIAG02
 Issue: https://github.com/899ms/loretide/issues/2
 Application baseline: `app-main` / `bb3a4b4616bf48a52e075bbe5e23e38112bbf6aa`
@@ -20,13 +21,13 @@ pwsh -File tests/diagnostics-acceptance/verify.ps1
 pwsh -File tests/diagnostics-acceptance/verify.ps1 -DatabaseUrl 'postgres://USER:PASSWORD@localhost:15402/loretide_diag_acceptance_example?sslmode=disable'
 ```
 
-The second command is intentionally not represented as passed until an isolated database exists on the reserved port. Do not place its connection string in a committed log or PR description.
+The second command must use a local-only connection value and must never place it in a committed log or PR description. On 2026-09-14, the main task supplied such a value directly to the local verifier process and reported a successful run at `1d0dbd6037e931a0fcd91f66b540bcd0b6ac1d79`: eight named Go tests and both PostgreSQL tests passed without a skip. This executor did not read, print, or retain the connection value.
 
 Historical result before the current scope correction: `pnpm install --frozen-lockfile` completed successfully on 2026-09-13. The prior default verifier run included UI unit tests, so it is not acceptance evidence for the current non-UI-only verifier and is retained only as history. The optional PostgreSQL suite was skipped because no isolated `15402` database URL was supplied. No browser test was run by this Issue.
 
 Current verifier self-test result: `pwsh -NoProfile -File tests/diagnostics-acceptance/verify.behavior.tests.ps1` exited `0` on 2026-09-14. It injects only fake Go and PostgreSQL command runners—no real database, browser, UI unit test, subprocess cleanup, or service is used—and rejects empty, missing, skipped, or failed Go evidence; invalid database targets; mismatched database/current-user identities; and superuser identities. It also proves malformed URI errors do not echo a fake secret, encoded credential components are split before decoding, missing passwords are rejected, caller working directory and diagnostic/password environment variables are restored on successful and exceptional paths, and a fake secret from a command failure is not included in the thrown message.
 
-The prior default verifier run included UI unit tests and is superseded. This review did not run the revised default verifier entry, per the explicit prohibition on running the old acceptance entry. The revised default command is Go-only; PostgreSQL remains blocked until an isolated URL exists. No service or browser was started.
+The prior default verifier run included UI unit tests and is superseded. This review did not run the revised default verifier entry, per the explicit prohibition on running the old acceptance entry; the 2026-09-14 main-task result above is the current real Go/PostgreSQL evidence. No service or browser was started.
 
 ## User-supplied manual UI observation (not agent UI acceptance)
 
@@ -45,30 +46,32 @@ Later read-only tab evidence reported by the main task: Web is now `healthy`, wi
 
 User-confirmed manual acceptance (reported 2026-09-13): in `13101/miranda-qu6a/diagnostics`, a normal `seed=42` run created a new record; its detail view opened; the export file downloaded and opened; and the record remained after refresh. Mark these four paths **user manual passed**. They are not duplicated by this Issue with UI automation or UI unit tests, and they do not replace independent non-UI evidence for database identity, selected-run-to-export artifact parsing, cross-workspace/account denial, stream resume/de-duplication, or retention-gap behavior.
 
-## Independent non-UI environment gap and next task
+## Independent non-UI database evidence and remaining boundary
 
-Read-only preflight in this checkout found no PostgreSQL listener on reserved `15402`, no `psql` command on `PATH`, and no `.env.worktree`. The next smallest non-UI task is therefore not to wait for all of Issue #1: provide only a local, non-superuser PostgreSQL listener on `15402` with a database named `loretide_diag_acceptance_*` and a locally available `psql` client. Configure its URL only in the isolated shell/environment (do not place it in Issue comments, records, or logs). Then run the existing verifier's optional integration gate; it will verify protocol, database name, current user, and non-superuser status before test migrations or writes. Until that precondition exists, do not point cleanup or integration tests at `13101`/`18101`/`15401` or any user development database.
+The previous `15402` preflight is historical only. On 2026-09-14 the main task provisioned an isolated loopback-only PostgreSQL resource, with a non-superuser role, and used its private local connection value to run the revised verifier successfully. The verifier's protocol gate checked the requested database/current user/non-superuser identity before it ran the two PostgreSQL tests. `TestPostgresAuditRollbackIsolationAndRetention` creates a per-test schema, applies diagnostics migrations there, and removes that schema in cleanup; `TestPostgresFullScenariosExportAndHealth` exercises the diagnostics store/service against that isolated resource. This is real persistence evidence, but it is not an HTTP server run.
 
-Non-UI preparation remaining after the launcher is available: use a fresh `loretide_diag_acceptance_*` non-superuser database on the reserved acceptance port; pass the verifier's protocol/identity gate; then record endpoint results, a downloaded JSON artifact parsed against its selected run ID, scoped denial, stream resume/de-duplication, and retention-gap results. UI observations and manual Todo steps remain user-owned and are not substituted by agent tests.
+The current PR head also has a successful pull-request workflow: [run 34771210226](https://github.com/899ms/loretide/actions/runs/34771210226), `success`, on `1d0dbd6037e931a0fcd91f66b540bcd0b6ac1d79`.
+
+Remaining non-UI boundary: `server/internal/handler/content_diagnostics_test.go` exists, but it is not included in this verifier and was not run here. It calls handlers through `httptest` and checks 401/403/404/200 authorization outcomes plus the production simulation gate. Its package `TestMain` connects using `DATABASE_URL` and creates user/workspace/agent fixtures in a full application schema. Establishing and authorizing that separate writable full-schema harness is the minimum requirement before claiming in-process handler HTTP coverage; it must not reuse a development database or be conflated with the isolated diagnostics schema. Even that test would not prove the complete Chi middleware chain or a live stream reconnect.
 
 ## Acceptance matrix
 
 | Requirement | Evidence location | Status | Evidence / boundary |
 | --- | --- | --- | --- |
 | Actual download is JSON, not merely a click | User-reported download/open observation | User manual passed; independent artifact check not executed | The user reported that export downloaded and opened. This Issue does not run UI unit or browser tests; an independently parsed artifact is not obtained in this checkout. |
-| Export matches selected authorized run | `server/internal/content/diagnostics/service.go:Export`; PostgreSQL integration test | Not executed | The service loads the requested run through scoped access. Requires isolated DB and browser/API evidence to mark pass. |
-| Cross workspace/account denial and redaction | `contract_test.go`, `log_test.go`, `store_integration_test.go` | Go behavior test passed; DB integration not executed | Named Go tests exercised scope isolation and secret removal. No real account/browser result is claimed. |
+| Export matches selected authorized run | `TestPostgresFullScenariosExportAndHealth` | PostgreSQL service test passed; HTTP not executed | Each simulated scenario is persisted then exported through `NewService.Export`; the test requires a redacted bundle. It does not exercise an HTTP request or a browser-selected run. |
+| Cross workspace/account denial and redaction | `contract_test.go`, `log_test.go`, `TestPostgresAuditRollbackIsolationAndRetention` | Go and PostgreSQL service tests passed; HTTP not executed | The tests reject cross-workspace/account reads and assert secret removal. No HTTP authorization response or real account is claimed. |
 | Stream pause, resume cursor, de-duplication | `packages/core/content/diagnostics/queries.ts` | Not executed | UI unit and browser tests are outside this Issue's current non-UI acceptance scope. |
 | Network loss / reconnect notice | `queries.ts` | Not executed | UI unit and browser tests are outside this Issue's current non-UI acceptance scope. |
-| Retention gap | `store_integration_test.go`; `queries.ts` | Not executed | DB test asserts an expired cursor produces a gap; UI renders a gap notice. Requires isolated PostgreSQL/API/browser proof. |
-| Permission-scoped diagnostics export | `service.go:Export`, `store.go:GetRun` | Source presence only | Export appears to load its run through `GetRun(scope, id)` and scoped queries. Runtime access is not claimed until the isolated database/API check passes. |
-| Real executor boundary | `service.go`, `simulator_test.go`, `transport_test.go` | Unit verified | Simulation is test-gated and the export declares real replay unavailable. This is not evidence that any real executor works. |
+| Retention gap | `TestPostgresAuditRollbackIsolationAndRetention`; `queries.ts` | PostgreSQL service test passed; UI not executed | An expired cursor returns `Gap=true` after technical-log pruning. UI rendering/reconnect remains outside scope. |
+| Permission-scoped diagnostics export | `TestPostgresAuditRollbackIsolationAndRetention`, `TestPostgresFullScenariosExportAndHealth` | PostgreSQL service test passed; HTTP not executed | Store reads reject cross workspace/account scope; service export returns a redacted bundle. Route/middleware authorization is not claimed. |
+| Real executor boundary | `service.go`, `simulator_test.go`, `transport_test.go`, `TestPostgresFullScenariosExportAndHealth` | Unit and PostgreSQL service tests passed | Simulation stays test-gated and executor health remains `unverified`; this is not evidence that any real executor works. |
 
 ## Test design and remaining work
 
-1. Create only an isolated, non-superuser PostgreSQL database on `15402` whose name starts with `loretide_diag_acceptance_`, then run the optional verifier command. Retain only its redacted exit/result summary.
-2. Start only the reserved isolated API/Web pair (`18102`/`13102`) and perform browser evidence: choose a known synthetic run, preview/export it, parse the downloaded JSON, verify run ID, test forbidden workspace/account, pause/resume, reconnect, duplicate event, and retention-gap indication.
-3. Keep every browser result `blocked` or `not executed` until it has its own screenshot, downloaded artifact assertion, and endpoint/operation evidence. Never mark the real executor as passed for this Issue.
+1. The isolated `15402` Go/PostgreSQL verifier is complete; retain only the redacted command/result summary above and never commit its connection value.
+2. HTTP authorization and stream-recovery coverage remain not executed. The smallest next authorization is a separate writable, full-schema local test harness for the existing direct handler tests, using a new local-only URL supplied to the test process. This requires explicit scope approval because it is outside the current three-file verifier boundary and creates application fixtures.
+3. Full router middleware, real HTTP stream reconnect, and any browser evidence remain out of scope. Keep them `not executed` unless separately authorized and evidenced; never mark the real executor as passed for this Issue.
 
 ## Defects observed during static review
 
