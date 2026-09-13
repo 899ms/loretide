@@ -24,6 +24,8 @@ The second command is intentionally not represented as passed until an isolated 
 
 Executed result: `pnpm install --frozen-lockfile` completed successfully on 2026-09-13. `pwsh -NoProfile -File tests/diagnostics-acceptance/verify.ps1` then exited `0`: five source-presence checks passed; Go JSON reported each of eight named unit/transport tests exactly once; Vitest JSON reported exactly two selected tests in exactly two selected files, both passing. The optional PostgreSQL suite was explicitly skipped because no isolated `15402` database URL was supplied. No browser test was run.
 
+Verifier self-test result: `pwsh -NoProfile -File tests/diagnostics-acceptance/verify.behavior.tests.ps1` exited `0`. It injects fake Go, Vitest, and PostgreSQL command runners—no real database, browser, subprocess cleanup, or service is used—and proves that missing/skip/fail Go tests, missing/failed Vitest cases, invalid database targets, mismatched identities, and superuser identities are rejected. It also proves caller working directory and diagnostic/password environment variables are restored on successful and exceptional paths, while a fake secret from a command failure is not included in the thrown message.
+
 ## Acceptance matrix
 
 | Requirement | Evidence location | Status | Evidence / boundary |
@@ -52,6 +54,7 @@ No production code was changed by this Issue. The following requires a separate 
 | File | Purpose |
 | --- | --- |
 | `tests/diagnostics-acceptance/verify.ps1` | Repeatable source-presence, Go/Vitest behavior verifier with JSON test-count gates and an optional isolated PostgreSQL identity gate. |
+| `tests/diagnostics-acceptance/verify.behavior.tests.ps1` | Fake-runner self-test for the verifier's reject gates, state restoration, and failure-output redaction. |
 | `records/issue-2-diagnostics-acceptance.md` | This matrix, status boundaries, reproduction commands, evidence plan, and rollback record. |
 
 Rollback is limited to deleting these two Issue-owned files from this branch. No existing code, environment, database, or evidence was altered.
