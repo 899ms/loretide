@@ -59,6 +59,29 @@ test('Go imports inside comments and strings are ignored',()=>{
  assert.deepEqual(check({'server/internal/content/work-editor/a.go':src},config),[]);
 });
 
+// A Go import path written with escape sequences must be decoded to its real
+// value, otherwise an obfuscated private import (e.g. "github\x2ecom/...") loses
+// its dot and is mistaken for a dotless standard-library path and skipped.
+test('Go escaped import path is decoded, not mistaken for a standard-library path',()=>{
+ const P='github.com/multica-ai/multica/server/internal/content/workspace-core/storage';
+ for(const esc of ['github\\x2ecom/multica-ai/multica/server/internal/content/workspace-core/storage',
+                   'github\\u002ecom/multica-ai/multica/server/internal/content/workspace-core/storage']){
+  const src=`package editor\nimport "${esc}"`;
+  assert.deepEqual(extractGoImports(src),[P],esc);
+  assert.ok(check({'server/internal/content/work-editor/a.go':src},config).some(x=>/private import/.test(x)),esc);
+ }
+});
+
+// Go import aliases may be Unicode identifiers; such an import must not be
+// silently skipped by an ASCII-only alias parser.
+test('Go import with a Unicode alias is still parsed',()=>{
+ const P='github.com/multica-ai/multica/server/internal/content/workspace-core/storage';
+ for(const src of [`package editor\nimport 别名 "${P}"`,`package editor\nimport (\n\t别名 "${P}"\n)`]){
+  assert.deepEqual(extractGoImports(src),[P],src);
+  assert.ok(check({'server/internal/content/work-editor/a.go':src},config).some(x=>/private import/.test(x)),src);
+ }
+});
+
 // A dynamic import()/require() whose argument is not a plain string literal is a
 // statically uncomputable module load and must be rejected, not ignored — even
 // through string concatenation, which the old regex missed.

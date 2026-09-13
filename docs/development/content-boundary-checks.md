@@ -53,6 +53,12 @@ fixes:
 
 Grouped, aliased (`m "path"`), blank (`_ "path"`) and dot (`. "path"`) imports
 are all extracted; standard-library entries are ignored by the module rules.
+Import aliases may be Unicode identifiers (e.g. `别名 "path"`), and are not
+skipped. Import-path string literals are decoded according to Go string escape
+rules (`\x`, `\u`, `\U`, octal, and the simple `\n`/`\t`/… escapes), so an
+obfuscated path such as `"github\x2ecom/..."` resolves to its real value
+(`github.com/...`) and is classified correctly instead of being mistaken for a
+dotless standard-library path.
 
 ### TypeScript / JavaScript
 

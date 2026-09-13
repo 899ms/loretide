@@ -10,12 +10,37 @@ import ts from 'typescript';
 // only recognises the `import` keyword in code context, so neither happens.
 export function extractGoImports(source) {
   const specs = [], n = source.length;
-  const ident = c => c !== undefined && /[A-Za-z0-9_]/.test(c);
+  // Go identifiers (including import aliases) may contain Unicode letters and
+  // digits, not only ASCII, so an alias like `别名` must still be recognised.
+  const ident = c => c !== undefined && /[\p{L}\p{Nd}_]/u.test(c);
   // Read an interpreted string that starts at the opening quote; returns
-  // [value, indexAfterClosingQuote]. Backslash escapes are consumed literally.
+  // [decodedValue, indexAfterClosingQuote]. Go escape sequences are decoded so
+  // that an obfuscated path such as "github\x2ecom/..." resolves to its real
+  // value ("github.com/...") and is classified correctly instead of being
+  // mistaken for a dotless standard-library path.
+  const simpleEscapes = {a: '\x07', b: '\b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\x0b', '\\': '\\', '"': '"', "'": "'"};
   const readString = i => {
     i++; let v = '';
-    while (i < n && source[i] !== '"') { if (source[i] === '\\') { v += source[i + 1] ?? ''; i += 2; continue; } v += source[i++]; }
+    while (i < n && source[i] !== '"') {
+      if (source[i] !== '\\') { v += source[i++]; continue; }
+      const e = source[i + 1];
+      if (e === 'x' || e === 'u' || e === 'U') {
+        const len = e === 'x' ? 2 : e === 'u' ? 4 : 8;
+        const hex = source.slice(i + 2, i + 2 + len);
+        if (hex.length === len && /^[0-9a-fA-F]+$/.test(hex)) {
+          const cp = parseInt(hex, 16);
+          v += e === 'U' ? String.fromCodePoint(cp) : String.fromCharCode(cp);
+          i += 2 + len; continue;
+        }
+        v += e ?? ''; i += 2; continue; // malformed escape: keep the letter
+      }
+      if (e >= '0' && e <= '7') {
+        let oct = '';
+        while (oct.length < 3 && source[i + 1 + oct.length] >= '0' && source[i + 1 + oct.length] <= '7') oct += source[i + 1 + oct.length];
+        v += String.fromCharCode(parseInt(oct, 8)); i += 1 + oct.length; continue;
+      }
+      v += e in simpleEscapes ? simpleEscapes[e] : (e ?? ''); i += 2; continue;
+    }
     return [v, i + 1];
   };
   // Read a raw string delimited by backticks (no escapes).

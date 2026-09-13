@@ -64,9 +64,39 @@ TypeScript 5.9.3（与仓库 catalog 一致），独立 scratchpad 环境：
 
 （后续仅追加本记录的提交会再触发一次同 workflow 的运行，内容等价、同样通过。）
 
+## 主任务复审反馈与二次修复（2026-09-13）
+
+主任务在 head `332a37a1` 上独立执行 `check()`，指出 Go 词法器两处**漏报**（现已本地复现确认有效）：
+
+1. **转义路径**：`import "github\x2ecom/multica-ai/…/workspace-core/storage"`。
+   旧 `readString` 对反斜杠只跳过一个字符，抽出 `githubx2ecom/…`，首段无 `.`
+   被当作 Go 标准库放行 → 私有导入漏报（`check` 返回 `[]`）。
+2. **Unicode 别名**：`import 别名 "…/workspace-core/storage"`。ASCII-only 别名解析
+   器抽取 `imports=[]`，整个导入被跳过 → 漏报。
+
+修复：
+- `readString` 按 Go 字符串语义解码转义（`\x`/`\u`/`\U`/八进制/`\n`\t 等简单转义），
+  使 `github\x2ecom` → `github.com`，正确归类为内容私有导入。
+- `ident` 改用 Unicode 类别 `\p{L}\p{Nd}_`，支持合法 Unicode 别名（单条与分组）。
+
+二次验证（本地，TS 5.9.3）：
+- 反例复现：修复前 CE1 `check=[]`、CE2 `extract=[]`（漏报）；修复后二者均报
+  `private import`。另验证 `\056`（八进制）、`.`、分组内 Unicode 别名、blank 别名
+  均正确检出。
+- 单元测试：`node --test` → tests 13 / pass 13 / fail 0（新增 2 条回归）。
+- 全仓扫描：`node scripts/check-content-boundaries.mjs` → passed (3519 files)，退出 0。
+- 老 vs 新 Go 抽取全量对拍（1732 文件）：非测试文件差异仍为原 4 例，全部
+  `new-only:[]`（新器只剔除旧正则从字符串/散文抓的垃圾），转义解码未改变任何真实
+  文件的抽取结果，无新回归。
+- 当前 head CI：见下方“真实 CI 运行证据”二次记录。
+
+保留现有规则与全部原测试，未放宽 `content-boundaries.json`。此修复只消除静态漏报，
+不代表运行时越权已被证明。
+
 ## 覆盖 / 仍不支持
 
-- 已覆盖：Go 分组/别名/blank/dot 导入、注释与字符串中的 import、
+- 已覆盖：Go 分组/别名/blank/dot 导入、Unicode 别名、转义（`\x`/`\u`/`\U`/八进制）
+  导入路径解码、注释与字符串中的 import、
   TS re-export/type-only/dynamic import/require、相对路径私有导入、
   Windows 路径标准化、（含三模块）循环依赖、无法静态计算的模块加载被明确拒绝。
 - 仍不支持（属静态分析固有局限，未宣称保证运行时行为）：不求解传入
