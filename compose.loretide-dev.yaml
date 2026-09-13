@@ -1,0 +1,64 @@
+name: loretide-dev
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: loretide
+      POSTGRES_DB: loretide_dev
+      POSTGRES_PASSWORD: ${LORETIDE_DB_PASSWORD:?required}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U loretide -d loretide_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 768m
+    cpus: 1.0
+  api:
+    image: golang:1.26.6-bookworm
+    working_dir: /workspace/server
+    command: [sh, -c, "go run ./cmd/migrate up && go run ./cmd/server"]
+    environment:
+      DATABASE_URL: postgres://loretide:${LORETIDE_DB_PASSWORD:?required}@db:5432/loretide_dev?sslmode=disable
+      JWT_SECRET: ${LORETIDE_JWT_SECRET:?required}
+      APP_ENV: development
+      PORT: "8080"
+      FRONTEND_ORIGIN: http://localhost:13000
+      GOMAXPROCS: "2"
+      GOFLAGS: -p=2
+      GOTOOLCHAIN: local
+    ports:
+      - "127.0.0.1:18000:8080"
+    volumes:
+      - .:/workspace
+      - go_modules:/go/pkg/mod
+      - go_build:/root/.cache/go-build
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 2g
+    cpus: 2.0
+  web:
+    image: node:22-bookworm
+    working_dir: /workspace
+    command: [sh, -c, "corepack pnpm --filter @multica/web... install --frozen-lockfile && corepack pnpm --filter @multica/web dev"]
+    environment:
+      NODE_ENV: development
+      FRONTEND_PORT: "3000"
+      REMOTE_API_URL: http://api:8080
+      NEXT_TELEMETRY_DISABLED: "1"
+      NODE_OPTIONS: --max-old-space-size=2048
+      CI: "true"
+    ports:
+      - "127.0.0.1:13000:3000"
+    volumes:
+      - .:/workspace
+    depends_on:
+      - api
+    mem_limit: 2560m
+    cpus: 2.0
+volumes:
+  database:
+  go_modules:
+  go_build:
