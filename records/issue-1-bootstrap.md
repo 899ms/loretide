@@ -17,7 +17,7 @@
 
 ## Safety contract
 
-The bootstrap writes only to its selected output directory, creates fresh random secrets and a random private verification code, uses a dedicated non-superuser role/database, keeps execution policy disabled, and retains state/logs after failure or stop. It neither reads the existing `data/windows` configuration nor operates the shared development instance. Stop validates both stored root identities and all Web descendants before acting; PID reuse fails closed without stopping a previously validated peer process. Status is read-only.
+The bootstrap writes only to its selected output directory, creates fresh random secrets and a random private verification code, uses a dedicated non-superuser role/database, keeps execution policy disabled, and retains state/logs after failure or stop. It neither reads the existing `data/windows` configuration nor operates the shared development instance. Before migration/build/start, a read-only SQL probe verifies the actual application role, database, database owner, and five forbidden privilege attributes; existing roles are never automatically altered. Stop validates both stored root identities and all Web descendants before acting, then revalidates each target immediately before requesting its stop. PID reuse fails closed, while operating-system-level races after the final identity read remain possible. Status is read-only.
 
 ## Verification record
 
@@ -40,7 +40,7 @@ The current no-real-process test command is:
 pwsh -NoProfile -File scripts/bootstrap-local-windows.test.ps1
 ```
 
-It passed 12 behavior cases for PID reuse rejection, all-root preflight before stop, read-only status, caller environment restoration, healthy repeated start, partial Web failure, path quoting/Web upstream, stale config rejection, PostgreSQL identity mismatch, unattributed Web children, untracked listener rejection, and enforced tool versions. These use injected fake command/process/health boundaries and do not start or stop real services.
+It passed 17 behavior cases for PID reuse rejection, all-root preflight and per-target stop revalidation, read-only status, caller environment restoration, healthy repeated start, partial Web failure, path quoting/Web upstream, stale config rejection, PostgreSQL identity mismatch, unattributed Web children, untracked listener rejection, application-role privilege/owner/query-failure rejection, and enforced tool versions. The privilege, owner, and query-failure cases prove no migration, build, or process launch occurs after a failed identity check. These use injected fake command/process/SQL/health boundaries and do not start or stop real services.
 
 ## Outstanding evidence and local artifacts
 

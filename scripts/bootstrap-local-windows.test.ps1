@@ -22,6 +22,7 @@ function New-CommonHooks([hashtable]$Processes,[Collections.Generic.List[object]
     ToolVersions={ [pscustomobject]@{node='24.14.0';pnpm='10.28.2';go='1.26.6';postgres='17.11';next='16.3.4'} }
     EnsurePostgres={ param($Config);$Events.Add("postgres:$($Config.postgresPort)") }
     GetPostgresStatus={ 'owned and running' }
+    GetApplicationDatabaseIdentity={ [pscustomobject]@{role='test_role';database='test_database';superuser=$false;createDatabase=$false;createRole=$false;replication=$false;bypassRls=$false;owner='test_role'} }
     GetProcess={ param($ProcessId);if($Processes.ContainsKey([int]$ProcessId)){$Processes[[int]$ProcessId]}else{$null} }
     GetChildren={ @() }
     PortInUse={ $false }
@@ -43,6 +44,12 @@ It 'validates every tracked root before stopping either process' {
   $api=New-Identity 4110 (Join-Path $output 'state\api.exe') foreign-api '2026-09-13T12:01:00.0000000Z';$web=New-Identity 4111 'C:\Program Files\nodejs\node.exe' owned-web;$processes[4110]=$api;$processes[4111]=$web
   Write-ProcessRecordForTest $output $config api (New-Identity 4110 (Join-Path $output 'state\api.exe') owned-api) (Join-Path $repoRoot server);Write-ProcessRecordForTest $output $config web $web (Join-Path $repoRoot 'apps\web');$hooks=New-CommonHooks $processes $events $health
   Assert-Throws { Invoke-BootstrapMain stop 'C:\runtime path' $output 13101 18101 15401 test_database test_role $hooks @{OutputPath=$output} } 'PID identity does not match';Assert-True (-not($events -match '^stop:')) 'no verified process may stop before every tracked root validates'
+}
+
+It 'revalidates a stop plan when its PID identity changes after preflight' {
+  $output=New-TestRoot 'stop-plan-revalidation';$config=New-TestConfig $output;$events=[Collections.Generic.List[object]]::new();$processes=@{};$health=@{};$web=New-Identity 4121 'C:\Program Files\nodejs\node.exe' owned-web;$api=New-Identity 4122 (Join-Path $output 'state\api.exe') owned-api;$processes[4121]=$web;$processes[4122]=$api
+  Write-ProcessRecordForTest $output $config web $web (Join-Path $repoRoot 'apps\web');Write-ProcessRecordForTest $output $config api $api (Join-Path $repoRoot server);$hooks=New-CommonHooks $processes $events $health;$hooks['GetProcess']={param($ProcessId);if($ProcessId -eq 4122){$processes[4121]=New-Identity 4121 'C:\Windows\System32\cmd.exe' foreign-web '2026-09-13T12:02:00.0000000Z'};if($processes.ContainsKey([int]$ProcessId)){$processes[[int]$ProcessId]}else{$null}}.GetNewClosure()
+  Assert-Throws { Invoke-BootstrapMain stop 'C:\runtime path' $output 13101 18101 15401 test_database test_role $hooks @{OutputPath=$output} } 'PID identity does not match';Assert-True (-not($events -match '^stop:')) 'a replaced PID must be rejected before StopProcess'
 }
 
 It 'keeps status read-only and does not start PostgreSQL' {
@@ -95,12 +102,34 @@ It 'refuses an untracked API listener before migrations or builds' {
   Assert-Throws { Invoke-BootstrapMain start 'C:\runtime path' $output 13101 18101 15401 test_database test_role $hooks @{OutputPath=$output} } 'already owned by an untracked listener';Assert-True (-not ($events -match '^run:|^stop:|^start:')) 'foreign API port must stop startup before commands or process launch'
 }
 
+It 'rejects an elevated application role before migration build or launch' {
+  $output=New-TestRoot elevated-role;New-TestConfig $output|Out-Null;$events=[Collections.Generic.List[object]]::new();$hooks=New-CommonHooks @{} $events @{};$hooks['GetApplicationDatabaseIdentity']={ [pscustomobject]@{role='test_role';database='test_database';superuser=$true;createDatabase=$false;createRole=$false;replication=$false;bypassRls=$false;owner='test_role'} };$hooks['StartProcess']={param($Spec);$events.Add("start:$($Spec.name)");throw 'unexpected process launch'}
+  Assert-Throws { Invoke-BootstrapMain start 'C:\runtime path' $output 13101 18101 15401 test_database test_role $hooks @{OutputPath=$output} } 'application database identity';Assert-True (-not ($events -match '^run:|^start:')) 'elevated application role must fail before migration build or launch'
+}
+
+It 'rejects a database owned by another role before migration build or launch' {
+  $output=New-TestRoot wrong-owner;New-TestConfig $output|Out-Null;$events=[Collections.Generic.List[object]]::new();$hooks=New-CommonHooks @{} $events @{};$hooks['GetApplicationDatabaseIdentity']={ [pscustomobject]@{role='test_role';database='test_database';superuser=$false;createDatabase=$false;createRole=$false;replication=$false;bypassRls=$false;owner='foreign_owner'} };$hooks['StartProcess']={param($Spec);$events.Add("start:$($Spec.name)");throw 'unexpected process launch'}
+  Assert-Throws { Invoke-BootstrapMain start 'C:\runtime path' $output 13101 18101 15401 test_database test_role $hooks @{OutputPath=$output} } 'application database identity';Assert-True (-not ($events -match '^run:|^start:')) 'wrong database owner must fail before migration build or launch'
+}
+
+It 'rejects every forbidden application-role capability before side effects' {
+  foreach($privilege in @('createDatabase','createRole','replication','bypassRls')){
+    $output=New-TestRoot "forbidden-$privilege";New-TestConfig $output|Out-Null;$events=[Collections.Generic.List[object]]::new();$hooks=New-CommonHooks @{} $events @{};$identity=[ordered]@{role='test_role';database='test_database';superuser=$false;createDatabase=$false;createRole=$false;replication=$false;bypassRls=$false;owner='test_role'};$identity[$privilege]=$true;$hooks['GetApplicationDatabaseIdentity']={ [pscustomobject]$identity }.GetNewClosure();$hooks['StartProcess']={param($Spec);$events.Add("start:$($Spec.name)");throw 'unexpected process launch'}.GetNewClosure()
+    Assert-Throws { Invoke-BootstrapMain start 'C:\runtime path' $output 13101 18101 15401 test_database test_role $hooks @{OutputPath=$output} } 'application database identity';Assert-True (-not ($events -match '^run:|^start:')) "$privilege must fail before migration build or launch"
+  }
+}
+
+It 'stops before migration build or launch when the identity query fails' {
+  $output=New-TestRoot identity-query-failure;New-TestConfig $output|Out-Null;$events=[Collections.Generic.List[object]]::new();$hooks=New-CommonHooks @{} $events @{};[void]$hooks.Remove('GetApplicationDatabaseIdentity');$hooks['Psql']={throw 'synthetic identity query failure'};$hooks['StartProcess']={param($Spec);$events.Add("start:$($Spec.name)");throw 'unexpected process launch'}
+  Assert-Throws { Invoke-BootstrapMain start 'C:\runtime path' $output 13101 18101 15401 test_database test_role $hooks @{OutputPath=$output} } 'synthetic identity query failure';Assert-True (-not ($events -match '^run:|^start:')) 'identity query failure must precede migration build or launch'
+}
+
 It 'enforces tool versions instead of only recording them' {
   $output=New-TestRoot versions;New-TestConfig $output|Out-Null;$events=[Collections.Generic.List[object]]::new();$hooks=New-CommonHooks @{} $events @{};$hooks['ToolVersions']={ [pscustomobject]@{node='20.0.0';pnpm='10.28.2';go='1.26.6';postgres='17.11';next='16.3.4'} }
   Assert-Throws { Invoke-BootstrapMain start 'C:\runtime path' $output 13101 18101 15401 test_database test_role $hooks @{OutputPath=$output} } 'Node 22.0 or newer is required'
 }
 
 $source=Get-Content -Raw $scriptPath
-foreach($forbidden in @('MULTICA_DEV_VERIFICATION_CODE=''888888''',"Join-Path `$root 'data/windows'",'test-db.json','docker compose','Stop-Computer','Restart-Computer','New-NetFirewallRule')){if($source -match [regex]::Escape($forbidden)){$failures.Add("forbidden source pattern: $forbidden")}}
+foreach($forbidden in @('MULTICA_DEV_VERIFICATION_CODE=''888888''',"Join-Path `$root 'data/windows'",'test-db.json','docker compose','Stop-Computer','Restart-Computer','New-NetFirewallRule','ALTER ROLE','ALTER DATABASE')){if($source -match [regex]::Escape($forbidden)){$failures.Add("forbidden source pattern: $forbidden")}}
 if($failures.Count){$failures|ForEach-Object{Write-Error $_};exit 1}
 Write-Output 'bootstrap-local-windows behavior tests passed'

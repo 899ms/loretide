@@ -143,7 +143,15 @@ function Get-VerifiedStopPlan([string]$Name) {
 
 function Invoke-VerifiedStopPlan($Plan) {
   if(-not $Plan.root){Remove-StaleProcessRecord $Plan.name;return $false}
-  foreach($child in ($Plan.children|Sort-Object startedAtUtc -Descending)){Invoke-Hook 'StopProcess' @([int]$child.pid) {param($ProcessId);Stop-Process -Id $ProcessId -ErrorAction Stop}}
+  foreach($child in ($Plan.children|Sort-Object startedAtUtc -Descending)){
+    $actualChild=Get-ActualProcessIdentity ([int]$child.pid)
+    if(-not $actualChild){throw "Refusing $($Plan.name) stop: planned child process is no longer present."}
+    [void](Assert-TrackedIdentity $child $actualChild "$($Plan.name) child")
+    Invoke-Hook 'StopProcess' @([int]$child.pid) {param($ProcessId);Stop-Process -Id $ProcessId -ErrorAction Stop}
+  }
+  $actualRoot=Get-ActualProcessIdentity ([int]$Plan.root.pid)
+  if(-not $actualRoot){throw "Refusing $($Plan.name) stop: planned root process is no longer present."}
+  [void](Assert-TrackedIdentity $Plan.root $actualRoot $Plan.name)
   Invoke-Hook 'StopProcess' @([int]$Plan.root.pid) {param($ProcessId);Stop-Process -Id $ProcessId -ErrorAction Stop}
   Remove-StaleProcessRecord $Plan.name
   $true
@@ -253,6 +261,20 @@ function Get-PostgresStatus {
   'owned and running'
 }
 
+function Get-ApplicationDatabaseIdentity {
+  if($script:Hooks.ContainsKey('GetApplicationDatabaseIdentity')){return (& $script:Hooks.GetApplicationDatabaseIdentity $script:Config)}
+  $query="SELECT current_user || '|' || current_database() || '|' || CASE WHEN r.rolsuper THEN '1' ELSE '0' END || '|' || CASE WHEN r.rolcreatedb THEN '1' ELSE '0' END || '|' || CASE WHEN r.rolcreaterole THEN '1' ELSE '0' END || '|' || CASE WHEN r.rolreplication THEN '1' ELSE '0' END || '|' || CASE WHEN r.rolbypassrls THEN '1' ELSE '0' END || '|' || pg_catalog.pg_get_userbyid(d.datdba) FROM pg_catalog.pg_roles r JOIN pg_catalog.pg_database d ON d.datname=current_database() WHERE r.rolname=current_user"
+  $value=Invoke-Psql @('-h','127.0.0.1','-p',[string]$script:Config.postgresPort,'-U',[string]$script:Config.role,'-d',[string]$script:Config.database,'-Atc',$query) $script:Config.databasePassword -Capture
+  $parts=@($value -split '\|',8)
+  if($parts.Count -ne 8 -or @($parts[2..6] | Where-Object {$_ -notin @('0','1')}).Count){throw 'Application database identity query returned an invalid result.'}
+  [pscustomobject]@{role=$parts[0];database=$parts[1];superuser=$parts[2] -eq '1';createDatabase=$parts[3] -eq '1';createRole=$parts[4] -eq '1';replication=$parts[5] -eq '1';bypassRls=$parts[6] -eq '1';owner=$parts[7]}
+}
+
+function Assert-ApplicationDatabaseIdentity {
+  $identity=Get-ApplicationDatabaseIdentity
+  if(-not $identity -or $identity.role -ne $script:Config.role -or $identity.database -ne $script:Config.database -or $identity.owner -ne $script:Config.role -or $identity.superuser -or $identity.createDatabase -or $identity.createRole -or $identity.replication -or $identity.bypassRls){throw 'Refusing application startup: application database identity, privileges, or ownership do not match this instance.'}
+}
+
 function New-InstanceConfig {[pscustomobject][ordered]@{schemaVersion=2;instanceId=[guid]::NewGuid().ToString();repoRoot=$script:RepoRoot;outputPath=$script:OutputRoot;runtimePath=$script:RuntimeRoot;postgresDataPath=$script:PgData;webPort=$script:RequestedWebPort;apiPort=$script:RequestedApiPort;postgresPort=$script:RequestedPostgresPort;database=$script:RequestedDatabase;role=$script:RequestedRole;databasePassword=(New-BootstrapSecret);jwtSecret=(New-BootstrapSecret);bootstrapPassword=(New-BootstrapSecret);verificationCode=(New-VerificationCode);executionPolicy='disabled';postgresInitialized=$false;databaseInitialized=$false}}
 
 function Initialize-Database {
@@ -265,7 +287,7 @@ function Initialize-Database {
     $script:Config.postgresInitialized=$true;Save-InstanceConfig
   }
   Ensure-Postgres
-  $roleSql=Join-Path $script:State 'role-setup.sql.tmp';Set-Content -Path $roleSql -NoNewline -Value "DO `$`$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='$($script:Config.role)') THEN CREATE ROLE $($script:Config.role) LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '$($script:Config.databasePassword)'; END IF; END `$`$;"
+  $roleSql=Join-Path $script:State 'role-setup.sql.tmp';Set-Content -Path $roleSql -NoNewline -Value "DO `$`$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='$($script:Config.role)') THEN CREATE ROLE $($script:Config.role) LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD '$($script:Config.databasePassword)'; END IF; END `$`$;"
   try{Invoke-Psql @('-h','127.0.0.1','-p',[string]$script:Config.postgresPort,'-U','loretide_bootstrap_admin','-d','postgres','-v','ON_ERROR_STOP=1','-f',$roleSql) $script:Config.bootstrapPassword}
   finally{Remove-Item -LiteralPath $roleSql -Force -ErrorAction SilentlyContinue}
   $exists=Invoke-Psql @('-h','127.0.0.1','-p',[string]$script:Config.postgresPort,'-U','loretide_bootstrap_admin','-d','postgres','-Atc',"SELECT 1 FROM pg_database WHERE datname='$($script:Config.database)'") $script:Config.bootstrapPassword -Capture
@@ -276,7 +298,7 @@ function Initialize-Database {
 function Get-InstanceEnvironment {@{APP_ENV='development';PORT=[string]$script:Config.apiPort;FRONTEND_PORT=[string]$script:Config.webPort;DATABASE_URL="postgres://$($script:Config.role):$($script:Config.databasePassword)@127.0.0.1:$($script:Config.postgresPort)/$($script:Config.database)?sslmode=disable";JWT_SECRET=$script:Config.jwtSecret;FRONTEND_ORIGIN="http://127.0.0.1:$($script:Config.webPort)";CORS_ALLOWED_ORIGINS="http://127.0.0.1:$($script:Config.webPort)";MULTICA_APP_URL="http://127.0.0.1:$($script:Config.webPort)";REMOTE_API_URL="http://127.0.0.1:$($script:Config.apiPort)";NEXT_PUBLIC_API_URL='';NEXT_PUBLIC_WS_URL='';LORETIDE_EXECUTION_POLICY='disabled';LORETIDE_DIAGNOSTICS_TEST='1';MULTICA_DEV_VERIFICATION_CODE=$script:Config.verificationCode;NEXT_TELEMETRY_DISABLED='1';GOTOOLCHAIN='auto'}}
 
 function Start-Instance {
-  Ensure-Postgres;$environment=Get-InstanceEnvironment;$api=Get-VerifiedTrackedProcess api;$web=Get-VerifiedTrackedProcess web
+  Ensure-Postgres;Assert-ApplicationDatabaseIdentity;$environment=Get-InstanceEnvironment;$api=Get-VerifiedTrackedProcess api;$web=Get-VerifiedTrackedProcess web
   if(-not $api){Remove-StaleProcessRecord api};if(-not $web){Remove-StaleProcessRecord web}
   $apiUrl="http://127.0.0.1:$($script:Config.apiPort)/health";$webUrl="http://127.0.0.1:$($script:Config.webPort)"
   if($api -and -not (Test-Endpoint $apiUrl)){throw 'Owned API process is running but unhealthy; refusing duplicate start or in-use executable rebuild.'}
