@@ -308,10 +308,24 @@ function Initialize-Database {
   $script:Config.databaseInitialized=$true;Save-InstanceConfig
 }
 
-function Get-InstanceEnvironment {@{APP_ENV='development';PORT=[string]$script:Config.apiPort;FRONTEND_PORT=[string]$script:Config.webPort;DATABASE_URL="postgres://$($script:Config.role):$($script:Config.databasePassword)@127.0.0.1:$($script:Config.postgresPort)/$($script:Config.database)?sslmode=disable";JWT_SECRET=$script:Config.jwtSecret;FRONTEND_ORIGIN="http://127.0.0.1:$($script:Config.webPort)";CORS_ALLOWED_ORIGINS="http://127.0.0.1:$($script:Config.webPort)";MULTICA_APP_URL="http://127.0.0.1:$($script:Config.webPort)";REMOTE_API_URL="http://127.0.0.1:$($script:Config.apiPort)";NEXT_PUBLIC_API_URL='';NEXT_PUBLIC_WS_URL='';LORETIDE_EXECUTION_POLICY='disabled';LORETIDE_DIAGNOSTICS_TEST='1';MULTICA_DEV_VERIFICATION_CODE=$script:Config.verificationCode;NEXT_TELEMETRY_DISABLED='1';GOTOOLCHAIN='auto'}}
+function Invoke-CheckoutGit([string[]]$Arguments) {
+  if($script:Hooks.ContainsKey('CheckoutGit')){return & $script:Hooks.CheckoutGit $Arguments}
+  $output=& git -C $script:RepoRoot @Arguments 2>$null
+  if($LASTEXITCODE){throw "Unable to determine checkout build metadata: git $($Arguments -join ' ') failed with exit code $LASTEXITCODE."}
+  ($output -join "`n").Trim()
+}
+
+function Get-CheckoutBuildIdentifier {
+  $sha=Invoke-CheckoutGit @('rev-parse','--verify','HEAD')
+  if($sha -notmatch '^[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?$'){throw 'Unable to determine checkout build metadata: HEAD is not a full Git object ID.'}
+  $status=Invoke-CheckoutGit @('status','--porcelain=v1','--untracked-files=normal')
+  if([string]::IsNullOrWhiteSpace($status)){$sha.ToLowerInvariant()}else{"$($sha.ToLowerInvariant())-dirty"}
+}
+
+function Get-InstanceEnvironment {@{APP_ENV='development';PORT=[string]$script:Config.apiPort;FRONTEND_PORT=[string]$script:Config.webPort;DATABASE_URL="postgres://$($script:Config.role):$($script:Config.databasePassword)@127.0.0.1:$($script:Config.postgresPort)/$($script:Config.database)?sslmode=disable";JWT_SECRET=$script:Config.jwtSecret;FRONTEND_ORIGIN="http://127.0.0.1:$($script:Config.webPort)";CORS_ALLOWED_ORIGINS="http://127.0.0.1:$($script:Config.webPort)";MULTICA_APP_URL="http://127.0.0.1:$($script:Config.webPort)";REMOTE_API_URL="http://127.0.0.1:$($script:Config.apiPort)";NEXT_PUBLIC_API_URL='';NEXT_PUBLIC_WS_URL='';LORETIDE_EXECUTION_POLICY='disabled';LORETIDE_DIAGNOSTICS_TEST='1';LORETIDE_BUILD=(Get-CheckoutBuildIdentifier);MULTICA_DEV_VERIFICATION_CODE=$script:Config.verificationCode;NEXT_TELEMETRY_DISABLED='1';GOTOOLCHAIN='auto'}}
 
 function Start-Instance {
-  Ensure-Postgres;Assert-ApplicationDatabaseIdentity;$environment=Get-InstanceEnvironment;$api=Get-VerifiedTrackedProcess api;$web=Get-VerifiedTrackedProcess web
+  $environment=Get-InstanceEnvironment;Ensure-Postgres;Assert-ApplicationDatabaseIdentity;$api=Get-VerifiedTrackedProcess api;$web=Get-VerifiedTrackedProcess web
   if(-not $api){Remove-StaleProcessRecord api};if(-not $web){Remove-StaleProcessRecord web}
   $apiUrl="http://127.0.0.1:$($script:Config.apiPort)/health";$webUrl="http://127.0.0.1:$($script:Config.webPort)"
   if($api -and -not (Test-Endpoint $apiUrl)){throw 'Owned API process is running but unhealthy; refusing duplicate start or in-use executable rebuild.'}
