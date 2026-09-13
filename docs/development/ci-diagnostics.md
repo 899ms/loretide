@@ -59,13 +59,18 @@ Before any test runs, a read-only step connects as the diagnostics role and
 asserts its attributes:
 
 ```sql
-SELECT rolsuper, rolcreatedb, rolcreaterole, (current_user = current_database())
+SELECT rolsuper,
+       rolcreatedb,
+       rolcreaterole,
+       pg_get_userbyid((SELECT datdba FROM pg_database WHERE datname = current_database())) = current_user
 FROM pg_roles WHERE rolname = current_user;
 ```
 
-The step requires exactly `false false false true`. Any deviation — most
-importantly a role that is a superuser — stops the job with an error before the
-integration suite executes. Test failures are never swallowed: every scripted
+The step requires exactly `false false false true`: the role is not a
+superuser, cannot create databases or roles, and owns the database it is
+connected to (which is what lets it manage its own temporary schema). Any
+deviation — most importantly a role that is a superuser — stops the job with an
+error before the integration suite executes. Test failures are never swallowed: every scripted
 step uses `set -euo pipefail`, and the Go steps exit non-zero on failure.
 
 ### Secret handling
