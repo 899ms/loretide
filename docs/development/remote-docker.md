@@ -19,6 +19,12 @@ Web binds host loopback 13000, API loopback 18000; database has no host port. Br
 
 Source is mounted from the dedicated directory. Web uses the pinned pnpm version and hot reload; API rebuilds on container restart. No desktop or daemon service is defined. Dependencies and caches are for this instance. Resource caps limit individual services but do not guarantee that simultaneous builds have no effect on other applications.
 
+## Attachment persistence
+
+`LOCAL_UPLOAD_DIR=/workspace/server/data/uploads` resolves through the existing source bind mount to `/home/opsadmin/loretide-dev/server/data/uploads`. This explicitly preserves the upstream default location and existing files. It is separate from the original Multica instance and ignored by Git. Container recreation retains files; deleting the host directory does not. Back up this directory alongside the database when backups are implemented.
+
+This is storage for explicitly uploaded application attachments. It does not scan or upload the operator's local media folders. The planned local asset references remain a separate, authorized daemon capability.
+
 ## Agent authentication boundary
 
 This environment does not mount the operator's Codex/Claude credentials, SSH key, Docker socket or home directory. The API stores/distributes authorized tasks; a future local daemon must execute the chosen local client on the operator's computer and return authorized progress/artifacts. Client authentication tokens must not be copied to this server.

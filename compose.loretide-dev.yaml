@@ -25,6 +25,7 @@ services:
       APP_ENV: development
       PORT: "8080"
       FRONTEND_ORIGIN: http://localhost:13000
+      LOCAL_UPLOAD_DIR: /workspace/server/data/uploads
       GOMAXPROCS: "2"
       GOFLAGS: -p=2
       GOTOOLCHAIN: local
