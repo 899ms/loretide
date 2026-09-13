@@ -6,21 +6,23 @@ The active environment is native Windows on the current computer. API, Web, rest
 
 Use one GitHub Issue per executor and branch/worktree, separate test databases and ports, and Draft PR delivery to the main reviewer. Application source currently exists in this independent checkout, not in the parent documentation repository on GitHub. A code Issue cannot be ready without an accessible application baseline.
 
-## Testing policy: no UI unit tests in CI, manual UI acceptance
+## Testing policy: do not write or run UI unit tests (local or CI); manual UI acceptance
 
-UI behavior is **not** verified by automated tests in Loretide CI, and it is
-**not** verified with computer-use / automated clicking. UI changes are accepted
-by a human, manually, against the [Multica design requirements](design/README.md).
+UI unit tests are **not written and not run — neither locally nor in CI** — and
+are **not** acceptance evidence. UI behavior is also **not** verified with
+computer-use / automated clicking. UI changes are accepted by the **user**,
+manually, against the affected UI surfaces and a manual Todo (below), following
+the [Multica design requirements](design/README.md).
 
 ### Classify a test by behavior, not by file extension
 
 A `.test.ts` / `.test.tsx` name does not decide anything; what the test *does*
 decides:
 
-- **UI test — not run in CI.** Renders a component, mounts the DOM, or drives a
-  React hook (`@testing-library/react`, `renderHook`, `document`, `window`,
-  `jsdom` environment, DOM APIs such as `URL.createObjectURL` /
-  `HTMLElement.click`).
+- **UI test — do not write or run it (local or CI).** Renders a component,
+  mounts the DOM, or drives a React hook (`@testing-library/react`, `renderHook`,
+  `document`, `window`, `jsdom` environment, DOM APIs such as
+  `URL.createObjectURL` / `HTMLElement.click`).
 - **Non-UI test — run in CI.** Pure functions, schema/contract parsing, state
   transitions, locale parity, backend Go tests. These have no DOM and typically
   run under `// @vitest-environment node`.
@@ -29,11 +31,12 @@ The Loretide content-contracts workflow
 (`.github/workflows/loretide-content.yml`) runs only the non-UI checks. The two
 UI suites it used to run — `content/diagnostics/queries.test.tsx` (a React hook)
 and `platform/content-diagnostics.test.ts` (DOM download) — have been removed
-from CI execution. **Their source files are kept**; only the CI steps are gone.
-Their absence from a CI run is this policy in effect, **not a pass**: CI makes no
-claim about those behaviors. When adding tests, keep pure logic in a node-env
-`.test.ts` so it can run in CI; do not add UI unit tests or automated
-click-through acceptance expecting CI to run them.
+from CI execution. **Their source files are kept** (not deleted), but they are
+not run — not in CI and not locally as part of verification. Their absence from a
+CI run is this policy in effect, **not a pass**: no automated coverage runs for
+those behaviors anywhere. When adding tests, keep pure logic in a node-env
+`.test.ts` so it can run in CI; do not write UI unit tests or automated
+click-through acceptance.
 
 ### Manual UI verification Todo (template)
 

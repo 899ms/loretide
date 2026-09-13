@@ -13,9 +13,9 @@
    - 移除 `pnpm --filter @multica/core exec vitest run content/diagnostics/queries.test.tsx`
    - 移除 `pnpm --filter @multica/web exec vitest run platform/content-diagnostics.test.ts`
 2. `docs/development/ci-diagnostics.md` — 更新检查清单（去掉两条 UI 测试行），新增
-   “UI unit tests are not run in CI (Loretide policy)” 小节；本地复现段把两条 UI 测试标注为
-   “developer-local only，CI 不执行”。
-3. `docs/development/README.md` — 新增“Testing policy: no UI unit tests in CI, manual UI acceptance”
+   “UI unit tests are not written or run (Loretide policy)” 说明；本地复现段不再列出
+   任何 UI 测试命令，明确它们本地与 CI 均不运行。
+3. `docs/development/README.md` — 新增“Testing policy: do not write or run UI unit tests (local or CI), manual UI acceptance”
    小节：按行为（非扩展名）区分 UI/非 UI 测试的判据、说明旧测试未执行是策略而非通过、
    以及“Manual UI verification Todo”模板。
 4. `records/issue-11-manual-ui-policy.md` — 本记录。
@@ -41,8 +41,10 @@ Go 诊断 `-race`、执行器门禁、迁移不变量、数据库最小权限（
 
 - 之前（我在 #4 引入）CI 会执行 `queries.test.tsx`（React hook）与
   `content-diagnostics.test.ts`（DOM 下载），与最新用户规则“禁 UI 单元测试”冲突。
-- 现在 CI 不再执行这两条；两测试源码文件保留在仓库，开发者可本地运行。
-- 文档明确：CI 日志中不出现这两条测试不代表其通过，而是策略性不执行；UI 由人工验收。
+- 现在 CI 不再执行这两条；两测试源码文件保留在仓库，但本地与 CI 均不运行（规则为
+  “不编写/不运行 UI 单元测试”，不是仅禁 CI）。
+- 文档明确：CI 日志中不出现这两条测试不代表其通过，而是策略性不执行（本地亦不运行）；
+  UI 由用户依据受影响界面与手动 Todo 验收，禁止 computer use。
 
 ## 验证
 
@@ -75,8 +77,8 @@ Go 诊断 `-race`、执行器门禁、迁移不变量、数据库最小权限（
 
 ## 未覆盖风险 / 限制
 
-- CI 不再对这两条 UI 测试提供自动回归；相应 UI 行为改为人工验收，存在人工遗漏风险，
-  由用户确认承担。
+- 这两条 UI 行为不再有任何自动回归（本地与 CI 均不运行）；改由用户人工验收。此处仅如实
+  描述“自动覆盖不再执行”，不声称用户已接受任何未明确确认的风险。
 - 分类按当前测试行为判断；若未来某测试同时混合 UI 与纯逻辑，应拆分后让纯逻辑部分进 CI。
 
 ## 回滚方法

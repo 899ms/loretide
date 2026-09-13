@@ -27,27 +27,28 @@ All steps live in a single `boundaries` job on `ubuntu-latest`.
 
 ### UI unit tests are not run in CI (Loretide policy)
 
-Per Loretide policy, **UI unit tests are not executed in CI and are not
-acceptance evidence**; UI changes are accepted through manual verification (see
-`docs/development/README.md`). The workflow classifies tests by behavior, not by
-file extension: a `.test.ts(x)` that drives React hooks or the DOM is a UI test.
+Per Loretide policy, **UI unit tests are not written or run — neither in CI nor
+locally** — and are not acceptance evidence; UI changes are accepted through
+manual verification by the user (see `docs/development/README.md`). The policy
+classifies tests by behavior, not by file extension: a `.test.ts(x)` that drives
+React hooks or the DOM is a UI test.
 
 The following two suites were previously run here and have been **removed from
 CI execution**. Their source files remain in the repository (they are not
-deleted) and can still be run locally by a developer; CI simply does not run
-them:
+deleted), but they are not run — not in CI and not locally as part of
+verification:
 
 | Suite | Why it is a UI test |
 | --- | --- |
 | `packages/core content/diagnostics/queries.test.tsx` | jsdom + `renderHook`; exercises the `useDiagnosticStream` React hook |
 | `apps/web platform/content-diagnostics.test.ts` | jsdom; drives `downloadDiagnosticBundle` through a DOM anchor and `URL.createObjectURL` |
 
-Their absence from a CI run is a deliberate policy decision, **not a pass** — CI
-makes no claim about these behaviors. `contract.test.ts` (pure schema parsing,
-node environment) and `locales/parity.test.ts` (`// @vitest-environment node`)
-are non-UI and remain in CI, as do typecheck, the Go `-race` diagnostics,
-execution-policy gates, migration invariants, module-boundary checks, the
-least-privilege database provisioning, and the build.
+Their absence from a CI run is a deliberate policy decision, **not a pass** — no
+automated coverage runs for these behaviors, in CI or locally. `contract.test.ts`
+(pure schema parsing, node environment) and `locales/parity.test.ts`
+(`// @vitest-environment node`) are non-UI and remain in CI, as do typecheck, the
+Go `-race` diagnostics, execution-policy gates, migration invariants,
+module-boundary checks, the least-privilege database provisioning, and the build.
 
 ## Database identity and least privilege
 
@@ -121,12 +122,11 @@ pnpm --filter @multica/views exec vitest run locales/parity.test.ts
 
 # Backend integration + gates:
 (cd server && go test -race ./internal/content/diagnostics -count=1)
-
-# UI unit tests — developer-local only; CI does not run these (Loretide policy):
-pnpm --filter @multica/core exec vitest run content/diagnostics/queries.test.tsx
-pnpm --filter @multica/web  exec vitest run platform/content-diagnostics.test.ts
 ```
 
+UI unit tests (`queries.test.tsx`, `content-diagnostics.test.ts`) are not part of
+this list: per Loretide policy they are not run, in CI or locally. UI behavior is
+verified manually by the user (see `docs/development/README.md`).
+
 Local success does not substitute for a passing GitHub Actions run; the CI run
-against the PR head SHA is the acceptance evidence for the non-UI checks. UI
-behavior is verified manually (see `docs/development/README.md`), not by CI.
+against the PR head SHA is the acceptance evidence for the non-UI checks.
