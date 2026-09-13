@@ -8,7 +8,7 @@
 
 ## 修改的文件（严格限定在 Issue 文件边界内）
 
-1. `server/pkg/executionpolicy/policy_test.go` — 新增 `TestErrDisabledMatchesThroughWrapping`：
+1. `server/pkg/executionpolicy/policy_test.go` — 新增 `TestLoretideErrDisabledMatchesThroughWrapping`：
    锁定 `ErrDisabled` sentinel 经 `%w` 包裹后仍可被 `errors.Is` 匹配（agent/execenv 门禁依赖此契约），
    且无关错误不被误配。保留原有 `TestConfiguredPolicy*` / `TestMissingPolicy*`。
 2. `server/pkg/agent/loretide_policy_test.go` — 重写为 `TestLoretideGateRejectsEveryRegisteredFactory`：
@@ -39,8 +39,8 @@
 定向 go test（从 server/ 运行，明确 -run 范围）：
 
 ```
-go test ./pkg/executionpolicy -run 'TestConfiguredPolicy|TestMissingPolicy|TestErrDisabledMatchesThroughWrapping' -count=1 -v
-  → PASS：TestErrDisabledMatchesThroughWrapping、TestConfiguredPolicy(4 子用例)、TestMissingPolicy
+go test ./pkg/executionpolicy -run 'TestConfiguredPolicy|TestMissingPolicy|TestLoretideErrDisabledMatchesThroughWrapping' -count=1 -v
+  → PASS：TestLoretideErrDisabledMatchesThroughWrapping、TestConfiguredPolicy(4 子用例)、TestMissingPolicy
 go test ./pkg/agent -run 'TestLoretideGateRejectsEveryRegisteredFactory' -count=1 -v
   → PASS
 go test ./internal/daemon/execenv -run 'TestLoretidePrepareRejectsWithErrDisabledAndNoSideEffects|TestLoretideReuseReturnsNilWithoutSideEffects' -count=1 -v

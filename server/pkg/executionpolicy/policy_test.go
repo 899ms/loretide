@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-// TestErrDisabledMatchesThroughWrapping guards the sentinel contract that the
+// TestLoretideErrDisabledMatchesThroughWrapping guards the sentinel contract that the
 // agent and execenv gates depend on: they wrap Check()'s error with %w, and
 // callers recover it with errors.Is. If Check stopped returning the ErrDisabled
 // sentinel (e.g. a freshly constructed error per call), those errors.Is checks
 // would silently fail open, so this locks the sentinel identity here.
-func TestErrDisabledMatchesThroughWrapping(t *testing.T) {
+func TestLoretideErrDisabledMatchesThroughWrapping(t *testing.T) {
 	wrapped := fmt.Errorf("runtime %q (family %q): %w", "omp", "pi", Check())
 	if !errors.Is(wrapped, ErrDisabled) {
 		t.Fatal("wrapped gate error no longer matches ErrDisabled")

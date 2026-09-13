@@ -59,7 +59,7 @@ and never start a service.
 From `server/`:
 
 ```bash
-go test ./pkg/executionpolicy -run 'TestConfiguredPolicy|TestMissingPolicy|TestErrDisabledMatchesThroughWrapping' -count=1 -v
+go test ./pkg/executionpolicy -run 'TestConfiguredPolicy|TestMissingPolicy|TestLoretideErrDisabledMatchesThroughWrapping' -count=1 -v
 go test ./pkg/agent -run 'TestLoretideGateRejectsEveryRegisteredFactory' -count=1 -v
 go test ./internal/daemon/execenv -run 'TestLoretidePrepareRejectsWithErrDisabledAndNoSideEffects|TestLoretideReuseReturnsNilWithoutSideEffects' -count=1 -v
 ```
