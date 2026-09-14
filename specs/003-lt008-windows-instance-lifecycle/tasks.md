@@ -55,6 +55,16 @@
 - [x] T012 运行 `pwsh -File scripts/local-windows.test.ps1` 全部通过；运行 quickstart 手动主流程、前置缺失、数据保留，把命令 + 退出码 + 输出片段写入 `baseline.txt`（**未执行**：需真实 Windows + PostgreSQL + 已构建 api.exe；PR 正文附主任务本机验证清单）；`grep -c "LORETIDE_EXECUTION_POLICY:'disabled'" scripts/local-windows-supervisor.mjs` 为 1（FR-009）；浏览器可达项交用户确认
 - [x] T013 `git diff --stat` 确认文件 ⊆ {scripts/local-windows.ps1, scripts/local-windows.test.ps1, docs/development/native-windows.md}（`local-windows-supervisor.mjs` 仅当采纳 research D3 可选项时出现）；准备 PR 正文：UI 影响：无页面改动；手动 UI Todo：浏览器可达 1 项；回滚：撤销本 PR
 
+## Phase 7: 实机回归（主任务 2026-09-14 在真实 Windows 实例上发现）
+
+主任务用 pwsh 7.6.6 在真机跑完整流程，发现三处云端桩测覆盖不到的缺陷。以下为修复与其验证层级。
+
+- [x] R001 [HIGH] `start` 在需要拉起 PostgreSQL 时挂死：`Invoke-PgCtl` 用 `$out = & pg_ctl ... 2>&1` 捕获管道，`pg_ctl start` 拉起的 `postgres.exe` 继承重定向句柄并持有到自身退出，PowerShell 等管道关闭即等数据库退出（实测 postgres ready 后 5 分钟未返回；杀 pwsh 后 postgres 仍在）。修复：新增 `Start-PostgresServer`，用 `Start-Process -Wait -PassThru -WindowStyle Hidden` 取 `ExitCode`，不接管道，保留 `-l postgres.log`；`status` 分支仍用 `Invoke-PgCtl` 捕获。**验证层级：Windows 实机验证**——句柄继承死锁无法用桩复现，桩测只断言调用形态（有 `Start-Process`、无 `2>&1`、仍有 `-l`）
+- [x] R002 [MEDIUM] `start` 未确认 supervisor 存活即报成功：supervisor 因 `secrets.json` ENOENT 立即退出（错误只进 `supervisor.err.log`），`start` 仍打印 `Local supervisor started` 并返回 0，第二次 `start` 又重复启动。修复：`Start-SupervisorProcess` 后 `Wait-SupervisorAlive` 最多轮询 10 秒，要求 `supervisor.pid` 存在、进程存活且命令行匹配；否则输出 `[supervisor]` + `err.log` 路径并退出 1。启动前先删除旧 pid 文件，避免陈旧 pid 让等待假通过。**验证层级：桩测覆盖**（`Start-SupervisorProcess` 桩不写 pid → 退出 1）+ Windows 实机复验
+- [x] R003 [MEDIUM] Next.js 子进程被误判为端口冲突：`web.pid=15872` 是 `next dev` 父进程，13000 的实际监听者是子 worker `pid 44772`，`status` 报 `conflict ... not this instance`、`ok=false`、`exit 1`，而实例一切正常。修复：新增 `Test-ListenerIsOurs`——监听者 pid 在已知组件 pid 集合内、或命令行/可执行路径位于 `$Root` 之内（与 `Test-ProcessOwned` 同一判定）、或父进程链（上溯 5 层，带自环保护）含已知组件 pid，三者任一成立即非冲突。`Get-ProcessInfo` 增取 `ParentProcessId`。**验证层级：桩测覆盖**（子 worker 命令行含 `$Root` → 非冲突、`ok=true`；仅靠父链的后代 → 非冲突；另一 checkout 的 next → 仍是冲突；父链自环 → 不挂起）+ Windows 实机复验
+
+三组回归用例均已对未修复代码验证过会失败（分别 3 / 5 / 3 条），非空断言。
+
 ## Dependencies
 
 - T001 → 全部
