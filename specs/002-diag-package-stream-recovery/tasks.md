@@ -62,7 +62,7 @@
 ## Phase 7: Polish
 
 - [x] T022 运行 `pnpm typecheck`、`pnpm --filter @multica/core test -- content/diagnostics`、`(cd server && go test ./internal/handler -run ContentDiagnostic -count=1)`、`pnpm check:content-boundaries`（views 未引入平台 API）；全部通过
-- [x] T023 `git diff --stat` 确认文件 ⊆ plan.md 结构清单；超出即回退
+- [x] T023 `git diff --stat` 确认文件 ⊆ plan.md 结构清单；超出即回退（主任务确认：store.go 与平台测试为 plan 遗漏，已补入清单）
 - [x] T024 准备 PR 正文：改动与用途、实际命令与退出码、`manual-ui-todo.md` 链接、UI 影响（诊断页状态区 / 下载 / 提示）、手动 UI Todo 清单、未执行项、回滚：撤销本 PR；正文声明本功能未新增任何外发请求（FR-011）
 
 ## Dependencies
