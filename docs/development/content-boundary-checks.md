@@ -11,6 +11,30 @@ node --test scripts/check-content-boundaries.test.mjs   # the checker's own test
 node scripts/check-content-boundaries.mjs               # scan the repository
 ```
 
+## Running it locally
+
+```bash
+pnpm check:content-boundaries
+```
+
+This is the repository entry point; run it from the repository root, with no
+arguments. It runs the two commands above in that order, joined by `&&`, so a
+failing self-test exits before the scan and a passing scan can never mask it.
+Exit code 0 means both steps passed; any non-zero exit names the step that
+failed. The full command-line contract is in
+`specs/001-arch-module-boundary/contracts/verify-entry.md`.
+
+The script and the configuration are the same ones CI runs — the two commands
+are byte-identical to the `Loretide content contracts` workflow steps, so
+Windows PowerShell, a Linux shell and CI all exercise one implementation. If
+either side changes, change the other in the same PR. Windows path separators
+are normalised inside the checker (see *Windows path normalization* below), so
+results do not differ by platform.
+
+Node 22 or newer is required (`package.json` `engines.node` is `>=22`); CI
+pins Node 22. `scripts/check.sh` runs this entry after `pnpm typecheck`, so
+`make check` covers it too.
+
 ## What it enforces
 
 Given the roots and module graph in `content-boundaries.json`:
@@ -95,3 +119,4 @@ behavior: it does not resolve values passed to a computed `import()`/`require()`
 path aliases beyond the prefix rewrites in `check()`, and does not model
 conditional or platform-specific bundling. It validates the declared module
 graph and the shape of import statements, nothing more.
+
