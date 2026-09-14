@@ -244,6 +244,10 @@
     "text111": "This is the original fault",
     "text112": "Original run is unreadable (beyond retention or not permitted)",
     "text113": "Not recorded",
-    "text114": "View the original run"
+    "text114": "View the original run",
+    "text115": "No linked trace",
+    "text116": "Object and versions",
+    "text117": "No version recorded",
+    "text118": "Versions seen on this page only"
   }
 }

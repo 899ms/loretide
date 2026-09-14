@@ -11,6 +11,8 @@ import {
   buildTraceWaterfall,
   describeRegressionVerdict,
   describeRunLinkage,
+  describeTraceJump,
+  describeObjectVersions,
   STREAM_EVENT_CAP,
   type DiagnosticDownload,
   type DiagnosticEvent,
@@ -89,6 +91,77 @@ const labels: Record<string, string> = {
   search: "搜索失败",
   clock_skew: "时钟偏差",
 };
+// The "view trace" affordance. An event whose trace id is absent or malformed
+// has nothing to jump to, so the button is disabled and says why. Jumping
+// anyway would clear every filter and show the whole technical log, which the
+// reader would take for the cause of the failure they were looking at.
+function TraceJumpCell({
+  event,
+  onTrace,
+}: {
+  event: DiagnosticEvent;
+  onTrace: (e: DiagnosticEvent) => void;
+}) {
+  const { t } = useT("common");
+  const jump = describeTraceJump(event);
+  const blocked = jump.kind !== "filter";
+  return (
+    <div className="space-y-1">
+      <Button
+        variant="outline"
+        disabled={blocked}
+        onClick={() => onTrace(event)}
+      >
+        {t(($) => $.diagnostics.text006)}
+      </Button>
+      {blocked && (
+        <p className="text-caption text-muted-foreground">
+          {t(($) => $.diagnostics.text115)}
+        </p>
+      )}
+    </div>
+  );
+}
+// The object this trace touched, and the versions recorded for it. Grouped from
+// the events already on screen: the event query has no object dimension, so
+// reaching further would mean a new server read path (FR-019). That bounds what
+// can be shown, which is why the scope note below is not optional - without it a
+// reader takes this for the object's full version history.
+function ObjectVersions({ events }: { events: DiagnosticEvent[] }) {
+  const { t } = useT("common");
+  const first = events[0];
+  const group = describeObjectVersions(events, {
+    objectType: first?.objectType ?? "",
+    objectId: first?.objectId ?? "",
+  });
+  if (group.state === "unknownObject") return null;
+  return (
+    <SettingsCard>
+      <SettingsRow label={t(($) => $.diagnostics.text116)} size="text">
+        <div className="space-y-1">
+          <p className="break-all">
+            {group.objectType} {t(($) => $.diagnostics.text003)}
+            {group.objectId}
+          </p>
+          {group.state === "present" ? (
+            <p className="break-all">
+              {group.versions
+                .map((v) => `${v.version} (${v.count})`)
+                .join(" / ")}
+            </p>
+          ) : (
+            <p className="text-muted-foreground">
+              {t(($) => $.diagnostics.text117)}
+            </p>
+          )}
+          <p className="text-caption text-muted-foreground">
+            {t(($) => $.diagnostics.text118)}
+          </p>
+        </div>
+      </SettingsRow>
+    </SettingsCard>
+  );
+}
 function Events({
   events,
   onTrace,
@@ -138,9 +211,7 @@ function Events({
                 {e.errorCode || "—"}
               </TableCell>
               <TableCell>
-                <Button variant="outline" onClick={() => onTrace(e)}>
-                  {t(($) => $.diagnostics.text006)}
-                </Button>
+                <TraceJumpCell event={e} onTrace={onTrace} />
               </TableCell>
             </TableRow>
           ))}
@@ -528,15 +599,21 @@ function DiagnosticsContent({ wsId, copy, download }: Props) {
   });
   const overview = d.overview.data;
   const run = d.detail.data;
+  // Where to look next is derived in core so it can be asserted (principle II
+  // forbids testing this component). An event with no usable trace id yields
+  // "unavailable" rather than an empty filter, which used to drop the reader
+  // into the unfiltered technical log right after they asked for one trace.
   const onTrace = (event: DiagnosticEvent) => {
-    setRunId(event.runId);
-    setTrace(event.traceId);
+    const jump = describeTraceJump(event);
+    if (jump.kind !== "filter") return;
+    setRunId(jump.filter.runId);
+    setTrace(jump.filter.traceId);
     setComponent("");
     setSeverity("");
     setCode("");
     setFrom("");
     setUntil("");
-    setAfter(0);
+    setAfter(jump.filter.after);
     setTab(3);
   };
   const simulate = async (originalRunId?: string) => {
@@ -962,6 +1039,7 @@ function DiagnosticsContent({ wsId, copy, download }: Props) {
             {tab === 3 && !runId && trace && (
               <SettingsSection>
                 <p>{trace}</p>
+                <ObjectVersions events={d.events.data?.events ?? []} />
                 <Events
                   events={d.events.data?.events ?? []}
                   onTrace={onTrace}
