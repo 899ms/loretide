@@ -809,7 +809,15 @@ type ReuseParams struct {
 // Returns nil if the workdir does not exist or required provider setup fails
 // (caller should fall back to Prepare).
 func Reuse(params ReuseParams, logger *slog.Logger) *Environment {
-	if executionpolicy.Check() != nil { return nil }
+	// A nil return is also how Reuse reports "no usable workdir", so without
+	// this line a gated reuse is indistinguishable from a missing directory.
+	// Log only - the return value and the fail-closed behaviour are unchanged.
+	if err := executionpolicy.Check(); err != nil {
+		if logger != nil {
+			logger.Info("execenv: reuse refused by the execution gate", "workdir", params.WorkDir, "error", err)
+		}
+		return nil
+	}
 	if _, err := os.Stat(params.WorkDir); err != nil {
 		return nil
 	}

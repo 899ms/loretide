@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 	"io"
 	"log/slog"
 	"os"
@@ -43,6 +44,7 @@ func TestPreparationHelperProcess(t *testing.T) {
 }
 
 func TestPreparationHelperRoundTripsReuse(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -83,6 +85,7 @@ func TestPreparationHelperRoundTripsReuse(t *testing.T) {
 }
 
 func TestPreparationHelperRoundTripsProjectResources(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -147,6 +150,7 @@ func TestPreparationHelperRoundTripsProjectResources(t *testing.T) {
 // untagged, non-omitempty `"HandoffNote": ""` and the helper answered
 // `json: unknown field "HandoffNote"` (MUL-7029).
 func TestPreparationHelperAcceptsFieldsFromAnOlderParent(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	workDir := filepath.Join(t.TempDir(), "workdir")
 	if err := os.MkdirAll(workDir, 0o755); err != nil {
@@ -261,6 +265,7 @@ func TestPreparationRequestPreservesOpenclawGatewayForHelper(t *testing.T) {
 // daemon would fall back to matching "deadline exceeded" in the message, which
 // is exactly the misclassification this change removes (#7112).
 func TestPreparationHelperPreservesOpenclawTimeoutKind(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("shell shim shape is covered by the windows-tagged tests")
 	}
@@ -327,6 +332,7 @@ func TestRehydratePreparationErrorUnknownKind(t *testing.T) {
 // The parent takes the claim and keeps it, so a second execution of the same
 // task must still be refused after PrepareIsolated has returned.
 func TestPrepareIsolatedKeepsTheClaimWithTheParent(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 	const (
@@ -442,6 +448,7 @@ func TestLockEnvRootForReuseExcludesConcurrentContinuations(t *testing.T) {
 // this fails immediately and says so, rather than proceeding with preparation
 // that silently believes it is protected.
 func TestPrepareIsolatedFailsLoudlyWhenPreclaimIsNotDeclared(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 	const (

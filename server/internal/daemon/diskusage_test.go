@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/multica-ai/multica/server/internal/daemon/execenv"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 )
 
 func writeFile(t *testing.T, path string, size int) {
@@ -261,6 +262,7 @@ func TestScanDiskUsage_MixedLayoutsUseMetadataIdentity(t *testing.T) {
 }
 
 func TestScanDiskUsage_ReadableActiveRootUsesOwnerIdentityWithoutGCMeta(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 
 	root := t.TempDir()

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/multica-ai/multica/server/internal/daemon/execenv"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 )
 
 // TestRunTaskSquadLeaderReusesWorkdirBeforeGCMetaWritten drives two real
@@ -28,6 +29,7 @@ import (
 // file. runTask writes that provenance via execenv.Prepare; this test never
 // writes .gc_meta.json, so it fails against the pre-fix GC-meta-keyed gate.
 func TestRunTaskSquadLeaderReusesWorkdirBeforeGCMetaWritten(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 
 	d, argsFile, cleanup := newLeaderReuseTestDaemon(t)
@@ -77,6 +79,7 @@ func TestRunTaskSquadLeaderReusesWorkdirBeforeGCMetaWritten(t *testing.T) {
 }
 
 func TestRunTaskSquadLeaderDoesNotReuseExternalPriorWorkdir(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 
 	d, _, cleanup := newLeaderReuseTestDaemon(t)
@@ -169,6 +172,7 @@ func TestShouldReusePriorWorkdirDeclinesRemovedDirectory(t *testing.T) {
 // (MUL-7034). The run continues in that directory; once the directory has been
 // GC'd, it prepares a fresh one instead.
 func TestRunTaskReusesPriorWorkdirForFreshSession(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 
 	d, _, cleanup := newLeaderReuseTestDaemon(t)
@@ -783,6 +787,7 @@ func TestLockReusablePriorEnvRootStopsWaitingWhenTheContextEnds(t *testing.T) {
 // cancellation under "budget exhausted" in the very logs the 15s budget is
 // meant to be judged by.
 func TestRunTaskCancelledWaitingForThePriorWorkdirStopsInsteadOfPreparing(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	d, _, cleanup := newLeaderReuseTestDaemon(t)
 	defer cleanup()
 
@@ -1052,6 +1057,7 @@ func TestLockEnvRootForReuseTakesIdentityAndLockFromOneHandle(t *testing.T) {
 // directory the lock is held on, so a substitution ends the run in a fresh
 // environment instead of executing in a directory nothing holds.
 func TestRunTaskDeclinesReuseWhenTheClaimedDirectoryIsSwappedBeforeUse(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	d, argsFile, cleanup := newLeaderReuseTestDaemon(t)
 	defer cleanup()
 	_ = argsFile

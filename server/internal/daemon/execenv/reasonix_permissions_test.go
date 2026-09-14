@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -52,6 +53,7 @@ func taskDenyList(t *testing.T, path string) []string {
 }
 
 func TestPrepareDeniesReasonixAskTool(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	env, err := Prepare(PrepareParams{
 		WorkspacesRoot: t.TempDir(),
@@ -83,6 +85,7 @@ func TestPrepareDeniesReasonixAskTool(t *testing.T) {
 }
 
 func TestReuseRewritesReasonixAskDeny(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	params := PrepareParams{
 		WorkspacesRoot: t.TempDir(),
@@ -241,6 +244,7 @@ func TestReasonixProjectConfigKeepsRepositoryFile(t *testing.T) {
 }
 
 func TestReasonixProjectConfigSkippedForOtherProviders(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	env, err := Prepare(PrepareParams{
 		WorkspacesRoot: t.TempDir(),

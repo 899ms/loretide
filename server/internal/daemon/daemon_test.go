@@ -24,6 +24,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/daemon/execenv"
 	"github.com/multica-ai/multica/server/internal/daemon/repocache"
 	"github.com/multica-ai/multica/server/pkg/agent"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 	"github.com/multica-ai/multica/server/pkg/taskfailure"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -3529,6 +3530,7 @@ func TestShouldRetryWithFreshSession_UnresumableHistoryIsBackendAgnostic(t *test
 }
 
 func TestExecuteAndDrain_CodexInactivityReportsMCPToolResultTranscript(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("shell-script fixture is POSIX-only")
 	}

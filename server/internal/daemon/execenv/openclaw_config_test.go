@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 	"io"
 	"log/slog"
 	"os"
@@ -1564,6 +1565,7 @@ func TestPrepareOpenclawSkillWriteMatchesScanPath(t *testing.T) {
 // fail-closed semantics, Prepare itself errors when the CLI is unavailable;
 // a stub here keeps the happy path observable.
 func TestPrepareEnvironmentOpenclawWiresConfigPath(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	wsRoot := t.TempDir()
 
 	stub := installOpenclawStub(t, map[string]openclawResponse{
@@ -1606,6 +1608,7 @@ func TestPrepareEnvironmentOpenclawWiresConfigPath(t *testing.T) {
 // can export OPENCLAW_INCLUDE_ROOTS. Without this, the wrapper's
 // $include into ~/.openclaw/openclaw.json is rejected at runtime.
 func TestPrepareEnvironmentOpenclawWiresIncludeRoot(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	wsRoot := t.TempDir()
 
 	userCfgDir := t.TempDir()
@@ -1639,6 +1642,7 @@ func TestPrepareEnvironmentOpenclawWiresIncludeRoot(t *testing.T) {
 // during Prepare, the whole call must fail. Previously the preparer logged
 // a warning and continued with no config; we have removed that path.
 func TestPrepareEnvironmentOpenclawFailsClosed(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	wsRoot := t.TempDir()
 
 	stub := installOpenclawStub(t, map[string]openclawResponse{
@@ -1668,6 +1672,7 @@ func TestPrepareEnvironmentOpenclawFailsClosed(t *testing.T) {
 // also must NOT shell out to the openclaw CLI, so the stub here records
 // zero calls.
 func TestPrepareEnvironmentNonOpenclawSkipsConfig(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	wsRoot := t.TempDir()
 
 	stub := installOpenclawStub(t, map[string]openclawResponse{})

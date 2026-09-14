@@ -291,6 +291,12 @@ func TestValidateLocalPath(t *testing.T) {
 	})
 
 	t.Run("rejects a symlink pointing at the user home", func(t *testing.T) {
+		// As root $HOME is /root, which validateLocalPath already rejects as a
+		// protected system root; that reason wins and the home-dir reason this
+		// case pins never surfaces. Same guard as the unwritable case above.
+		if os.Getuid() == 0 {
+			t.Skip("test cannot run as root; $HOME is itself a protected system root")
+		}
 		home, err := os.UserHomeDir()
 		if err != nil || home == "" {
 			t.Skip("no home dir")

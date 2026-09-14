@@ -3,6 +3,7 @@ package execenv
 import (
 	"context"
 	"errors"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 	"io"
 	"log/slog"
 	"os"
@@ -379,6 +380,7 @@ func TestPrepareLocalWorktreeConcurrentTasks(t *testing.T) {
 // sidecar-free branch is the user-visible contract — a diff full of
 // .agent_context/ scaffolding would make the mode unusable for review.
 func TestWorktreeModeDeliversBranchWithoutSidecars(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	repo := newTestRepo(t)
 	// Start dirty, so the branch gets a baseline commit as well as the agent's
 	// own — a sidecar could otherwise hide in either one.
@@ -501,6 +503,10 @@ func TestFinalizeKeepsWorktreeWhenCommitFails(t *testing.T) {
 
 	// Force every commit in this worktree to fail the way a signing setup the
 	// daemon can't satisfy would.
+	// gpg.format has to be pinned: git only consults gpg.program under openpgp,
+	// so a host whose global config sets gpg.format=ssh would sign through
+	// gpg.ssh.program, commit successfully, and defeat this trigger.
+	gitRun(t, wt.Path, "config", "gpg.format", "openpgp")
 	gitRun(t, wt.Path, "config", "commit.gpgSign", "true")
 	gitRun(t, wt.Path, "config", "gpg.program", filepath.Join(repo, "definitely-not-a-real-gpg"))
 
@@ -603,6 +609,7 @@ func TestPrepareLocalWorktreeFailsWhenUntrackedReplayIsTruncated(t *testing.T) {
 // starts a new empty CODEX_HOME, the prior rollout is invisible, and the agent
 // silently loses the conversation it was having with the user.
 func TestPrepareWorktreeModeUsesPerIssueCodexSessionStore(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	repo := newTestRepo(t)
 	workspacesRoot := t.TempDir()
 	codexHome := t.TempDir()
@@ -1915,6 +1922,7 @@ func TestConflictAfterAUserCommitOnTheBranchStillOffersTheEditAgain(t *testing.T
 // plumbing between them is covered too: which claim fields become the branch
 // name, and which become the identity the branch is recorded under.
 func TestPrepareTwoTurnsOfOneIssueThroughPrepare(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	repo := newTestRepo(t)
 	writeFile(t, filepath.Join(repo, "tracked.txt"), "user work in progress\n")
 	workspacesRoot := t.TempDir()
@@ -1979,6 +1987,7 @@ func TestPrepareTwoTurnsOfOneIssueThroughPrepare(t *testing.T) {
 // worktree it believed it owned nothing of. This test runs two turns across
 // that boundary, which is where the in-process tests above cannot look.
 func TestIsolatedPrepareCarriesTheStateFinalizeNeeds(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	repo := newTestRepo(t)
 	writeFile(t, filepath.Join(repo, "tracked.txt"), "user work in progress\n")
 	workspacesRoot := t.TempDir()
@@ -2052,6 +2061,7 @@ func TestIsolatedPrepareCarriesTheStateFinalizeNeeds(t *testing.T) {
 // A read-only turn drops its branch — which the daemon could not do either
 // while createdBranch was being lost on the way back from the helper.
 func TestIsolatedPrepareKeepsTheReadOnlyBranchDrop(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	repo := newTestRepo(t)
 	workspacesRoot := t.TempDir()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

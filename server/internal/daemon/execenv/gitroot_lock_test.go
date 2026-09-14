@@ -3,6 +3,7 @@ package execenv
 import (
 	"context"
 	"errors"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -256,6 +257,7 @@ func TestRunGitSurfacesStderrInTheError(t *testing.T) {
 // its own helper process. Both must get a worktree; before the cross-process
 // lock one of them routinely died in `git stash create`.
 func TestConcurrentIsolatedPreparesOnOneRepo(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	repo := newTestRepo(t)
 	writeFile(t, filepath.Join(repo, "tracked.txt"), "user work in progress\n")
 	writeFile(t, filepath.Join(repo, "untracked.txt"), "new file\n")

@@ -17,6 +17,7 @@ import (
 
 	"github.com/multica-ai/multica/server/internal/daemon/execenv"
 	"github.com/multica-ai/multica/server/internal/daemon/repocache"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 )
 
 // newGCTestDaemon creates a minimal Daemon for GC testing with a mock HTTP server.
@@ -672,6 +673,7 @@ func TestCleanTaskDir_AcceptsLegacyOwnerWithGCWorkspaceIdentity(t *testing.T) {
 }
 
 func TestCleanTaskDir_RemovesStableRootRecord(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 
 	root := t.TempDir()

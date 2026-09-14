@@ -2,6 +2,7 @@ package execenv
 
 import (
 	"encoding/json"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -127,6 +128,7 @@ func TestPrepareRollsBackWhenWriteContextFilesFailsAfterMarker(t *testing.T) {
 // from inside the task fail closed — and must persist the manifest that the
 // task teardown later uses to remove it.
 func TestPrepareSucceedsInPlaceAndLeavesMarker(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	workspacesRoot := t.TempDir()
 	userDir := t.TempDir()
 
