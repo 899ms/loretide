@@ -49,7 +49,7 @@
 | 供全部 sink 及导出复用 | `SlogHandler` 与 `Store.Technical` 均经 `Sanitize()`；`Export` 复用同一 `Event` | 自动测试已通过 | `TestLogRegressionSlogHandlerLeakingPrevention` |
 | 验证嵌套字段 | `TestLogRegressionSanitizeRules` 覆盖字段级规则 | 代码存在但无测试 | 未见**嵌套**结构的负例；`Event` 为扁平结构，嵌套场景不适用但卡片明确要求 |
 | 验证异常文本 | `TestSecretsNeverEnterTechnicalLog` | 自动测试已通过 | — |
-| 验证模型输出样例 | 未找到以模型输出为输入的脱敏负例 | **无证据** | — |
+| 验证模型输出样例 | `log_regression_test.go`：5 组真实形状的模型输出样例（回显的 system prompt、带 key 的 provider stdout、provider 栈回溯、含嵌套凭据的 tool-call、带令牌的 markdown 回调 URL）× 13 个 `Sanitize` 负责的字段，断言序列化后的事件不含任一敏感串、且不含换行 | 自动测试已通过 | `TestModelOutputSamplesNeverSurviveSanitize`（65 个子用例）、`TestModelOutputThroughSlogHandlerLeaksNothing`。业务身份字段（`Workspace`/`Account`/`Actor`/`ObjectID`）按设计透传、不在断言范围，见 `TestLogRegressionSanitizeRules` 的「business identity fields preserved」用例 |
 | 不能只测试顶层 API key | `TestLogRegressionSanitizeRules` 覆盖多字段 | 自动测试已通过 | — |
 | 不记录真实凭据 | `TestSecretsNeverEnterTechnicalLog`、`TestLogRegressionSlogHandlerLeakingPrevention` | 自动测试已通过 | — |
 
@@ -64,7 +64,7 @@
 | 交付保留配置 | `store.go` `Store.Retention` / `Store.MaxLogs`；`limits.go` 校验 | 自动测试已通过 | `TestDiagnosticLimitsRejectInvalidConfiguration` |
 | 交付丢弃可见状态 | `Metrics.Dropped` / `Metrics.SinkErrors` 进入 `Overview` | 自动测试已通过 | `TestPostgresFullScenariosExportAndHealth` |
 | 验证写失败 | `Store.Technical` 失败时 `s.Log.Errors.Add(1)` 而不返回错误 | 自动测试已通过 | handler 侧 `TestContentDiagnosticWritesCoordinateWithWorkspaceDelete/technical_is_dropped_after_delete_commits` |
-| 验证磁盘满模拟 | 未找到磁盘满或存储写满的模拟测试 | **无证据** | `store_integration_test.go` 出现 `disk` 字样但非磁盘满场景 |
+| 验证磁盘满模拟 | `store_diskfull_test.go`：在隔离 schema 上用触发器抛 SQLSTATE `53100`（PostgreSQL 自身的 `disk_full`）驱动真实 INSERT 路径，断言有界（内存缓冲与行数均不增长）、可见（`sink_errors` 与 `dropped` 各按失败次数递增）、不拖垮业务（`CommitRun` / `Runs` / `Query` 仍成功），并验证存储恢复后写入恢复且计数停止 | 自动测试已通过 | `TestTechnicalSinkOnFullStorageStaysBoundedVisibleAndNonFatal`、`TestAuditOnFullStorageRejectsTheWriteInsteadOfCounting`（关键审计满盘时整体拒绝而非计数吞掉）。需 `LORETIDE_DIAG_TEST_DATABASE_URL`，未配置时 `t.Skip` |
 | 验证截断 | `TestLogRegressionBufferCapacities` | 自动测试已通过 | — |
 | 验证持续写入 | `TestLogRegressionConcurrentAppendAndEvents`（`-race`） | 自动测试已通过 | — |
 | sink 失败不拖垮普通请求 | `Technical()` 无返回值，失败仅计数 | 自动测试已通过 | 同「验证写失败」行；浏览器侧对照为手动项 V11-10 |
@@ -296,10 +296,10 @@
 | 卡片 | 自动测试已通过 | 代码存在但无测试 | 无证据 | 合计 |
 |---|---:|---:|---:|---:|
 | DIAG-01 | 10 | 0 | 0 | 10 |
-| DIAG-02 | 5 | 2 | 3 | 10 |
-| DIAG-03 | 9 | 1 | 1 | 11 |
-| DIAG-04 | 7 | 1 | 1 | 9 |
-| DIAG-05 | 9 | 1 | 1 | 11 |
+| DIAG-02 | 8 | 2 | 0 | 10 |
+| DIAG-03 | 10 | 1 | 0 | 11 |
+| DIAG-04 | 8 | 1 | 0 | 9 |
+| DIAG-05 | 10 | 1 | 0 | 11 |
 | DIAG-06 | 8 | 3 | 0 | 11 |
 | DIAG-07 | 10 | 2 | 0 | 12 |
 | DIAG-08 | 13 | 1 | 1 | 15 |
@@ -308,7 +308,7 @@
 | DIAG-11 | 9 | 0 | 0 | 9 |
 | DIAG-12 | 9 | 3 | 1 | 13 |
 | DIAG-13 | 2 | 4 | 3 | 9 |
-| **合计** | **102** | **28** | **14** | **144** |
+| **合计** | **108** | **28** | **8** | **144** |
 
 ### 4.2 D13-V01～V12 状态
 
@@ -335,14 +335,14 @@
 
 1. **D13-V01～V11 未用完整模拟场景验证**——37 条浏览器手动条目（`manual-ui-todo.md` V05/V08/V11）全部处于「待用户验证」，且该清单只覆盖 V05/V08/V11 三条，V01～V04、V06、V07、V09、V10 没有对应的手动清单。
 2. **D13-V12 的公共接入合同未通过**——无接入合同、无流程检查，三条子句全部无覆盖。
-3. **14 个条目完全无证据**，逐条列出（其中 6 条是浏览器手动矩阵尚未执行，8 条是实现缺失；DIAG-09 trace 瀑布经复核为部分存在，已移出）：
+3. **8 个条目完全无证据**，逐条列出（全部是浏览器手动矩阵尚未执行）。下表保留已闭合行的历史，删除线即表示不再计入：
 
    | 卡片 | 条目 | 性质 |
    |---|---|---|
    | ~~DIAG-02~~ | ~~交付请求头脱敏规则~~ | **已闭合**（feature 005） |
    | ~~DIAG-02~~ | ~~交付路径/URL 脱敏规则~~ | **已闭合**（feature 005） |
-   | DIAG-02 | 验证模型输出样例 | 测试缺失 |
-   | DIAG-03 | 验证磁盘满模拟 | 测试缺失 |
+   | ~~DIAG-02~~ | ~~验证模型输出样例~~ | **已闭合**（2026-09-14 测试补齐） |
+   | ~~DIAG-03~~ | ~~验证磁盘满模拟~~ | **已闭合**（2026-09-14 测试补齐） |
    | ~~DIAG-04~~ | ~~交付 outbox 接口~~ | **已闭合（带限制）**（feature 005）：接口 + 进程内实现，不跨进程重启 |
    | ~~DIAG-05~~ | ~~交付 HTTP trace 传播~~ | **已闭合**（feature 005） |
    | DIAG-08 | D13-V05 浏览器矩阵 | 手动未执行 |
@@ -354,15 +354,21 @@
    | DIAG-13 | 浏览器可从操作记录定位技术原因 | 手动未执行 |
    | DIAG-13 | 浏览器可导出脱敏包 | 手动未执行 |
 
-   其中影响面最大的是 **DIAG-05 的 HTTP trace 传播未接线**（`handler/`、`middleware/` 中检索不到 `Pack`/`Unpack`/`traceparent`），它直接让 D13-V03「从请求跨队列到模拟 daemon」的首段断裂——队列与 WebSocket 两段都已自动化，唯独入口一段没有。
+   （历史）其中影响面最大的是 **DIAG-05 的 HTTP trace 传播未接线**，它直接让 D13-V03「从请求跨队列到模拟 daemon」的首段断裂。该项已于 2026-09-14 闭合。
 
-   > **2026-09-14 更新（`specs/005-diag-trace-and-sanitize` 实施后）**：上表 15 条中的 **3 条实现缺失已闭合**（DIAG-02 两条、DIAG-04 一条、DIAG-05 一条，共 4 行），见各卡片表内的证据列。**其余 11 条未动**：DIAG-02「验证模型输出样例」与 DIAG-03「验证磁盘满模拟」仍是测试缺失，DIAG-09「交付 trace 瀑布」仍是实现缺失，6 条浏览器手动矩阵与 DIAG-13 的 3 条仍未执行。
+   > **2026-09-14 更新（一）`specs/005-diag-trace-and-sanitize` 实施后**：**4 行实现缺失已闭合**（DIAG-02 两条、DIAG-04 一条、DIAG-05 一条），见各卡片表内的证据列。
    >
    > DIAG-04 的闭合**带限制**：交付的是接口与进程内实现，进程退出会丢失未派发项（`TestOutboxDoesNotSurviveTheProcess` 就是这条限制的断言）。持久落库版本列为后续任务。
    >
-   > **本次不改动任何 D13-V 的状态**：§4.2 的 12 条仍按原样。已有代码不等于已验收，浏览器矩阵未逐项通过之前 DG-01 仍不满足。
+   > **2026-09-14 更新（二）测试缺口补齐**：**2 行测试缺失已闭合**——DIAG-02「验证模型输出样例」与 DIAG-03「验证磁盘满模拟」，用例名见各卡片表。两者都只加测试，未改生产代码。
+   >
+   > 剩余 **8 条无证据全部是浏览器手动矩阵**（DIAG-08 一条、DIAG-09 三条、DIAG-12 一条、DIAG-13 三条），按 constitution 原则 II 只能由用户手动验收。
+   >
+   > **§4.1 计数同步**：更新（一）当时只改了卡片表、未同步 §4.1，本次一并按第 2 节各行重新统计，结果为 **108 / 28 / 8**（此前表中为 102 / 28 / 14）。
+   >
+   > **两次更新都不改动任何 D13-V 的状态**：§4.2 的 12 条仍按原样。已有代码不等于已验收，浏览器矩阵未逐项通过之前 DG-01 仍不满足。
 
-4. **27 个条目「代码存在但无测试」**——其中 DIAG-09（7 项）与 DIAG-13（4 项）集中在浏览器面板层。按 constitution 原则 II 这些不补 UI 单测，只能由用户手动验收，因此 **DG-01 的出口天然依赖一份尚不存在的完整浏览器验收报告**。
+4. **28 个条目「代码存在但无测试」**——其中 DIAG-09（8 项）与 DIAG-13（4 项）集中在浏览器面板层。按 constitution 原则 II 这些不补 UI 单测，只能由用户手动验收，因此 **DG-01 的出口天然依赖一份尚不存在的完整浏览器验收报告**。
 5. **两项对表未做，需主任务在文档仓库完成**：
    - `simulator.go` 的 16 个场景是否等于 `docs/13` §7 的完整列举（本次只读了 §9，未读 §7）；
    - 迁移 `468`～`473` 是否满足「无 FK、索引全部 `CONCURRENTLY`」（仓库现有迁移测试不检查这两项）。
