@@ -83,7 +83,7 @@
 - 预计位置：导出/生命周期服务、预览接口及测试。
 
 ## DIAG-13 · 回归关联与诊断端到端验收
-- [ ] **状态：D13-V12 部分交付，待用户验收**（公共接入合同规格 PR [899ms/loretide#33](https://github.com/899ms/loretide/pull/33)、实施 PR [899ms/loretide#35](https://github.com/899ms/loretide/pull/35) 已合入 app-main `b11803fd9`，2026-09-14）；依赖：DIAG-09、DIAG-11、DIAG-12；规模M；验收D13-V09/12及全部D13基础场景。本次闭合 D13-V12 第一、三子句：`docs/development/diagnostics-onboarding-contract.md`（消费方 E1/E2/E3、提供方 P1–P3、模拟/真实证据分栏）、`pnpm check:diagnostics-contract` 本地与 CI 同源、豁免登记 `scripts/diagnostics-contract.json` 须带到期日期、PR 模板两条检查项。第二子句（真实 Codex 实测）在执行器禁用期间不可能通过，对照表 V12 标「部分」。D13-V09 回归四态判定（通过/未通过/未运行/无法判定，前端从 `regression`+`status` 推导，`"not_run"` 与空串均为未运行）与原运行/场景/模块/提交四项定位随 #37 合入，待用户按 006 手动清单验证。
+- [ ] **状态：D13-V12 部分交付，待用户验收**（公共接入合同规格 PR [899ms/loretide#33](https://github.com/899ms/loretide/pull/33)、实施 PR [899ms/loretide#35](https://github.com/899ms/loretide/pull/35) 已合入 app-main `b11803fd9`，2026-09-14）；依赖：DIAG-09、DIAG-11、DIAG-12；规模M；验收D13-V09/12及全部D13基础场景。本次闭合 D13-V12 第一、三子句：`docs/development/diagnostics-onboarding-contract.md`（消费方 E1/E2/E3、提供方 P1–P3、模拟/真实证据分栏）、`pnpm check:diagnostics-contract` 本地与 CI 同源、豁免登记 `scripts/diagnostics-contract.json` 须带到期日期、PR 模板两条检查项。第二子句（真实 Codex 实测）在执行器禁用期间不可能通过，对照表 V12 标「部分」。D13-V09 回归四态判定（通过/未通过/未运行/无法判定，前端从 `regression`+`status` 推导，`"not_run"` 与空串均为未运行）与原运行/场景/模块/提交四项定位随 #37 合入，待用户按 006 手动清单验证。 [#54](https://github.com/899ms/loretide/pull/54)（specs/008，app-main `a6bf4ff97`，2026-09-15）补齐审计事件→技术追踪/对象版本跳转（`linkage.ts` 纯函数）、下一动作映射穷尽性、快照无媒体载荷、复现不回写偏好、跨层关联端到端断言；D13-V09 五条子句均有纯函数/集成测试覆盖，浏览器侧 7 条新增手动项（J-1～J-4、O-1～O-3）已并入 `docs/development/manual-ui-runbook.md`。
 - 交付面板中的故障复现与回归结果入口、故障/场景/模块/提交关联、CI模拟检查和浏览器验证报告。
 - 验证修复前故障用例失败、修复后通过，未执行不显示通过；浏览器可从操作记录定位技术原因并导出脱敏包。
 - 预计位置：回归结果适配、诊断视图扩展、CI入口、浏览器测试和记录。
@@ -91,7 +91,7 @@
 ## DG-01 · 初期公共诊断能力出口
 
 - [ ] DIAG-01～13 完成，D13-V01～11用完整模拟场景验证，D13-V12的公共接入合同通过。LT-009 开始前必须完成此检查点。
-  - **证据现状（2026-09-15，app-main `247a61b29`）**：对照表 145 行 = 自动测试已通过 121 / 代码存在但无测试 16 / 无证据 8。非界面行已由 [#50](https://github.com/899ms/loretide/pull/50) 补齐测试（脱敏枚举、迁移约束 `TestContentMigrationConstraints`、结果回写 trace、队列统计与样本不足、读路径只读、导出无外发 `check:diagnostics-no-upload`）；剩余 16 行中 14 行为浏览器界面（原则 II 只能手动）、2 行显式排除（DIAG-02 嵌套字段无真实负例、DIAG-10 不复制媒体由 specs/008 认领）；8 行无证据全部是浏览器手动矩阵未执行。**DG-01 的剩余瓶颈只有用户手动矩阵**（002：37 条，006：20 条，008 待交付）。
+  - **证据现状（2026-09-15，app-main `247a61b29`）**：对照表 145 行 = 自动测试已通过 121 / 代码存在但无测试 16 / 无证据 8。非界面行已由 [#50](https://github.com/899ms/loretide/pull/50) 补齐测试（脱敏枚举、迁移约束 `TestContentMigrationConstraints`、结果回写 trace、队列统计与样本不足、读路径只读、导出无外发 `check:diagnostics-no-upload`）；剩余 16 行中 14 行为浏览器界面（原则 II 只能手动）、2 行显式排除（DIAG-02 嵌套字段无真实负例、DIAG-10 不复制媒体由 specs/008 认领）；8 行无证据全部是浏览器手动矩阵未执行。**DG-01 的剩余瓶颈只有用户手动矩阵**（002：37 条，006：20 条，008：7 条，共 64 条，顺序见 app `docs/development/manual-ui-runbook.md`）。#54 合入后对照表为 123 / 14 / 8（app-main `a6bf4ff97`）；14 行「代码存在但无测试」全部是浏览器界面行。
 - [ ] 实际业务/文件/Codex/远程组件尚未实现的状态明确展示，不把模拟健康当真实验证。
 - [ ] 后续每个LT/EP交付同时完成D13-V12对应模块的真实接入和针对性回归，不能以DG-01通过豁免。
 
