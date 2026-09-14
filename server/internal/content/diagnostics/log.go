@@ -1,6 +1,6 @@
 package diagnostics
 
-import("context";"log/slog";"regexp";"sync";"sync/atomic";"time")
+import("context";"log/slog";"net/http";"net/textproto";"regexp";"sort";"strings";"sync";"sync/atomic";"time")
 
 var codes=map[string]string{
  "":"Completed", "AUTHORIZATION_DENIED":"Access denied", "FILE_MISSING":"File unavailable", "FILE_CHANGED":"File changed",
@@ -12,6 +12,73 @@ var codes=map[string]string{
 var token=regexp.MustCompile(`^[a-zA-Z0-9_.:-]{0,100}$`)
 var hexID=regexp.MustCompile(`^[a-f0-9]{16,32}$`)
 func safeToken(v string)string{if token.MatchString(v){return v};return "[redacted]"}
+
+// Request header admission, three tiers. The list is the rule; see
+// specs/005-diag-trace-and-sanitize/contracts/request-sanitization.md.
+// Anything unlisted is denied, which is what makes a header introduced
+// tomorrow safe today.
+type admission int
+const (admitNone admission=iota;admitPresence;admitValue)
+// admitValue: the value may be recorded where a field exists for it.
+var headerValueAdmitted=map[string]bool{"Traceparent":true,"Tracestate":true,"X-Diagnostic-Trace":true,"X-Request-Id":true,"X-Workspace-Id":true,"Content-Type":true,"Content-Length":true}
+// admitPresence: only the fact that the header was sent. Not the value, and
+// not its length — a length is a value in disguise.
+var headerPresenceAdmitted=map[string]bool{"User-Agent":true,"Accept":true}
+// Denied by name. Redundant with the suffix patterns for X-Api-Key on purpose:
+// if one list is mis-edited the other still refuses.
+var headerDenied=map[string]bool{"Authorization":true,"Cookie":true,"Set-Cookie":true,"X-Api-Key":true,"Proxy-Authorization":true}
+// Denied by shape. Matched on the final "-" segment, so x-api-token is denied
+// while a header that merely ends in those letters is not swept up by accident
+// (it is still denied, by the default).
+var headerDeniedSuffix=map[string]bool{"token":true,"secret":true,"key":true,"password":true}
+// headerAdmission decides one header name. Denial wins over both admit tiers.
+func headerAdmission(name string)admission{
+ canonical:=textproto.CanonicalMIMEHeaderKey(strings.TrimSpace(name))
+ if canonical==""{return admitNone}
+ if headerDenied[canonical]{return admitNone}
+ if parts:=strings.Split(canonical,"-");len(parts)>1&&headerDeniedSuffix[strings.ToLower(parts[len(parts)-1])]{return admitNone}
+ if headerValueAdmitted[canonical]{return admitValue}
+ if headerPresenceAdmitted[canonical]{return admitPresence}
+ return admitNone
+}
+// RequestIdentity is the only way a boundary should describe the request it is
+// recording: the registered route pattern, the method, the status, and the
+// presence-tier headers. Everything else about the request stays out.
+func RequestIdentity(method,pattern string,status int,h http.Header)(string,int,[]string){
+ route:=requestRoute(method,pattern)
+ if status<100||status>599{status=0}
+ return route,status,headersPresent(h)
+}
+// headersPresent lists the presence-tier headers that were sent. Names only,
+// drawn from a compile-time map, so the result cannot carry request content.
+func headersPresent(h http.Header)[]string{
+ names:=[]string{}
+ for name:=range h{if headerAdmission(name)==admitPresence{names=append(names,textproto.CanonicalMIMEHeaderKey(name))}}
+ sort.Strings(names);return names
+}
+// routeShape is the registered route pattern plus its method. A pattern is
+// fixed at registration, so it cannot carry a path parameter; anything that
+// does not look like one is dropped whole rather than cleaned up.
+var routeShape=regexp.MustCompile(`^[A-Z]{3,7} /[A-Za-z0-9/_{}.:-]*$`)
+// requestRoute builds the request identity from the route pattern and method.
+// It never falls back to the path as requested: an unmatched route has no safe
+// identity, and "" says so honestly.
+func requestRoute(method,pattern string)string{
+ if method==""||pattern==""{return ""}
+ candidate:=method+" "+pattern
+ if !routeShape.MatchString(candidate)||strings.Contains(candidate,".."){return ""}
+ return candidate
+}
+// safeRoute re-checks a route that reached Sanitize from anywhere, so a sink
+// that built one by hand cannot bypass the rule.
+func safeRoute(v string)string{if v==""{return ""};parts:=strings.SplitN(v," ",2);if len(parts)!=2{return ""};return requestRoute(parts[0],parts[1])}
+// safePresence keeps only names the presence tier admits, whatever the caller
+// put in the slice.
+func safePresence(names []string)[]string{
+ kept:=[]string{}
+ for _,name:=range names{if headerAdmission(name)==admitPresence{kept=append(kept,textproto.CanonicalMIMEHeaderKey(name))}}
+ sort.Strings(kept);if len(kept)==0{return nil};return kept
+}
 func oneOf(v string,allowed ...string)string{for _,a:=range allowed{if a==v{return v}};return "unknown"}
 // Sanitize uses an allowlist. Model output, input text, paths, URLs, headers and
 // nested attributes are never copied into the technical read model.
@@ -24,6 +91,11 @@ func Sanitize(e Event) Event {
  e.ObjectType=oneOf(e.ObjectType,"simulation","run","work","account","source","diagnostics")
  e.Step=safeToken(e.Step);e.Build=safeToken(e.Build);e.Version=safeToken(e.Version)
  for _,p:=range []*string{&e.Trace,&e.Span,&e.Parent,&e.Operation,&e.Run,&e.ID}{if *p!="" && !hexID.MatchString(*p){*p=""}}
+ // Request identity and correlation attribute. Each is re-checked here rather
+ // than trusted from the caller, so every sink shares one rule (FR-007).
+ e.Route=safeRoute(e.Route);if e.Status<100||e.Status>599{e.Status=0}
+ e.HeadersPresent=safePresence(e.HeadersPresent)
+ if e.Upstream!=""&&!hexID.MatchString(e.Upstream){e.Upstream=""}
  e.Next="inspect_trace";e.Retryable=false
  switch e.Code{case "NETWORK_UNAVAILABLE","SEARCH_FAILED","TIMEOUT","DATABASE_UNAVAILABLE":e.Next="retry_simulation";e.Retryable=true;case "AUTHORIZATION_DENIED":e.Next="check_authorization";case "FILE_MISSING","FILE_CHANGED":e.Next="check_registered_file";case "MODEL_AUTH","MODEL_QUOTA":e.Next="check_local_client"}
  return e

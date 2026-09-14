@@ -1288,6 +1288,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 	// Global middleware
 	r.Use(chimw.RequestID)
+	// Trace propagation is global; recording is not. This gives every request a
+	// trace of this instance's own and returns it on X-Diagnostic-Trace, but it
+	// writes no diagnostic event — that stays with the content-diagnostics
+	// group below (specs/005-diag-trace-and-sanitize, FR-015).
+	r.Use(middleware.Trace)
 	r.Use(middleware.ClientMetadata)
 	r.Use(middleware.RequestLogger)
 	if opts.HTTPMetrics != nil {
@@ -1438,6 +1443,9 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	// Daemon API routes (require daemon token or valid user token)
 	r.Route("/api/daemon", func(r chi.Router) {
 		r.Use(middleware.DaemonAuth(queries, patCache, daemonTokenCache, cloudPATVerifier))
+		// After DaemonAuth, so the decision to continue the caller's trace
+		// reads the authentication result rather than anything the caller sent.
+		r.Use(middleware.AdoptDaemonTrace)
 
 		r.Post("/register", h.DaemonRegister)
 		r.Post("/deregister", h.DaemonDeregister)

@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
+	"github.com/multica-ai/multica/server/internal/middleware"
 	"github.com/multica-ai/multica/server/internal/testutil"
 )
 
@@ -234,5 +237,253 @@ func TestContentDiagnosticExportRefusesUngrantedAccount(t *testing.T) {
 	res.JSON(&body)
 	if body.Code != "AUTHORIZATION_DENIED" || body.Next == "" {
 		t.Fatalf("refusal is not a diagnostic error object: %+v", body)
+	}
+}
+
+// Feature 005 (specs/005-diag-trace-and-sanitize) FR map:
+//
+//	FR-002  TestContentDiagnosticTraceRunsThroughQueueAndDaemon
+//	FR-003  TestContentDiagnosticBoundaryReportsTheTraceItRanUnder
+//	FR-004  TestContentDiagnosticKeepsAUserTraceparentAsCorrelationOnly
+//	FR-004a TestContentDiagnosticDropsAMalformedTraceparent
+//	FR-015  TestTracePropagatesWithoutRecordingOutsideDiagnostics
+
+// technicalEventCount counts rows a workspace has, so a test can assert that a
+// request added one — or, for FR-015, that it added none.
+func technicalEventCount(t *testing.T, ws string) int {
+	t.Helper()
+	var n int
+	if err := testPool.QueryRow(context.Background(),
+		"SELECT count(*) FROM content_technical_log WHERE workspace_id=$1", ws).Scan(&n); err != nil {
+		t.Fatalf("count technical log: %v", err)
+	}
+	return n
+}
+
+// latestTechnicalEvent returns the newest event a workspace recorded.
+func latestTechnicalEvent(t *testing.T, ws string) diagnostics.Event {
+	t.Helper()
+	var payload []byte
+	if err := testPool.QueryRow(context.Background(),
+		"SELECT payload FROM content_technical_log WHERE workspace_id=$1 ORDER BY sequence DESC LIMIT 1", ws).Scan(&payload); err != nil {
+		t.Fatalf("read newest technical event: %v", err)
+	}
+	var e diagnostics.Event
+	if err := json.Unmarshal(payload, &e); err != nil {
+		t.Fatalf("decode technical event: %v", err)
+	}
+	return e
+}
+
+// callTraced runs a handler behind the same middleware chain the router mounts,
+// so the test exercises the boundary rather than the handler in isolation.
+func callTraced(t *testing.T, h Handler, next http.HandlerFunc, req *http.Request) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	middleware.Trace(h.DiagnosticTrace(next)).ServeHTTP(rec, req)
+	return rec
+}
+
+func TestContentDiagnosticTraceRunsThroughQueueAndDaemon(t *testing.T) {
+	h, ws := newDiagnosticWorkspace(t)
+	req := testutil.WithHeaders(
+		testutil.JSONRequest("POST", "/api/content-diagnostics/simulate", `{"scenario":"normal","seed":42}`),
+		"X-User-ID", testUserID, "X-Workspace-ID", ws)
+
+	rec := callTraced(t, h, h.ContentDiagnosticSimulate, req)
+	if rec.Code != 201 {
+		t.Fatalf("simulate: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	traceID := rec.Header().Get(middleware.DiagnosticTraceHeader)
+	if traceID == "" {
+		t.Fatal("no trace id was returned, so nothing downstream can be correlated to this request")
+	}
+
+	var run struct {
+		Events []struct {
+			Trace     string `json:"trace_id"`
+			Component string `json:"component"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &run); err != nil {
+		t.Fatalf("decode run: %v", err)
+	}
+	if len(run.Events) == 0 {
+		t.Fatal("the run produced no events")
+	}
+	// The run walks web -> api -> database -> queue -> daemon -> executor ->
+	// tool -> result -> database, and every hop goes through Pack/Unpack. If the
+	// HTTP boundary is wired, all of them carry the trace the request ran under.
+	seen := map[string]bool{}
+	for _, e := range run.Events {
+		seen[e.Component] = true
+		if e.Trace != traceID {
+			t.Fatalf("component %q ran under trace %s, but the request was %s: the chain is broken at this hop",
+				e.Component, e.Trace, traceID)
+		}
+	}
+	for _, want := range []string{"queue", "daemon", "result"} {
+		if !seen[want] {
+			t.Fatalf("the run never reached %q, so this test did not prove continuity through it", want)
+		}
+	}
+}
+
+func TestContentDiagnosticBoundaryReportsTheTraceItRanUnder(t *testing.T) {
+	h, ws := newDiagnosticWorkspace(t)
+	req := testutil.WithHeaders(
+		testutil.JSONRequest("POST", "/api/content-diagnostics/client", `{"code":"UI_ERROR"}`),
+		"X-User-ID", testUserID, "X-Workspace-ID", ws)
+
+	before := technicalEventCount(t, ws)
+	rec := callTraced(t, h, h.ContentDiagnosticClient, req)
+	if rec.Code != 201 {
+		t.Fatalf("client error: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := technicalEventCount(t, ws); got <= before {
+		t.Fatalf("a recorded route wrote no technical event (%d -> %d)", before, got)
+	}
+	header := rec.Header().Get(middleware.DiagnosticTraceHeader)
+	if got := latestTechnicalEvent(t, ws).Trace; got != header {
+		t.Fatalf("%s = %s but the event was recorded under %s; the caller was told the wrong id",
+			middleware.DiagnosticTraceHeader, header, got)
+	}
+}
+
+func TestContentDiagnosticKeepsAUserTraceparentAsCorrelationOnly(t *testing.T) {
+	h, ws := newDiagnosticWorkspace(t)
+	const inbound = "44444444444444444444444444444444"
+	req := testutil.WithHeaders(
+		testutil.JSONRequest("POST", "/api/content-diagnostics/client", `{"code":"UI_ERROR"}`),
+		"X-User-ID", testUserID, "X-Workspace-ID", ws,
+		"traceparent", "00-"+inbound+"-5555555555555555-01")
+
+	rec := callTraced(t, h, h.ContentDiagnosticClient, req)
+	if rec.Code != 201 {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	event := latestTechnicalEvent(t, ws)
+	if event.Trace == inbound {
+		t.Fatal("a user-credential request chose its own trace id; the boundary must mint its own")
+	}
+	if event.Upstream != inbound {
+		t.Fatalf("upstream_trace = %q, want %q kept as a correlation attribute", event.Upstream, inbound)
+	}
+}
+
+func TestContentDiagnosticDropsAMalformedTraceparent(t *testing.T) {
+	h, ws := newDiagnosticWorkspace(t)
+	req := testutil.WithHeaders(
+		testutil.JSONRequest("POST", "/api/content-diagnostics/client", `{"code":"UI_ERROR"}`),
+		"X-User-ID", testUserID, "X-Workspace-ID", ws,
+		"traceparent", "not-a-traceparent")
+
+	rec := callTraced(t, h, h.ContentDiagnosticClient, req)
+	// A bad header from the caller is not the caller's request failing.
+	if rec.Code != 201 {
+		t.Fatalf("a malformed traceparent failed the request: %d %s", rec.Code, rec.Body.String())
+	}
+	if event := latestTechnicalEvent(t, ws); event.Upstream != "" {
+		t.Fatalf("upstream_trace = %q, want empty: an unparsable value is dropped, not stored", event.Upstream)
+	}
+}
+
+// FR-015: propagation is global, recording is not. This is the only automated
+// protection for the second half of that rule. If anyone mounts DiagnosticTrace
+// on the shared stack, or teaches the propagation middleware to record, this
+// test goes red — which is the whole reason it exists.
+func TestTracePropagatesWithoutRecordingOutsideDiagnostics(t *testing.T) {
+	_, ws := newDiagnosticWorkspace(t)
+
+	// A route outside the diagnostics group: propagation reaches it, the
+	// recording middleware does not.
+	businessRoute := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"workspaces":[]}`))
+	})
+
+	before := technicalEventCount(t, ws)
+
+	req := testutil.WithHeaders(httptest.NewRequest("GET", "/api/workspaces", nil),
+		"X-User-ID", testUserID, "X-Workspace-ID", ws)
+	rec := httptest.NewRecorder()
+	middleware.Trace(businessRoute).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("propagation changed a business route's response: %d", rec.Code)
+	}
+	if got := rec.Header().Get(middleware.DiagnosticTraceHeader); got == "" {
+		t.Fatalf("%s missing on a business route; propagation is supposed to be global", middleware.DiagnosticTraceHeader)
+	}
+	if after := technicalEventCount(t, ws); after != before {
+		t.Fatalf("a business route wrote %d technical event(s); recording must stay inside the diagnostics group",
+			after-before)
+	}
+}
+
+// FR-006/FR-007/FR-008/SC-004: what the export bundle may carry about a
+// request. The assertion is over the serialized bundle, because that is the
+// artifact a developer actually opens.
+func TestContentDiagnosticExportCarriesNoRequestSecrets(t *testing.T) {
+	h, ws := newDiagnosticWorkspace(t)
+
+	const (
+		token     = "super-secret-bearer-value"
+		apiKey    = "leaky-api-key-value"
+		userAgent = "Mozilla/5.0 (private-build-name)"
+		queryKey  = "unexpectedquerykey"
+		queryVal  = "unexpectedqueryvalue"
+	)
+	req := testutil.WithHeaders(
+		testutil.JSONRequest("POST", "/api/content-diagnostics/simulate?"+queryKey+"="+queryVal, `{"scenario":"normal","seed":42}`),
+		"X-User-ID", testUserID, "X-Workspace-ID", ws,
+		"Authorization", "Bearer "+token, "X-Api-Key", apiKey, "User-Agent", userAgent)
+	// Route the request so chi can report a pattern, the way production does.
+	rctx := chi.NewRouteContext()
+	rctx.RoutePatterns = append(rctx.RoutePatterns, "/api/content-diagnostics/simulate")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	sim := callTraced(t, h, h.ContentDiagnosticSimulate, req)
+	if sim.Code != 201 {
+		t.Fatalf("simulate: expected 201, got %d: %s", sim.Code, sim.Body.String())
+	}
+	var run struct {
+		ID string `json:"run_id"`
+	}
+	if err := json.Unmarshal(sim.Body.Bytes(), &run); err != nil {
+		t.Fatalf("decode run: %v", err)
+	}
+
+	event := latestTechnicalEvent(t, ws)
+	if event.Route != "POST /api/content-diagnostics/simulate" {
+		t.Fatalf("route = %q, want the pattern and method", event.Route)
+	}
+	if event.Status != 201 {
+		t.Fatalf("status = %d, want 201", event.Status)
+	}
+	if fmt.Sprint(event.HeadersPresent) != fmt.Sprint([]string{"User-Agent"}) {
+		t.Fatalf("headers_present = %v, want only the presence-tier header", event.HeadersPresent)
+	}
+
+	// Both export paths must agree, since one is previewed and the other saved.
+	for _, method := range []string{"GET", "POST"} {
+		res := testutil.Call(t, h.ContentDiagnosticExport, testutil.WithHeaders(
+			testutil.JSONRequest(method, "/api/content-diagnostics/export?run_id="+run.ID, `{}`),
+			"X-User-ID", testUserID, "X-Workspace-ID", ws)).Want(200)
+		bundle := res.Body.String()
+		for _, leak := range []string{token, apiKey, userAgent, queryKey, queryVal, "Bearer ", "private-build-name"} {
+			if strings.Contains(bundle, leak) {
+				t.Fatalf("%s export leaked %q", method, leak)
+			}
+		}
+		var shape struct {
+			Redacted bool `json:"redacted"`
+		}
+		if err := json.Unmarshal(res.Body.Bytes(), &shape); err != nil {
+			t.Fatalf("decode bundle: %v", err)
+		}
+		if !shape.Redacted {
+			t.Fatalf("%s export is not marked redacted", method)
+		}
 	}
 }

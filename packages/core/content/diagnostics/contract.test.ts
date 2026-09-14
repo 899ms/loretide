@@ -5,9 +5,15 @@
 //   FR-002 streamQuery carries every filter key plus the cursor
 //   FR-005 parseContentDispositionFilename reads the server-chosen file name
 //   FR-008 mergeEvents de-duplicates by event_id, sorts by sequence, caps at STREAM_EVENT_CAP
+// Feature 005 (specs/005-diag-trace-and-sanitize):
+//   FR-012 route / status / headers_present / upstream_trace default when the
+//          server has not sent them yet, and a malformed event still falls back
 import {describe,it,expect} from "vitest";
 import {pageSchema,parseDiagnostic,runSchema,mergeEvents,streamQuery,parseContentDispositionFilename,STREAM_EVENT_CAP,type DiagnosticEvent} from "./contract";
-function event(id:string,sequence:number):DiagnosticEvent{return {eventId:id,sequence,occurredAt:"",receivedAt:"",actorKind:"system",actorId:"",workspaceId:"ws-1",accountId:"",objectType:"diagnostics",objectId:"",objectVersion:"",action:"query",outcome:"success",errorCode:"",operationId:"",traceId:"",spanId:"",parentSpanId:"",runId:"",attempt:1,step:"",component:"api",severity:"info",durationMs:0,safeMessage:"",retryable:false,nextAction:"",build:"test",isTest:true}}
+function event(id:string,sequence:number):DiagnosticEvent{return {eventId:id,sequence,occurredAt:"",receivedAt:"",actorKind:"system",actorId:"",workspaceId:"ws-1",accountId:"",objectType:"diagnostics",objectId:"",objectVersion:"",action:"query",outcome:"success",errorCode:"",operationId:"",traceId:"",spanId:"",parentSpanId:"",runId:"",attempt:1,step:"",component:"api",severity:"info",durationMs:0,safeMessage:"",retryable:false,nextAction:"",build:"test",isTest:true,route:"",status:0,headersPresent:[],upstreamTrace:""}}
+// The wire event a current server sends. Feature 005 adds four optional fields
+// on top of it; an older server omits them entirely.
+const wireEvent={event_id:"a".repeat(32),sequence:1,occurred_at:"2026-01-01T00:00:00Z",received_at:"2026-01-01T00:00:00Z",actor_kind:"system",actor_id:"",workspace_id:"ws-1",account_id:"",object_type:"diagnostics",object_id:"run",object_version:"1",action:"query",outcome:"success",error_code:"",operation_id:"b".repeat(32),trace_id:"c".repeat(32),span_id:"d".repeat(16),parent_span_id:"",run_id:"run",attempt:1,step:"api",component:"api",severity:"info",duration_ms:1,safe_message:"Completed",retryable:false,next_action:"inspect_trace",build:"test",is_test:true};
 describe("diagnostic API contracts",()=>{
  it("rejects malformed success and absent run evidence",()=>{expect(()=>parseDiagnostic({events:"ok",cursor:1},pageSchema)).toThrow("OUTPUT_SCHEMA");expect(()=>parseDiagnostic({regression:"passed"},runSchema)).toThrow()});
  it("accepts additive fields without inventing results",()=>{expect(parseDiagnostic({events:[],cursor:0,gap:false,has_more:false,future:true},pageSchema).events).toEqual([]);expect(mergeEvents([],[])).toEqual([])});
@@ -33,6 +39,29 @@ describe("diagnostic API contracts",()=>{
   expect(parseContentDispositionFilename(null)).toBeNull();
   expect(parseContentDispositionFilename(`attachment; filename="../../etc/passwd"`)).toBe("passwd");
   expect(parseContentDispositionFilename(`attachment; filename=""`)).toBeNull();
+ });
+ // FR-012 (feature 005)
+ it("defaults the request-identity fields when an older server omits them",()=>{
+  const page=parseDiagnostic({events:[wireEvent],cursor:0,gap:false,has_more:false},pageSchema);
+  const parsed=page.events[0];
+  expect(parsed?.route).toBe("");
+  expect(parsed?.status).toBe(0);
+  expect(parsed?.headersPresent).toEqual([]);
+  expect(parsed?.upstreamTrace).toBe("");
+ });
+ // FR-012 (feature 005)
+ it("carries the request identity through when the server sends it",()=>{
+  const sent={...wireEvent,route:"GET /api/content-diagnostics/events",status:200,headers_present:["user-agent"],upstream_trace:"e".repeat(32)};
+  const parsed=parseDiagnostic({events:[sent],cursor:0,gap:false,has_more:false},pageSchema).events[0];
+  expect(parsed?.route).toBe("GET /api/content-diagnostics/events");
+  expect(parsed?.status).toBe(200);
+  expect(parsed?.headersPresent).toEqual(["user-agent"]);
+  expect(parsed?.upstreamTrace).toBe("e".repeat(32));
+ });
+ // FR-012 (feature 005)
+ it("still falls back when an event is malformed, new fields notwithstanding",()=>{
+  const {event_id:_dropped,...missingId}=wireEvent;
+  expect(()=>parseDiagnostic({events:[{...missingId,route:"GET /x",status:200}],cursor:0,gap:false,has_more:false},pageSchema)).toThrow("OUTPUT_SCHEMA");
  });
  // FR-008
  it("de-duplicates by event id, orders by sequence and keeps the newest page of events",()=>{
