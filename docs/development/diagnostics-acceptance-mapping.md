@@ -328,15 +328,15 @@
 | D13-V11 | **部分** | 服务端有界性、事务拒绝与磁盘满均已自动化；浏览器 11 条待用户验证。**2026-09-14**：磁盘满由 #32 闭合 |
 | D13-V12 | **部分** | 第一、三条子句已由接入合同与 `check:diagnostics-contract` 覆盖；**第二条子句（真实 Codex 及远程阶段实测）在执行器禁用期间不可能通过**，因此本条不得记为整体满足 |
 
-**无一条 D13-V 达到「完全满足」。** 12 条中 **11 条为「部分」，1 条为「未满足」**（V10）。
+**无一条 D13-V 达到「完全满足」。** 12 条**全部为「部分」**，不再有「未满足」——2026-09-14 由 008 把最后一条 V10 从「未满足」提到「部分」。
 
-所有「部分」都卡在同一处：**浏览器侧全部是手动条目且一条未执行**。服务端与纯函数层的自动覆盖已相当完整，但按 constitution 原则 II，界面行为只能由用户确认——这是 DG-01 出口的结构性约束，不是可以靠再写测试消除的缺口。
+**「没有未满足」不等于接近达标。** 所有「部分」都卡在同一处：服务端与纯函数层的自动覆盖已相当完整，而**浏览器侧 64 条手动条目一条未执行**。按 constitution 原则 II，界面行为只能由用户确认——这是 DG-01 出口的结构性约束，不是可以靠再写测试消除的缺口。
 
 ### 4.3 结论
 
 **DG-01 当前不满足，缺口如下：**
 
-1. **D13-V01～V11 未用完整模拟场景验证**——浏览器手动条目现有 **57 条**，全部处于「待用户验证」，一条未执行：`specs/002-diag-package-stream-recovery/manual-ui-todo.md` 37 条（V05 / V08 / V11）、`specs/006-diag-trace-waterfall-regression/manual-ui-todo.md` 20 条（瀑布 W-1 ～ W-9、四态 V-1 ～ V-6、关联 L-1 ～ L-5）。两份清单合计覆盖 V05 / V08 / V09 / V11 四条；**V01 ～ V04、V06、V07、V10 仍没有对应的手动清单**。
+1. **D13-V01～V11 未用完整模拟场景验证**——浏览器手动条目现有 **64 条**，全部处于「待用户验证」，一条未执行：`specs/002-diag-package-stream-recovery/manual-ui-todo.md` 37 条（V05 / V08 / V11）、`specs/006-diag-trace-waterfall-regression/manual-ui-todo.md` 20 条（瀑布 W-1 ～ W-9、四态 V-1 ～ V-6、关联 L-1 ～ L-5）、`specs/008-diag-linkage-and-invariants/manual-ui-todo.md` 7 条（跳转 J-1 ～ J-4、对象版本 O-1 ～ O-3）。三份清单合计覆盖 V02 / V05 / V08 / V09 / V11 五条；**V01、V03、V04、V06、V07、V10 仍没有对应的手动清单**。
 2. **D13-V12 的公共接入合同已交付，但 V12 仍不整体满足**——接入合同与 PR 层检查已落地（三条子句中第一、三条有覆盖），但第二条子句「真实 Codex 及远程阶段分别追加实测」在执行器禁用期间**不可能通过**。合同的职责是让这件事**可见**（第 4 节固定记为「未执行」），不是让它通过。
 3. **8 个条目完全无证据**，逐条列出（全部是浏览器手动矩阵尚未执行）。下表保留已闭合行的历史，删除线即表示不再计入：
 
@@ -485,10 +485,41 @@
 
 本次刷新只改本文件，未改任何生产代码、测试或脚本。§4.1 的 13 行计数由脚本按第 2 节各表的「类型」列重新统计，未手工累加；结果 **112 / 25 / 8（共 145）**，与上一版相比自动化 +3、无测试 −3，合计不变——这三项来自 #37 把 DIAG-09 一行与 DIAG-13 两行从「代码存在但无测试」转为「自动测试已通过」。
 
+**2026-09-14 更新（五）008 实施的命令**（在 `app-main` `3fd8268` 之上实际执行，同一套本地 PostgreSQL 16.13 / 端口 15433）：
+
+| 命令 | 退出码 | 结果 |
+|---|---:|---|
+| `pnpm check:content-boundaries` | 0 | 13 自测 PASS；`3541 files; 12 registered modules`（新增的 `linkage.ts` 未越界） |
+| `pnpm check:diagnostics-contract` | 0 | 26 自测 PASS；`checked 1 landed module; skipped 11 not yet landed` |
+| `pnpm typecheck` | 0 | 9/9 任务，**4 个真实执行**（非全缓存）。见下方「基线缺陷」 |
+| `go test ./internal/content/diagnostics -count=1 -race -v` | 0 | **47 PASS / 0 SKIP / 0 FAIL**（已设 `LORETIDE_DIAG_TEST_DATABASE_URL`，Postgres 集成用例真实执行）。含本次新增的 `TestNextAction*` 4 条、`TestSnapshotHasNoMedia*` 3 条、`TestReproduce*` 3 条 |
+| `go test ./internal/handler -run 'TestContentDiagnostic\|TestDeleteWorkspace_PurgesContentDiagnostics' -v` | 0 | **17 PASS / 0 SKIP / 0 FAIL**，含本次新增的 `TestContentDiagnosticLinkage*` 3 条 |
+| `pnpm --filter @multica/core exec vitest run …5 个文件` | 0 | **5 文件 74 用例**全部通过，含新增 `linkage.test.ts` 18 条 |
+
+vitest **逐文件指定**（`contract` / `stream-state` / `trace-waterfall` / `regression` / `linkage`），不用 `content/diagnostics/` 目录通配——通配会把原则 II 排除的 `queries.test.tsx` 一并跑掉。
+
+**变异验证**（本次 7 处，每处改完即还原，均确认变红）：
+
+| # | 改动 | 变红用例 |
+|---|---|---|
+| M1 | 删掉 `check_registered_file` 分支 | 穷尽性 + 该分支两条 |
+| M2 | 给 `Scenarios` 加一个未映射的错误码 | 穷尽性 |
+| M3 | 把某可重试码的 `Retryable` 翻成 `false` | 动作/可重试成对 |
+| M4 | 把默认 `Next` 改成空串 | 三条 |
+| M5 | 给 `Snapshot` 加 `Blob []byte` | 字段清单 + 字节容器 |
+| M6 | 给 `Snapshot` 加一个**合法的** `string` 字段 | 字段清单（这正是它相对「只查类型」的价值） |
+| M7 | 让复现用直接 SQL 回写原运行的偏好 | 偏好与快照输入两条 |
+
+**M7 的第一次尝试没能变红**，值得记录：当时用 `CommitRun` 回写，而它对已存在的 `run_id` 直接拒绝，写入被静默吞掉。换成直接 `UPDATE` 才变红。**这本身是一条发现**——「复现不回写偏好」目前是由存储层没有运行更新路径保证的，不是复现逻辑自觉。
+
+**「M2 的第一版断言没能变红」也必须记录**：最初的穷尽性断言写成「结果落在已知动作集合内」，而未映射的错误码会落到默认分支 `inspect_trace`，它**本来就在集合内**——该断言对它要抓的那个情况恒为真。改成**逐码写明期望动作**的对照表后才真正变红。写完看绿而不做变异验证，就会把这种断言当成覆盖。
+
+**基线缺陷（非本次引入，已顺手修复）**：`pnpm typecheck` **自 #37 合并起在 `app-main` 上一直是红的**，被 turbo 缓存掩盖——#37 当时的记录就写着「9/9 任务全部命中缓存」，缓存命中掩盖了真实的类型错误。原因是 `trace-waterfall.test.ts` 的构造辅助函数没有设置 `route` / `status` / `headersPresent` / `upstreamTrace`，而 `DiagnosticEvent` 要求这四个字段（zod 的 `.optional().default("")` 在 transform 之后产出必填 `string`）。修法与本次新增文件所需的改动完全相同：在辅助函数里补上这四个字段的零值。该文件**不在 008 的 plan Source Code 清单内**，作为清单外改动在 PR 正文单列。
+
 **未执行**：
 
 - `packages/core/content/diagnostics/queries.test.tsx` 与 `apps/web/platform/content-diagnostics.test.ts`——UI 单测，按 constitution 原则 II 与 `loretide-content.yml` 的显式排除，CI 不跑，本次也不跑。
 - 全量 `pnpm test` / `make test` / Playwright——本任务为纯文档，不做全量验证。
-- 两份 `manual-ui-todo.md` 合计 **57** 条浏览器条目（`specs/002` 37 条、`specs/006` 20 条）——需真实 Windows 实例与用户操作。
+- 三份 `manual-ui-todo.md` 合计 **64** 条浏览器条目（`specs/002` 37 条、`specs/006` 20 条、`specs/008` 7 条）——需真实 Windows 实例与用户操作。
 
 **一处需要注意的陷阱**：`server/internal/handler/handler_test.go` 的 `TestMain` 在数据库连不上时执行 `os.Exit(0)`，即**整个 handler 测试包会以退出码 0 "通过"而实际一个用例都没跑**。本文件引用的 handler 证据均已通过 `-v` 输出逐条确认用例真实执行，未依赖包级退出码。任何后续复核请同样使用 `-v` 核对用例名，不要只看退出码。
