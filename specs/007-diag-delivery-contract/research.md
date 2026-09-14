@@ -1,6 +1,6 @@
 # Research: 007 诊断接入合同与交付检查
 
-Phase 0。Technical Context 无 NEEDS CLARIFICATION（三处已由 2026-09-14 clarify 解决，两处按推荐值暂定并标注）。以下为落地前的技术决策。
+Phase 0。Technical Context 无 NEEDS CLARIFICATION（五处均已由 2026-09-14 clarify 解决）。以下为落地前的技术决策。
 
 ## D1. 检查脚本的形状：抄既有检查器的分法
 
@@ -28,9 +28,10 @@ Phase 0。Technical Context 无 NEEDS CLARIFICATION（三处已由 2026-09-14 cl
 
 ## D4. 豁免登记
 
-- **Decision**: 放本功能自有的 `scripts/diagnostics-contract.json`，形如 `{"exemptions": [{"module": "...", "reason": "...", "where": "..."}]}`。三个字段都必填，缺任一项则配置本身判为无效、检查失败。
+- **Decision**: 放 `scripts/diagnostics-contract.json`（与 `content-boundaries.json` 同目录），形如 `{"version":1,"exemptions":[{"module":"...","reason":"...","where":"...","expires":"YYYY-MM-DD"}]}`。**四个字段都必填**，缺任一项则配置本身判为无效、检查失败。
 - **Rationale**: 不碰 `scripts/content-boundaries.json`（ARCH-01/02 的交付物）。必填 `reason` 与 `where` 是为了让豁免在 PR diff 里**读起来像一个决定**，而不是一行静默的白名单。
-- **Status**: 位置**暂定**，主任务未答。改为写进 `content-boundaries.json` 的 `adapters` 并列段落是一行改动。
+- **到期日期为什么必填**（主任务 2026-09-14 补充）：一条没有期限的豁免就是永久豁免，而永久豁免与删掉检查的效果完全相同——豁免出口存在的意义是给合理的例外一条**临时**通道，不是给它一张免死金牌。因此缺 `expires` 不是「用默认值」而是**配置无效**，已过期则停止生效并在失败输出里点明过期，与「缺证据」区分开：两者要补的东西不同。
+- **Status**: 主任务 2026-09-14 确认。
 - **Alternatives considered**: 命令行开关 / 环境变量——会被塞进 CI 脚本等于静默关闭，否决。
 
 ## D5. 合同文本放哪、写成什么
@@ -51,7 +52,7 @@ Phase 0。Technical Context 无 NEEDS CLARIFICATION（三处已由 2026-09-14 cl
 ## D7. CI 接入
 
 - **Decision**: 在 `.github/workflows/loretide-content.yml` 既有两条边界检查步骤之后，新增一条 run 步骤。**`on:` 段一字不动**（FR-009、SC-005 用逐字节比对钉住）。
-- **Status**: **暂定**，主任务未答。
+- **Status**: 主任务 2026-09-14 确认——在**现有 job 内**新增一条 `run: pnpm check:diagnostics-contract`。
 - **Rationale**: 时机论证见 plan.md 的 Complexity Tracking。
 
 ## D8. 测试落点

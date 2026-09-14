@@ -39,9 +39,14 @@
 | FR-011 最小证据 | E1 import + E2 三类调用点之一 + E3 测试引用，**三条同时满足**；缺哪条报哪条 | FR-011 拆为三条具名条件，新增 FR-011a（缺项粒度）；FR-006 补引用；SC-002 改为三个分别只缺一条的夹具 |
 | FR-016 覆盖范围 | 静态检查只管服务端；前端两根写进合同文本、不做检查 | FR-016 收窄，新增 FR-016a（前端要求入文本 + 注明无静态检查） |
 
-### 两项按推荐值暂定，不阻塞
+### 剩余两项已于 2026-09-14 由主任务确认
 
-CI 接入与豁免登记位置主任务未答，已按推荐项写入 Clarifications 与 Assumptions 并标注「暂定（待主任务确认）」。两者都不改变任何 FR 的可测性：前者是一个 CI 步骤的有无，后者是一个配置文件的位置，改动量各一行。**不计为清单未通过项。**
+| 项 | 决定 | 对 spec 的影响 |
+|---|---|---|
+| CI 接入 | 接入：在 `.github/workflows/loretide-content.yml` **既有 job** 内加一个 `run: pnpm check:diagnostics-contract` 步骤，`on:` 触发条件不变 | Clarifications 第 4 条改写为确认项；Assumptions 去掉暂定措辞；T017 写死为既有 job 内加步骤 |
+| 豁免登记 | 位置 `scripts/diagnostics-contract.json`（与 `content-boundaries.json` 同目录）；**每条豁免必须带原因与到期日期，无到期日期的豁免视为无效** | Clarifications 第 5 条改写为确认项；新增 FR-012a（到期日期必填）、FR-012b（过期后不再生效且失败信息须点名已过期）、SC-002a |
+
+两项均已回写 spec、data-model、contracts、research、plan、tasks，spec.md 内不再有「暂定」字样。
 
 ### 关于 §2 的记录
 

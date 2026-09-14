@@ -17,7 +17,7 @@ export function check(files, config) -> string[]   // 纯函数，返回错误�
 | 来源 | 用途 |
 |---|---|
 | `scripts/content-boundaries.json` | **只读**模块名列表。本功能不写它、不改它的规则 |
-| `scripts/diagnostics-contract.json` | 豁免登记 |
+| `scripts/diagnostics-contract.json` | 豁免登记。每条必填 `module` / `reason` / `where` / `expires`；**缺 `expires` 使整份配置无效**，已过期的豁免停止生效 |
 | `server/internal/content/**/*.go` | 判定 E1 / E2 / E3 |
 
 ## 判定
@@ -30,7 +30,8 @@ export function check(files, config) -> string[]   // 纯函数，返回错误�
 |---|---|---|
 | 通过 | 0 | 摘要：检查 N 个已落地模块，跳过 M 个未落地 |
 | 缺项 | 非 0 | 每缺项一行：`<module>: missing <E1\|E2\|E3> — <该条的具体说明>` |
-| 配置无效 | 非 0 | 指出无效之处 |
+| 配置无效 | 非 0 | 指出无效之处（含缺 `expires` 的豁免） |
+| 豁免已过期 | 非 0 | 指明豁免过期，并按 E1/E2/E3 重新判定 |
 
 **缺项必须点名到条**（FR-011a）。只说「该模块无证据」不满足合同——作者需要知道补哪一条。
 

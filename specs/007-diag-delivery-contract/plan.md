@@ -78,7 +78,7 @@ specs/007-diag-delivery-contract/
 docs/development/diagnostics-onboarding-contract.md   # 新增：接入合同正文（含前端两根的要求与「无静态检查」声明）
 scripts/check-diagnostics-contract.mjs                # 新增：导出 check(files, config) + CLI 入口
 scripts/check-diagnostics-contract.test.mjs           # 新增：node:test，合成夹具，含三条缺项负例
-scripts/diagnostics-contract.json                     # 新增：豁免登记（暂定位置，见 spec Assumptions）
+scripts/diagnostics-contract.json                     # 新增：豁免登记（位置已确认，见 spec Clarifications 第 5 条）
 package.json                                          # + check:diagnostics-contract 入口
 .github/PULL_REQUEST_TEMPLATE.md                      # + 一条交付检查项
 .github/workflows/loretide-content.yml                # + 一个 run 步骤（触发条件一字不动）
@@ -93,4 +93,4 @@ docs/development/diagnostics-acceptance-mapping.md    # D13-V12 与 DIAG-13 对�
 |---|---|---|
 | 检查今天几乎空转（12 个模块只有 1 个会被判定） | 这正是现在加的理由。等第一个新模块落地时再加，那个 PR 要同时背「实现模块」与「引入新红线」，最可能的结果是当场删掉检查。现在加，它先在 `diagnostics` 上跑绿，新模块落地时自然生效 | 推迟到有模块时再做：省事，但把检查的引入时机放在了它最容易被拒绝的时刻 |
 | 判定用三条静态条件，而非「真的接入了」 | 静态检查只能证明痕迹存在，不能证明语义正确。三条（import + 调用点 + 测试）把「装样子」的成本抬到接近真接入，同时保留 FR-012 的豁免出口给合理的例外 | 只查 import：一个 `diagnostics.NewID()` 就能骗过；查全部调用语义：静态分析做不到，且会误伤把审计集中在 handler 层的正当设计 |
-| 新增一个豁免配置文件 | 没有豁免出口时，唯一绕过办法是删检查——那比没有检查更糟 | 复用 `content-boundaries.json` 的 `adapters`：更少文件，但要改 ARCH-01/02 的交付物；已在 spec 标为待主任务确认，改动量一行 |
+| 新增一个豁免配置文件 | 没有豁免出口时，唯一绕过办法是删检查——那比没有检查更糟。主任务已确认位置，并要求豁免必带**到期日期**：无期限的豁免等同于永久豁免，与删掉检查效果相同 | 复用 `content-boundaries.json` 的 `adapters`：更少文件，但要改 ARCH-01/02 的交付物 |
