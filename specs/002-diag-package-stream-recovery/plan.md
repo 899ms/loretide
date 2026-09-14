@@ -26,7 +26,7 @@
 
 **Constraints**: 25 秒轮换与每批成员资格重查保留；`views` 不引入平台 API；下载不自动上传；不改 `Scope.Accounts` 语义
 
-**Scale/Scope**: 后端 1 个文件；core 3 个文件；views 1 个文件；web platform 1 个文件；测试 2～3 个文件；1 份清单
+**Scale/Scope**: 后端 2 个文件；core 3 个文件；views 1 个文件；web platform 1 个文件；测试 2～3 个文件；1 份清单
 
 ## Constitution Check
 
@@ -70,6 +70,7 @@ specs/002-diag-package-stream-recovery/
 ### Source Code (repository root)
 
 ```text
+server/internal/content/diagnostics/store.go          # Page 结构增加 Rotate（轮换收尾标记）
 server/internal/handler/content_diagnostics.go        # Stream: deadline 分支发最后一页并置 rotate=true
 server/internal/handler/content_diagnostics_test.go   # + 轮换页、过滤透传、拒绝路径用例
 
@@ -82,6 +83,7 @@ packages/core/content/diagnostics/contract.test.ts    # + rotate 解析、畸形
 
 packages/views/content/diagnostics/index.tsx          # download prop 签名改为 ({blob, filename})；gap 提示保留；「仅显示最近 200 条」标示
 apps/web/platform/content-diagnostics.ts              # downloadDiagnosticBundle({blob, filename})：直接保存 Blob，用服务端文件名
+apps/web/platform/content-diagnostics.test.ts         # 随 download 签名变化的平台接入测试（非 UI 单测）
 ```
 
 **Structure Decision**: 全部在既有文件内改；状态机与解析逻辑抽为 `contract.ts` 的纯函数以便在 node 环境测试（constitution II）。不新建目录。
