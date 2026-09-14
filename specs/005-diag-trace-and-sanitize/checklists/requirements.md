@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -24,24 +24,28 @@
 
 ## Feature Readiness
 
-- [ ] All functional requirements have clear acceptance criteria
+- [x] All functional requirements have clear acceptance criteria
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success Criteria
 - [x] No implementation details leak into specification
 
 ## Notes
 
-### 两项未通过，原因相同：三个 [NEEDS CLARIFICATION] 标记
+### 全部通过（2026-09-14 clarify 回写后复验）
 
-FR-015（挂载范围）、FR-016（入站 `traceparent` 信任口径）、FR-017（outbox 形态）三项待澄清，因此：
+初稿两项未通过，原因是 FR-015～FR-017 三个 [NEEDS CLARIFICATION]。主任务已于 2026-09-14 逐条回答并写回 `## Clarifications`：
 
-- **No [NEEDS CLARIFICATION] markers remain** — 未通过。三处都是「多个合理解释、实现与验收差别很大、无安全的默认值」，按 specify 指令不自行猜测：
-  - FR-015 决定改动面是一个路由组还是全部 API 路由；
-  - FR-016 是安全/隐私判断（采信外部 trace id 会让调用方能自选标识并借此关联记录）；
-  - FR-017 决定是否需要新迁移，进而受 constitution 原则 V（无外键、索引 `CONCURRENTLY` 单语句一文件）约束。
-- **All functional requirements have clear acceptance criteria** — 未通过。FR-015～FR-017 的验收条件取决于上述选择，选定前写不出可验证的判定。
+| 项 | 决定 | 对 spec 的影响 |
+|---|---|---|
+| FR-015 挂载范围 | 传播挂全部 API 路由的公共中间件层；记录范围不变，仍只有 `/api/content-diagnostics` 写技术事件 | FR-015 重写为「传播全局、记录模块内」两个关注点；US1 新增验收场景 7（业务路由只传播不记录）；Edge Cases 新增「不得改变非诊断路由的响应形状与错误语义」 |
+| FR-016 入站信任 | 边界一律新建本实例 trace；用户凭据路径的入站值仅作关联属性（不作查询键、不跨 workspace 关联、不用于授权）；只有 daemon 的 machine credential 路径采信为父级 | FR-001 改为「一律本实例新建」；FR-004 拆为 FR-004（按来源区分）与 FR-004a（非法值既不采信也不留存）；FR-016 补「判定基于已完成的认证结果，不依赖消息自称身份」；US1 描述与验收场景 1～4 重写 |
+| FR-017 outbox 形态 | 只定接口：事务内登记 + 提交后派发，不落库、不新增迁移；登记项含 id / 类型 / 载荷 / 幂等键，签名可被持久实现替换 | FR-017 重写；FR-010 拆出 FR-010a 明确「进程退出会丢失未派发项」；US3 描述、Independent Test、验收场景 2/4 调整，新增场景 6 把该限制写成验收项；Edge Cases 对应条改为「明确接受的限制」 |
 
-其余 FR-001～FR-014 均已可测，对应的验收场景与 SC 已写明。
+复验结果：两项现均通过。**FR-010a 与 US3 场景 6 是刻意把一条已知限制写成验收项**——按 constitution 原则 X 与仓库既有口径，未保证的事不能靠沉默蒙混过去，要能被读出来。
+
+### 一项待确认，不阻塞
+
+技术事件的请求身份形状（Clarifications 第 4 条）暂定「路由模板 + HTTP 方法」，主任务未回答。这是四个候选里最保守的一个，可证明不含用户取值；若后续改为更细的形状属放宽而非纠错，已写在 Assumptions。**不计为清单未通过项**：FR-006 的验收判定在暂定形状下是明确且可测的。
 
 ### 关于 Current State 的写法
 
@@ -49,4 +53,4 @@ FR-015（挂载范围）、FR-016（入站 `traceparent` 信任口径）、FR-01
 
 ### 下一步
 
-三个标记进入 `/speckit-clarify` 处理，由主任务回答后回写 spec，再进入 `/speckit-plan`。本清单在澄清回写后重新验证。
+进入 `/speckit-plan`。
