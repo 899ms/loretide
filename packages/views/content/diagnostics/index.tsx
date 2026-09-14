@@ -8,6 +8,9 @@ import {
   useDiagnosticStream,
   recordDiagnosticClientError,
   describeDiagnosticError,
+  buildTraceWaterfall,
+  describeRegressionVerdict,
+  describeRunLinkage,
   STREAM_EVENT_CAP,
   type DiagnosticDownload,
   type DiagnosticEvent,
@@ -17,11 +20,7 @@ import {
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
 import { Badge } from "@multica/ui/components/ui/badge";
-import {
-  Progress,
-  ProgressLabel,
-  ProgressValue,
-} from "@multica/ui/components/ui/progress";
+import { Progress } from "@multica/ui/components/ui/progress";
 import { PageHeader } from "@multica/views/layout/page-header";
 import { Alert, AlertDescription } from "@multica/ui/components/ui/alert";
 import {
@@ -155,6 +154,231 @@ function Events({
     </div>
   );
 }
+// The verdict column. A run that was never evaluated carries the backend's own
+// literal "not_run" (simulator.go:15), which this table used to print raw next
+// to real verdicts. describeRegressionVerdict turns it into one of four explicit
+// states, and nothing uncertain is allowed to read as a pass (FR-005).
+function RegressionVerdictCell({ run }: { run: DiagnosticRun }) {
+  const { t } = useT("common");
+  const verdict = describeRegressionVerdict(run);
+  return (
+    <div className="space-y-1">
+      <Badge
+        variant={
+          verdict.verdict === "passed"
+            ? "secondary"
+            : verdict.verdict === "failed"
+              ? "destructive"
+              : "outline"
+        }
+      >
+        {verdict.verdict === "passed" && t(($) => $.diagnostics.text103)}
+        {verdict.verdict === "failed" && t(($) => $.diagnostics.text104)}
+        {verdict.verdict === "not_run" && t(($) => $.diagnostics.text105)}
+        {verdict.verdict === "undecidable" && t(($) => $.diagnostics.text106)}
+      </Badge>
+      {/* A pass has to carry its own basis, or "passed" is just an assertion. */}
+      {verdict.verdict === "passed" && (
+        <p className="text-caption">
+          {t(($) => $.diagnostics.text107)}{" "}
+          {t(($) => $.diagnostics.text109)}
+          {verdict.expectedCode || "—"} {t(($) => $.diagnostics.text110)}
+          {verdict.actualCode || "—"}
+        </p>
+      )}
+      {/* Undecidable is only actionable if the raw value is visible. */}
+      {verdict.verdict === "undecidable" && (
+        <p className="break-all text-caption">
+          {t(($) => $.diagnostics.text108)}
+          {verdict.rawRegression || "—"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Module and build, each marked "not recorded" when absent rather than left
+// blank, so a missing value is distinguishable from an unread one (FR-007).
+function RunLocators({
+  run,
+  readableRunIds,
+}: {
+  run: DiagnosticRun;
+  readableRunIds: ReadonlySet<string>;
+}) {
+  const { t } = useT("common");
+  const linkage = describeRunLinkage(run, readableRunIds);
+  return (
+    <span className="break-all">
+      {linkage.module.state === "present"
+        ? linkage.module.value
+        : t(($) => $.diagnostics.text113)}{" "}
+      {t(($) => $.diagnostics.text088)}
+      {linkage.build.state === "present"
+        ? linkage.build.value
+        : t(($) => $.diagnostics.text113)}
+    </span>
+  );
+}
+
+// The original fault. "First run" and "broken link" mean opposite things to a
+// reader, so self / unreadable / missing are kept apart (FR-007). The jump is an
+// in-page switch through the existing run selection, not a new route (FR-008).
+function OriginalRunCell({
+  run,
+  readableRunIds,
+  onOpen,
+}: {
+  run: DiagnosticRun;
+  readableRunIds: ReadonlySet<string>;
+  onOpen: (runId: string) => void;
+}) {
+  const { t } = useT("common");
+  const { originalRun } = describeRunLinkage(run, readableRunIds);
+  if (originalRun.state === "self") {
+    return <span>{t(($) => $.diagnostics.text111)}</span>;
+  }
+  if (originalRun.state === "linkable") {
+    return (
+      <Button
+        variant="outline"
+        aria-label={t(($) => $.diagnostics.text114)}
+        onClick={() => onOpen(originalRun.runId)}
+      >
+        {originalRun.runId.slice(0, 8)}
+      </Button>
+    );
+  }
+  if (originalRun.state === "unreadable") {
+    return (
+      <span className="text-caption">
+        {t(($) => $.diagnostics.text112)}
+      </span>
+    );
+  }
+  return <span>{t(($) => $.diagnostics.text113)}</span>;
+}
+
+// The trace waterfall. Hierarchy, offsets and collapsing are computed by
+// buildTraceWaterfall in @multica/core; this component only draws the rows it is
+// handed, because constitution principle II forbids UI unit tests and anything
+// that needs proving has to sit where a test can reach it.
+//
+// UI policy gap (docs/development/design/README.md): a time-positioned bar has
+// no counterpart in packages/ui. The closest upstream component is Progress,
+// which fills from its own left edge and cannot express an offset from the run
+// start. Progress is kept as the bar itself; the horizontal offset is a layout
+// wrapper around it, using semantic tokens and the --text-* scale only. No new
+// control is introduced.
+function TraceWaterfall({ run }: { run: DiagnosticRun }) {
+  const { t } = useT("common");
+  // Expanding is a per-view glance, not a preference: it dies with the run being
+  // looked at, so it stays local rather than going to a store (research D5).
+  const [expanded, setExpanded] = useState(false);
+  // Expanding lifts the cap for this run only; the default bound still applies
+  // on first render so a large run cannot flood the page (FR-004).
+  const waterfall = buildTraceWaterfall(
+    run.events,
+    expanded ? { cap: run.events.length } : {},
+  );
+
+  if (waterfall.rows.length === 0) {
+    return <p>{t(($) => $.diagnostics.text100)}</p>;
+  }
+
+  // The axis spans from the run start to the last span's end, so a gap between
+  // two bars is real waiting rather than a rendering artefact.
+  const totalMs = Math.max(
+    ...waterfall.rows.map((r) => r.startOffsetMs + r.durationMs),
+    1,
+  );
+
+  return (
+    <div className="space-y-3">
+      {waterfall.rows.map((row) => {
+        if (row.kind === "collapsed") {
+          return (
+            <SettingsCard key={row.eventId}>
+              <SettingsRow
+                label={`${t(($) => $.diagnostics.text098)}${row.collapsedCount}${t(($) => $.diagnostics.text099)}`}
+                size="text"
+                align="start"
+              >
+                <Button variant="outline" onClick={() => setExpanded(!expanded)}>
+                  {expanded
+                    ? t(($) => $.diagnostics.text102)
+                    : t(($) => $.diagnostics.text101)}
+                </Button>
+              </SettingsRow>
+            </SettingsCard>
+          );
+        }
+        const event = run.events.find((e) => e.eventId === row.eventId);
+        const offsetPercent = (row.startOffsetMs / totalMs) * 100;
+        // A zero-duration span still has to be visible, so the bar keeps a floor
+        // width rather than collapsing to nothing.
+        const widthPercent = Math.max((row.durationMs / totalMs) * 100, 1.5);
+        return (
+          <div
+            key={row.eventId}
+            style={{ marginInlineStart: `${Math.min(row.depth, 8) * 16}px` }}
+          >
+            <SettingsCard>
+              <SettingsRow
+                label={event?.step ?? row.spanId}
+                size="text"
+                align="start"
+              >
+                <p className="text-caption">
+                  {event?.errorCode || event?.outcome}{" "}
+                  {t(($) => $.diagnostics.text070)}
+                  {event?.attempt} · {row.startOffsetMs}
+                  {t(($) => $.diagnostics.text071)} → {row.durationMs}
+                  {t(($) => $.diagnostics.text071)}
+                </p>
+                <div className="flex w-full items-center">
+                  <div
+                    aria-hidden
+                    style={{ width: `${offsetPercent}%` }}
+                    className="shrink-0"
+                  />
+                  <div style={{ width: `${widthPercent}%` }} className="shrink-0">
+                    <Progress
+                      aria-label={event?.step ?? row.spanId}
+                      value={100}
+                    />
+                  </div>
+                </div>
+                {row.anomaly && (
+                  <Badge variant="outline">
+                    {row.anomaly === "clockSkew" &&
+                      t(($) => $.diagnostics.text093)}
+                    {row.anomaly === "orphan" && t(($) => $.diagnostics.text094)}
+                    {row.anomaly === "cycle" && t(($) => $.diagnostics.text095)}
+                    {row.anomaly === "invalidTime" &&
+                      t(($) => $.diagnostics.text096)}
+                    {row.anomaly === "invalidDuration" &&
+                      t(($) => $.diagnostics.text097)}
+                  </Badge>
+                )}
+                <p className="break-all text-caption">
+                  {t(($) => $.diagnostics.text072)}
+                  {row.spanId} {t(($) => $.diagnostics.text073)}
+                  {row.parentSpanId}
+                </p>
+                <p>
+                  {event?.safeMessage} {t(($) => $.diagnostics.text075)}
+                  {event?.nextAction}
+                </p>
+              </SettingsRow>
+            </SettingsCard>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function Snapshot({ run }: { run: DiagnosticRun }) {
   const { t } = useT("common");
   return (
@@ -285,6 +509,12 @@ function DiagnosticsContent({ wsId, copy, download }: Props) {
   if (from) params.set("from", new Date(from).toISOString());
   if (until) params.set("until", new Date(until).toISOString());
   const d = useDiagnostics(wsId, runId, params.toString());
+  // Which original runs can actually be opened, taken from the runs already
+  // fetched for this table. Deriving it here rather than asking the server keeps
+  // this feature from adding a data path or widening any scope filter (FR-012).
+  const readableRunIds = new Set(
+    (d.runs.data?.runs ?? []).map((x) => x.runId),
+  );
   // The live stream answers the same question as the paged technical log, so a
   // resume after a rotation or a dropped connection keeps the same filter.
   const stream = useDiagnosticStream(wsId, live, {
@@ -686,55 +916,7 @@ function DiagnosticsContent({ wsId, copy, download }: Props) {
                     {tab === 4 ? (
                       <Snapshot run={run} />
                     ) : (
-                      <div className="space-y-3">
-                        {run.events.map((e, i) => (
-                          <SettingsCard key={e.eventId}>
-                            <SettingsRow
-                              label={e.step}
-                              size="text"
-                              align="start"
-                            >
-                              <Progress
-                                aria-label={e.step}
-                                value={
-                                  (e.durationMs /
-                                    Math.max(
-                                      ...run.events.map((x) => x.durationMs),
-                                      1,
-                                    )) *
-                                  100
-                                }
-                              >
-                                <ProgressLabel>
-                                  {e.errorCode || e.outcome}{" "}
-                                  {t(($) => $.diagnostics.text070)}
-                                  {e.attempt}
-                                </ProgressLabel>
-                                <ProgressValue>
-                                  {() => (
-                                    <>
-                                      {e.durationMs}{" "}
-                                      {t(($) => $.diagnostics.text071)}
-                                    </>
-                                  )}
-                                </ProgressValue>
-                              </Progress>
-                              <p className="break-all text-caption">
-                                {t(($) => $.diagnostics.text072)}
-                                {e.spanId} {t(($) => $.diagnostics.text073)}
-                                {e.parentSpanId}{" "}
-                                {t(($) => $.diagnostics.text074)}
-                                {i + 1}
-                              </p>
-                              <p>
-                                {e.safeMessage}{" "}
-                                {t(($) => $.diagnostics.text075)}
-                                {e.nextAction}
-                              </p>
-                            </SettingsRow>
-                          </SettingsCard>
-                        ))}
-                      </div>
+                      <TraceWaterfall run={run} />
                     )}
                   </>
                 )}
@@ -896,13 +1078,21 @@ function DiagnosticsContent({ wsId, copy, download }: Props) {
                             {t(($) => $.diagnostics.text087)}
                             {r.actualCode || "正常"}
                           </TableCell>
-                          <TableCell>{r.regression}</TableCell>
                           <TableCell>
-                            {r.module} {t(($) => $.diagnostics.text088)}
-                            {r.build || "unknown"}
+                            <RegressionVerdictCell run={r} />
                           </TableCell>
                           <TableCell>
-                            {r.originalRunId.slice(0, 8) || "—"}
+                            <RunLocators run={r} readableRunIds={readableRunIds} />
+                          </TableCell>
+                          <TableCell>
+                            <OriginalRunCell
+                              run={r}
+                              readableRunIds={readableRunIds}
+                              onOpen={(id) => {
+                                setRunId(id);
+                                setTab(4);
+                              }}
+                            />
                           </TableCell>
                           <TableCell>
                             <Button

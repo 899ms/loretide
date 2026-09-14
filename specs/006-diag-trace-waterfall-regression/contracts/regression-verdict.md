@@ -14,11 +14,14 @@ describeRegressionVerdict(run: DiagnosticRun) -> RegressionVerdict
 
 | `regression` | `status` 指示未完成 | `verdict` | 说明 |
 |---|---|---|---|
-| `""`（空串） | 任意 | `not_run` | 从未评估。**这是当前面板渲染成空单元格的那一格** |
+| `"not_run"` | 任意 | `not_run` | **后端 `simulator.go:15` 的初始值**，即「从未评估」的真实字面量。当前面板把这个原始 token 直接显示给用户 |
+| `""`（空串） | 任意 | `not_run` | 零值，只可能来自本代码路径之外写入的 payload。与上一行同判，安全方向一致 |
 | `"passed"` | 否 | `passed` | 唯一返回 `passed` 的分支 |
 | `"passed"` | 是 | `undecidable` | 状态与结论冲突，两个原值都带出，不择一相信 |
 | `"failed"` | 任意 | `failed` | — |
 | 其他任意值 | 任意 | `undecidable` | 后端将来新增枚举时的安全落点，原值经 `rawRegression` 带出 |
+
+**「`status` 指示未完成」的判定**：`status` 当前只有 `"completed"` 与 `"failed"` 两个取值（`simulator.go:15` / `:44`）。判定为 `status !== "completed" && status !== "failed"` 即视为未完成——这样将来新增 `"running"` 之类会自动落到 `undecidable`，符合安全方向。
 
 ### 不变量
 
@@ -47,6 +50,8 @@ describeRunLinkage(run: DiagnosticRun, readableRunIds: ReadonlySet<string>) -> R
 | 非空且 ∈ `readableRunIds` | `linkable` |
 | 非空、不 ∈ `readableRunIds`、格式合法 | `unreadable` |
 | 非空但格式不合法 | `missing` |
+
+**「格式合法」的判定**：运行 id 由 `contract.go:56` 的 `NewID()` 生成，为 `hex.EncodeToString(16 bytes)`，即 32 位小写十六进制。判定为 `/^[0-9a-f]{32}$/`，不匹配即 `missing`。
 
 ### 不变量
 

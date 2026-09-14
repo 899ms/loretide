@@ -23,7 +23,17 @@
 - **现有 trace 标签页（`index.tsx` 约 686–730 行）渲染的是**：按 `run.events` 数组原序的扁平列表；每行一个 `Progress`，宽度 = `durationMs ÷ max(所有 durationMs)`；`spanId` 与 `parentSpanId` 以纯文本并排打印；序号取数组下标 `i + 1`。
   - 因此**没有**父子缩进，**没有**按开始时刻定位的横轴，**看不出**并发与等待间隙，`parent_span_id` 只是被打印出来而没有被用来构造层级。
 - **回归关联现状（`index.tsx` 约 895–906 行）**：运行列表逐列显示 `r.regression`、`r.module`、`r.originalRunId.slice(0, 8) || "—"`。四个定位信息里有三个已显示，但只是文本，没有从回归结果跳回原故障运行的路径。
-- **`Evaluate()` 只有两态**：`server/internal/content/diagnostics/simulator.go` 第 47 行 `func Evaluate(run *Run){run.Regression="failed";if run.Actual==run.Expected{run.Regression="passed"}}`。未评估过的 `Run.Regression` 是零值空串，面板直接 `{r.regression}` 渲染成**空单元格**——既不是「通过」也没说「未运行」，是一个沉默的空白。
+- **`Evaluate()` 只有两态，而「未评估」的字面值是 `"not_run"`**（2026-09-14 实施期修正，见下方「规格修正」）：
+  - `simulator.go` 第 15 行 `Simulate()` 创建每个 Run 时即写入 `Regression:"not_run"`——**字面字符串，不是空串**。
+  - 第 47 行 `func Evaluate(run *Run){run.Regression="failed";if run.Actual==run.Expected{run.Regression="passed"}}` 覆写为两态之一。
+  - `service.go` 第 25 行 `Evaluate(&run)` 在 `CommitRun` 前**无条件调用**，所以正常路径落库的 Run 带 `passed` / `failed`。
+  - 但 `"not_run"` 仍会落库：`service.go` 第 24 行 `database` 场景先 `CommitRun(...,true)`，若该提交意外成功则 `return run, ErrConflict` 提前返回，此时 Run 仍带 `"not_run"`。
+  - `store.go` 第 81 行整个 Run 以 JSON `payload` 落库，`json:"regression"` 无 `omitempty`，字符串原样往返；空串只可能来自本代码路径之外写入的 payload。
+  - 面板 `index.tsx` 第 899 行 `<TableCell>{r.regression}</TableCell>` 直接渲染原值——所以一条未评估的运行**显示的是原始 token `not_run`**，一个未翻译、与判定结论混在同一列的字符串。
+
+### 规格修正（2026-09-14，实施期）
+
+本节原写「未评估过的 `Run.Regression` 是零值空串，面板渲染成空单元格」。**该表述错误**，证据为 `simulator.go:15` 的 `Regression:"not_run"`（该行在写规格时的 `0bd37da87` 与实施基线 `191f20a` 上一致，非后续引入）。据此 FR-005 的映射表补入 `"not_run"` 一行——否则后端表示「从未评估」的那个值会落进「其他任意值」→「无法判定」，恰好打掉 US2 的全部意义。修正经主任务裁决（选项 A），Q1「前端推导、不改 Go」的结论不变，仅扩大了推导为「未运行」的取值集合。
 - **`packages/core/content/diagnostics/` 下没有任何瀑布或判定的纯函数**（检索 `waterfall` / `buildTree` / `span` 无命中）。现有纯函数只有 `mergeEvents`、`streamQuery`、`stream-state.ts` 的状态机。
 - 面板已有文案 `text007 = 暂无记录。未执行不表示已通过。`，但那是**列表为空**时的提示，与「某一条运行未评估」是两回事。
 
@@ -110,7 +120,7 @@
 - **FR-002**: 系统 MUST 按每个 span 相对本次运行最早 `occurred_at` 的偏移量横向定位，使等待间隙与并发重叠可见；宽度 MUST 表示该 span 自身耗时。定位在时钟偏差下的禁止项见 **FR-014**。
 - **FR-003**: 层级构造 MUST 对父子成环与自引用保持终止性，环上节点降级为顶层并标注异常。
 - **FR-004**: 瀑布 MUST 以 200 个 span 为上限，与实时流的 `STREAM_EVENT_CAP` 取同一常量或同值。超限时 MUST 优先保留含 `error_code` 的 span 及其完整祖先链，其余节点折叠为「另有 N 条」且 MUST 可展开。MUST NOT 按时间顺序直接截断——那会把失败步骤连同其父链一起切掉。折叠状态下层级 MUST 仍然正确，不得出现无父节点的悬空片段。
-- **FR-005**: 系统 MUST 为回归结果提供四态显式判定：通过 / 未通过 / 未运行 / 无法判定。四态 MUST 由前端从 `Run` 已有字段推导：`regression` 为空串 MUST 判为「未运行」；未知取值 MUST 判为「无法判定」并原样保留原值。任何情况下 MUST NOT 把「未运行」或「无法判定」呈现为通过。
+- **FR-005**: 系统 MUST 为回归结果提供四态显式判定：通过 / 未通过 / 未运行 / 无法判定。四态 MUST 由前端从 `Run` 已有字段推导：`regression` 为 `"not_run"`（后端 `simulator.go:15` 的初始值）**或**空串（本代码路径之外写入的零值）MUST 判为「未运行」；未知取值 MUST 判为「无法判定」并原样保留原值。任何情况下 MUST NOT 把「未运行」或「无法判定」呈现为通过。
 - **FR-006**: 显示「通过」时 MUST 同时显示其判定依据（`expected_code` 与 `actual_code`），使该结论可就地复核。
 - **FR-007**: 系统 MUST 为每条回归结果给出四项定位：原故障运行、输入场景、模块、代码版本。任一项缺失 MUST 显示为「未记录」；`original_run_id` 为空 MUST 显示为「本身即原故障」，二者不得混为一谈。
 - **FR-008**: 原故障运行 MUST 可从回归结果跳转到该运行详情，且 MUST 在同一诊断页内切换，MUST NOT 新增路由。目标不可读时 MUST 标注不可读及原因类别，不得跳转到错误页或空白页。
@@ -150,7 +160,7 @@
 > 下列五项原为默认假设，已在 2026-09-14 的 Clarifications 中由主任务确认，现为**决定**而非假设，写入对应 FR：前端推导「未运行」（FR-005/FR-010）、200 上限与按错误码保留的折叠策略（FR-004）、时钟偏差下仍按 `occurred_at` 定位并标注（FR-014）、页内切换不新增路由（FR-008）、不做概览聚合（FR-013）。以下是仍然成立的假设。
 
 - **数据充分性**：`span_id` / `parent_span_id` / `occurred_at` / `duration_ms` 足以构造层级与时间轴，无需后端补字段。这一点已按 `contract.go` 与 `contract.ts` 核实。
-- **前端推导「未运行」的已知代价**：`regression` 为空串是「从未评估」的唯一来源——这依赖后端当前不会显式写入空串。若将来后端改为显式置空，二者将无法区分。本功能按当前后端行为成立，该前提若变化需重新审视 FR-005。
+- **前端推导「未运行」的已知代价**：`"not_run"` 与空串都被判为「未运行」。前者是后端 `Simulate()` 的初始值，后者是本代码路径之外写入的零值。代价是：若将来后端把 `"not_run"` 改作别的含义（例如「已运行但结论待定」），前端会继续把它显示为「未运行」。本功能按当前后端行为成立，该前提若变化需重新审视 FR-005。
 - **桌面端不在范围内**：诊断页仅挂载于 Web（`apps/web/app/[workspaceSlug]/(dashboard)/diagnostics/page.tsx`），与 spec 002 的 FR-012 一致。
 - **不触碰的相邻缺口**：`diagnostics-acceptance-mapping.md` 列出的其余实现缺失——DIAG-05 的 HTTP trace 传播未接线、DIAG-04 无 outbox、DIAG-02 请求头与路径脱敏、DIAG-03 磁盘满模拟——均**不在本功能范围内**，各自另立任务。本功能不因「顺手」扩大范围（constitution 原则 VIII）。
 - **对照表的更新**：本功能完成后 `diagnostics-acceptance-mapping.md` 相关行需要更新，但那是交付后的记录动作，由主任务按原则 X 决定何时进行，不在本功能的实现任务内。

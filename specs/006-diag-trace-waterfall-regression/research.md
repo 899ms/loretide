@@ -26,9 +26,10 @@ Phase 0。Technical Context 无 NEEDS CLARIFICATION——五个原本的未决�
 
 ## D4. 四态判定的取值来源
 
-- **Decision**：判定只读 `Run` 的 `regression` / `expectedCode` / `actualCode` / `status` 四个已有字段，映射为 `passed` / `failed` / `not_run` / `undecidable`。映射规则：`regression === ""` → `not_run`；`regression === "passed"` 且 `status` 不指示未完成 → `passed`；`regression === "failed"` → `failed`；其余一切（未知枚举值、`passed` 与 `status` 冲突）→ `undecidable`，并原样带出原值。
+- **Decision**：判定只读 `Run` 的 `regression` / `expectedCode` / `actualCode` / `status` 四个已有字段，映射为 `passed` / `failed` / `not_run` / `undecidable`。映射规则：`regression === "not_run"`（后端初始值）或 `=== ""`（零值）→ `not_run`；`regression === "passed"` 且 `status` 不指示未完成 → `passed`；`regression === "failed"` → `failed`；其余一切（未知枚举值、`passed` 与 `status` 冲突）→ `undecidable`，并原样带出原值。
 - **Rationale**：Clarification Q1 定为 A，后端不动。把「未知取值」和「状态冲突」都归入 `undecidable` 而非各自成态，是因为二者对使用者的含义相同（「这个结论不能信，去看原值」），分开只会让界面多一个没人能区分的标签。
 - **安全方向**：任何不确定都必须倒向「不是通过」。这是 D13-V09 末句的字面要求，也是本功能唯一可能造成错误验收结论的地方，因此写成不变量：`verdict === "passed"` 当且仅当上述精确条件成立。
+- **实施期修正（2026-09-14）**：原写「`regression === ""` → `not_run`」，遗漏了后端真正的初始值 `"not_run"`（`simulator.go:15`）。若不补，该值会落进「其他任意值」→ `undecidable`，使 US2 失效。经主任务裁决按选项 A 补入，Q1 的结论（前端推导、不改 Go）不变。
 - **Alternatives considered**：把 `status` 冲突单列为第五态——增加界面复杂度而不增加可操作性，否决。
 
 ## D5. 折叠状态的归属
