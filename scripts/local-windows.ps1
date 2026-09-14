@@ -85,21 +85,44 @@ function Invoke-PgCtl {
   [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($out | Out-String).Trim() }
 }
 
-# `pg_ctl start` must NOT be run through a captured pipeline. The postgres.exe
-# it launches inherits the redirected handles and keeps them open for its whole
-# life, so `$out = & pg_ctl ... 2>&1` waits for the database to shut down rather
-# than for pg_ctl to return: start never comes back even though PostgreSQL is
-# ready. Start-Process gives the child its own handles, so this waits only for
-# pg_ctl itself. Server output already goes to postgres.log via -l.
+# Starting PostgreSQL has two ways to hang, and both were hit in turn.
+#
+# It must NOT run through a captured pipeline: the postgres.exe pg_ctl launches
+# inherits the redirected handles and holds them for its whole life, so
+# `$out = & pg_ctl ... 2>&1` waits for the database to shut down.
+#
+# It must also NOT use Start-Process -Wait: on Windows that waits for the whole
+# process tree, and postgres.exe is pg_ctl's child, so -Wait means the same
+# thing by another route. Both leave start hanging minutes after the server is
+# ready to serve.
+#
+# Waiting on the Process object waits for THAT process only. Server output still
+# goes to postgres.log via -l.
 function Start-PostgresServer {
   $exe = Join-Path $script:PgBin 'pg_ctl.exe'
   if (-not (Test-Path $exe)) { return [pscustomobject]@{ ExitCode = 127; Output = "pg_ctl.exe not found at $exe" } }
   $logPath = Join-Path $script:Runtime 'postgres.log'
-  $proc = Start-Process -FilePath $exe -PassThru -Wait -WindowStyle Hidden -ArgumentList @(
+  $proc = Start-Process -FilePath $exe -PassThru -WindowStyle Hidden -ArgumentList @(
     '-D', "`"$($script:PgData)`"", '-l', "`"$logPath`"",
     '-o', "`"-p $($script:Ports.postgres) -h 127.0.0.1`"", '-w', 'start'
   )
+  if (-not $proc.WaitForExit(60000)) {
+    return [pscustomobject]@{ ExitCode = 124; Output = "pg_ctl start did not return within 60s; server log: $logPath" }
+  }
   [pscustomobject]@{ ExitCode = $proc.ExitCode; Output = "pg_ctl start exited $($proc.ExitCode); server log: $logPath" }
+}
+
+# pg_ctl returning 0 is not the same as the server accepting connections, and
+# after the two hangs above the launcher should prove readiness rather than
+# assume it. `status` is safe to capture: it spawns nothing.
+function Wait-PostgresReady {
+  param([int]$TimeoutSec = 30)
+  $deadline = (Get-Date).AddSeconds($TimeoutSec)
+  do {
+    if ((Invoke-PgCtl -PgArgument @('-D', $script:PgData, 'status')).ExitCode -eq 0) { return $true }
+    Start-Sleep -Seconds 1
+  } while ((Get-Date) -lt $deadline)
+  $false
 }
 
 # Status code only; the body is never read, so a slow page cannot hold up status.
@@ -429,7 +452,13 @@ function Test-StartPreconditions {
   if ($pgStatus.ExitCode -ne 0) {
     $started = Start-PostgresServer
     if ($started.ExitCode -ne 0) {
-      Write-PreconditionFailure -Component 'postgres' -Reason 'PostgreSQL failed to start' `
+      Write-PreconditionFailure -Component 'postgres' -Reason $started.Output `
+        -NextStep "read $(Join-Path $script:Runtime 'postgres.log')"
+      return $false
+    }
+    if (-not (Wait-PostgresReady)) {
+      Write-PreconditionFailure -Component 'postgres' `
+        -Reason 'pg_ctl returned but the server is still not accepting status checks after 30s' `
         -NextStep "read $(Join-Path $script:Runtime 'postgres.log')"
       return $false
     }
