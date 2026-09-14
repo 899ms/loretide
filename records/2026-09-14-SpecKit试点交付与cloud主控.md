@@ -37,3 +37,36 @@
 - 三个作废 cloud 会话（`session_0172…`、`session_01PS…`、`session_01W7…`）待归档。
 
 本次 UI 影响：无；手动 UI Todo：002 的 26 条见 app `specs/002-diag-package-stream-recovery/manual-ui-todo.md`，待用户本机执行。
+
+## 第二日（2026-09-14 下午～09-15 凌晨）追加
+
+### 合入清单（app 仓库 app-main，均经主任务本机复核后 squash 合并）
+
+| PR | 内容 |
+| --- | --- |
+| #30 / #32 | specs/005：HTTP trace 传播、请求头/URL 脱敏、进程内 outbox；DIAG-02/03 测试缺口 |
+| #35 | specs/007：诊断接入合同 + `check:diagnostics-contract` 进 CI + 豁免须带到期日期 |
+| #37 | specs/006：trace 层级瀑布、折叠、回归四态判定与四项定位 |
+| #40 / #48 | 验收对照表刷新（新增 §5 剩余实现缺口 G1–G6）、迁移对表 |
+| #42 | daemon 三包 114 例失败分诊：108 例为执行闸门（`policytest.SkipIfExecutionGated` + `loretide_gate_open` 构建约束），6 例环境；0 真实回归 |
+| #43 / #44 / #49 | specs/008（G1–G6）、009（持久 outbox）、010（非 UI 证据缺口）规格 |
+| #45 | specs/009：`content_dispatch_outbox` 表（迁移 474～476）+ 租约排水器；真实 PostgreSQL 53 用例 |
+| #47 | `docs/development/spec-kit-workflow.md`（流程规范 + 三条铁律） |
+| #50 | specs/010：对照表 121/16/8，`TestContentMigrationConstraints`、`check:diagnostics-no-upload` |
+| #52 | `docs/development/manual-ui-runbook.md`：57 条手动项一次跑完的顺序与登记表 |
+
+文档仓库：#31/#34/#36/#38/#39/#41/#46/#51 状态回写。累计 #19～#52 共 34 个。
+
+### 新增教训
+
+9. **turbo 缓存命中的 `pnpm typecheck` 不是证据。** #37 的 PR 正文写「9/9 全部命中缓存」，主任务复核时也只跑了带缓存的 `pnpm typecheck`，两边都绿；实际 `packages/core` 的 `tsc --noEmit` 自 #37 起在 app-main 就是红的（测试夹具缺四个必填字段）。规则：PR 正文出现「命中缓存」，主任务必须用 `--force` 或单包 `tsc --noEmit` 复跑。
+10. **规格被事实推翻时在实现 PR 内修正并单列「规格修正」**，不遮掉也不另开 PR；006（`"not_run"` 字面值）、007（提供方无法 import 自己）、009（`sequence` 列、`SKIP LOCKED` 与租约的真实关系）三次都按此处理。
+11. **实现任务默认回勾 tasks.md**，未真正执行的项保留并注明；005 与 007 两次遗漏后写进 workflow 文档。
+12. **cloud 会话会触发账号用量限额**（016nc 在 impl 008 T032 处停下），未推送的工作留在容器里；主任务应在派发时要求「阶段性 push」，并在限额恢复后先推送再继续。
+13. **Windows 专有失败只能在 Windows 分诊**：`-overlay` 摘掉执行闸门后四组用例结果不变，证明与闸门无关（真实 codex-cli 在 PATH、路径进 JSON 转义、symlink 特权、HOME 未隔离）。
+
+### 当前状态
+
+- DG-01 剩余瓶颈只有用户手动矩阵：002 的 37 条 + 006 的 20 条（`docs/development/manual-ui-runbook.md` 给出一次跑完的顺序），008 交付后再加 7 条。
+- 进行中：impl 008（会话 016nc，WIP 已推送）。
+- 后续项：排水器接入服务级优雅停机；Windows 专有 daemon 失败 98 例分诊（需 Windows 主机）；`Sanitize()` 对 ObjectID/Workspace/Account/Actor 的设计问题。
