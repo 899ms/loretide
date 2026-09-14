@@ -37,7 +37,7 @@ description: "Task list template for feature implementation"
 ## Phase 1: Setup（基线）
 
 - [ ] T001 记录基线：`pnpm check:content-boundaries` 退出码；`ls server/internal/content/`（确认只有 `diagnostics`）；`ls server/migrations | wc -l`（SC-007 的比对基数）；`git rev-parse origin/app-main` — *基线，无 FR 映射*
-- [ ] T002 记录 `.github/workflows/loretide-content.yml` 的 `on:` 段现状（逐字节留存，供 T018 比对） — **SC-005**
+- [ ] T002 记录 `.github/workflows/loretide-content.yml` 的 `on:` 段现状（逐字节留存，供 **T022** 比对） — **SC-005**
 
 ## Phase 2: Foundational（阻塞全部故事）
 
@@ -54,6 +54,8 @@ description: "Task list template for feature implementation"
 - [ ] T006 [US1] 同文件：**错误码枚举**那一行第二列写「暂无公共入口（`log.go` 的 `codes` 未导出）」，第三列写「向诊断包申请导出，导出前由人工审查」，并注明导出为**后续任务**。**不得**要求模块引用私有符号 — **FR-003**
 - [ ] T007 [US1] 同文件：新增前端两根一节（消费诊断错误对象经 `parseWithFallback`、呈现 `next_action`、不泄漏正文），**显著注明当前无静态检查、由人工审查**，前端侧检查列为后续任务 — **FR-016a**
 - [ ] T008 [US1] 同文件：新增**静态检查边界声明**一节——检查只证明痕迹存在，不证明语义正确，也不证明真实执行器跑过；通过检查 ≠ 接入合格 — **FR-002**
+
+- [ ] T008a [US1] **逐条核对合同**：拿 `docs/development/diagnostics-onboarding-contract.md` 的第三列对照 `server/internal/content/diagnostics/` 逐条走一遍，确认每条都能指到真实代码；把「无法指到的条目数」记为 0 并在交付记录中给出核对清单。错误码枚举那一行是**唯一允许**指不到公共入口的条目，且必须已按 T006 写明原因 — **FR-002、SC-001**
 
 **Checkpoint**: US1 可独立交付——合同文本本身就有价值，即使检查尚未落地。
 
@@ -95,7 +97,7 @@ description: "Task list template for feature implementation"
 
 - T001、T002 → 全部
 - Foundational T003、T004 → US2
-- US1：T005 → T006 / T007 / T008（同一文件，顺序写）
+- US1：T005 → T006 / T007 / T008（同一文件，顺序写）→ T008a（核对，依赖前四条写完）
 - US2：T009 → T010 → T011 → T012；T013 依赖 T003、T012；T014 依赖 T012；T015、T016 依赖 T014
 - US3：T017 依赖 T005（同一文件）；T018 依赖 T015、T017
 - Polish：T019 依赖 US2；**T020 → T021**；T022 依赖全部；T023 最后
@@ -112,5 +114,5 @@ description: "Task list template for feature implementation"
 1. **MVP = US1 + US2**：合同文本 + 能报缺项的检查。两者都到位，D13-V12 第一条子句才算有覆盖。
 2. **US3 与 US1 共用同一份合同文档**，不建议并行给两个执行者。
 3. **US2 的脚本与 US1 的文档文件不重叠**，可并行。
-4. 任务总数 23；单 PR 手写文件约 8 个，无需拆分。
+4. 任务总数 24；单 PR 手写文件约 8 个，无需拆分。
 5. **本功能无页面改动、无手动 UI Todo**。若实施中发现必须改页面或改生产代码，**停下来报告**，不得自行扩范围。
