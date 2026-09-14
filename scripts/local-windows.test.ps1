@@ -73,6 +73,19 @@ Assert-Contains $source '#Requires -Version 7.0' 'script declares its minimum Po
 $supervisor = Get-Content -Raw -Path (Join-Path $RepoRoot 'scripts/local-windows-supervisor.mjs')
 Assert-Contains $supervisor "LORETIDE_EXECUTION_POLICY:'disabled'" 'supervisor keeps execution policy disabled'
 
+# Regression, found on real Windows and NOT reachable from a stub: running
+# `pg_ctl start` through a captured pipeline hangs forever, because the
+# postgres.exe it spawns inherits the redirected handles and holds them for its
+# whole life. Only Start-Process gives the child its own handles. A stub cannot
+# reproduce a handle-inheritance deadlock, so the shape of the call is asserted
+# instead; the behaviour itself is verified on Windows.
+Assert-Contains $source 'function Start-PostgresServer' 'the pg_ctl start path has its own wrapper'
+$startFn = $source.Substring($source.IndexOf('function Start-PostgresServer'))
+$startFn = $startFn.Substring(0, $startFn.IndexOf('# --- Identity'))
+Assert-Contains $startFn 'Start-Process' 'pg_ctl start runs via Start-Process, not a captured pipeline'
+Assert-NotContains $startFn '2>&1' 'pg_ctl start does not capture the server pipeline'
+Assert-Contains $startFn "'-l'" 'pg_ctl start still redirects the server log with -l'
+
 # ---------------------------------------------------------------------------
 # Load the definition region only: no param block, no dispatch, no side effects.
 # ---------------------------------------------------------------------------
@@ -108,6 +121,8 @@ function New-ApiExe { Set-Content -Path (Join-Path $FakeState 'api.exe') -Value 
 $script:Procs = @{}
 $script:Listeners = @()
 $script:PgExit = 0
+$script:PgStartExit = 0
+$script:SupervisorSurvives = $true
 $script:HealthCalls = [System.Collections.Generic.List[string]]::new()
 
 function Get-ProcessInfo {
@@ -129,15 +144,25 @@ function Invoke-HealthProbe {
   200
 }
 function Get-CheckoutCommit { param([string]$Root) 'abc1234' }
+function Start-PostgresServer {
+  [pscustomobject]@{ ExitCode = $script:PgStartExit; Output = 'stub pg_ctl start' }
+}
+# $script:SupervisorSurvives models the real failure the stub used to hide: the
+# process launches, then exits on a bad secrets.json without writing a live pid.
 function Start-SupervisorProcess {
   param([string]$Root, [string]$ScriptDir)
   $script:SupervisorStarted = $true
+  if ($script:SupervisorSurvives) {
+    $script:Procs[301] = New-Proc -ProcessId 301 -ExecutablePath 'node.exe' -CommandLine "node $FakeRoot/scripts/local-windows-supervisor.mjs"
+    Set-Content -Path (Join-Path $FakeState 'supervisor.pid') -Value '301'
+  }
 }
 
 function New-Proc {
-  param([int]$ProcessId, [string]$ExecutablePath = '', [string]$CommandLine = '', $CreationDate = $null)
+  param([int]$ProcessId, [string]$ExecutablePath = '', [string]$CommandLine = '',
+        $CreationDate = $null, [int]$ParentProcessId = 0)
   [pscustomobject]@{
-    ProcessId = $ProcessId; ExecutablePath = $ExecutablePath
+    ProcessId = $ProcessId; ParentProcessId = $ParentProcessId; ExecutablePath = $ExecutablePath
     CommandLine = $CommandLine; CreationDate = $CreationDate
   }
 }
@@ -146,6 +171,8 @@ function Reset-Fixture {
   $script:Procs = @{}
   $script:Listeners = @()
   $script:PgExit = 0
+  $script:PgStartExit = 0
+  $script:SupervisorSurvives = $true
   $script:SupervisorStarted = $false
   $script:HealthCalls.Clear()
   Get-ChildItem $FakeState -File -ErrorAction SilentlyContinue | Remove-Item -Force
@@ -237,6 +264,59 @@ $owned = Get-InstanceStatus
 Assert-Equal 0 $owned.conflicts.Count 'our own listeners are not conflicts'
 Assert-Equal $true $owned.ok 'ok=true with our own listeners on our ports'
 
+# Regression, found on real Windows: `next dev` (web.pid) forks a worker, and
+# that CHILD owns 13000. Matching the recorded pid alone reported a perfectly
+# healthy instance as a conflict against itself (ok=false, exit 1).
+Reset-Fixture
+New-Secrets
+New-ApiExe
+Set-RunningInstance
+$script:Procs[44772] = New-Proc -ProcessId 44772 -ExecutablePath 'node.exe' `
+  -CommandLine "node $FakeRoot\apps\web\node_modules\next\dist\compiled\jest-worker\processChild.js" `
+  -ParentProcessId 203
+$script:Listeners = @(
+  [pscustomobject]@{ Port = 18000; OwningProcess = 202 },
+  [pscustomobject]@{ Port = 13000; OwningProcess = 44772 }
+)
+$child = Get-InstanceStatus
+Assert-Equal 0 $child.conflicts.Count 'a next worker child listening on 13000 is not a conflict'
+Assert-Equal $true $child.ok 'ok=true when the listener is our own child process'
+
+# The parent chain is the other half: a child whose command line does not name
+# the checkout is still ours when it descends from a recorded component pid.
+Reset-Fixture
+New-Secrets
+New-ApiExe
+Set-RunningInstance
+$script:Procs[44773] = New-Proc -ProcessId 44773 -ExecutablePath 'C:\Program Files\nodejs\node.exe' `
+  -CommandLine 'node --worker' -ParentProcessId 203
+$script:Listeners = @([pscustomobject]@{ Port = 13000; OwningProcess = 44773 })
+$desc = Get-InstanceStatus
+Assert-Equal 0 $desc.conflicts.Count 'a descendant of the web process is not a conflict'
+
+# A genuinely foreign listener must still be caught after the loosening above.
+Reset-Fixture
+New-Secrets
+New-ApiExe
+Set-RunningInstance
+$script:Procs[7777] = New-Proc -ProcessId 7777 -ExecutablePath 'C:\other\checkout\node.exe' `
+  -CommandLine 'node C:\other\checkout\apps\web\node_modules\next dev' -ParentProcessId 1
+$script:Listeners = @([pscustomobject]@{ Port = 13000; OwningProcess = 7777 })
+$foreign = Get-InstanceStatus
+Assert-Equal 1 $foreign.conflicts.Count 'another checkout''s next is still a conflict'
+Assert-Equal $false $foreign.ok 'ok=false for a foreign listener'
+
+# A parent chain that loops must not hang the walk.
+Reset-Fixture
+New-Secrets
+New-ApiExe
+Set-RunningInstance
+$script:Procs[8001] = New-Proc -ProcessId 8001 -ExecutablePath 'C:\x\a.exe' -ParentProcessId 8002
+$script:Procs[8002] = New-Proc -ProcessId 8002 -ExecutablePath 'C:\x\b.exe' -ParentProcessId 8001
+$script:Listeners = @([pscustomobject]@{ Port = 13000; OwningProcess = 8001 })
+$loop = Get-InstanceStatus
+Assert-Equal 1 $loop.conflicts.Count 'a looping parent chain terminates and still reports the conflict'
+
 # A pid belonging to an unrelated program is not ours, even though it is alive.
 Reset-Fixture
 New-Secrets
@@ -305,6 +385,29 @@ $code = Invoke-InstanceStart -ScriptDir (Join-Path $FakeRoot 'scripts') | Select
 Assert-Equal 0 $code 'a clean start exits 0'
 Assert-True $script:SupervisorStarted 'a clean start launches the supervisor'
 Assert-Equal 'abc1234' (Get-Content (Join-Path $FakeState 'build.txt') -Raw).Trim() 'start writes the build commit'
+
+# Regression, found on real Windows: the supervisor can exit the moment it reads
+# a bad secrets.json, and only supervisor.err.log says so. start must not report
+# success for a dead instance - it did, and the next start launched a second one.
+Reset-Fixture
+New-Secrets
+New-ApiExe
+$script:SupervisorSurvives = $false
+$out = (Invoke-InstanceStart -ScriptDir (Join-Path $FakeRoot 'scripts') | Out-String)
+$code = Invoke-InstanceStart -ScriptDir (Join-Path $FakeRoot 'scripts') | Select-Object -Last 1
+Assert-Equal 1 $code 'start exits 1 when the supervisor does not survive launch'
+Assert-Contains $out '[supervisor]' 'the dead supervisor is reported against the supervisor component'
+Assert-Contains $out 'supervisor.err.log' 'the failure points at the supervisor error log'
+Assert-NotContains $out 'Local supervisor started' 'start does not claim success for a dead supervisor'
+
+# A stale pid from a previous run must not satisfy the liveness wait.
+Reset-Fixture
+New-Secrets
+New-ApiExe
+Set-Content -Path (Join-Path $FakeState 'supervisor.pid') -Value '4242'
+$script:SupervisorSurvives = $false
+$code = Invoke-InstanceStart -ScriptDir (Join-Path $FakeRoot 'scripts') | Select-Object -Last 1
+Assert-Equal 1 $code 'a leftover supervisor.pid does not make a failed start look successful'
 
 # T008: preconditions pass when everything is in place.
 Reset-Fixture
