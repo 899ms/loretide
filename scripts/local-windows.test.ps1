@@ -82,9 +82,14 @@ Assert-Contains $supervisor "LORETIDE_EXECUTION_POLICY:'disabled'" 'supervisor k
 Assert-Contains $source 'function Start-PostgresServer' 'the pg_ctl start path has its own wrapper'
 $startFn = $source.Substring($source.IndexOf('function Start-PostgresServer'))
 $startFn = $startFn.Substring(0, $startFn.IndexOf('# --- Identity'))
-Assert-Contains $startFn 'Start-Process' 'pg_ctl start runs via Start-Process, not a captured pipeline'
-Assert-NotContains $startFn '2>&1' 'pg_ctl start does not capture the server pipeline'
-Assert-Contains $startFn "'-l'" 'pg_ctl start still redirects the server log with -l'
+# Comments are stripped so the wrapper may explain why -Wait and 2>&1 are wrong
+# while the code itself must contain neither.
+$startCode = (($startFn -split "`n" | Where-Object { $_.TrimStart() -notlike '#*' }) -join "`n")
+Assert-Contains $startCode 'Start-Process' 'pg_ctl start runs via Start-Process, not a captured pipeline'
+Assert-NotContains $startCode '2>&1' 'pg_ctl start does not capture the server pipeline'
+Assert-NotContains $startCode '-Wait' 'pg_ctl start does not use Start-Process -Wait (it waits for the process TREE)'
+Assert-Contains $startCode 'WaitForExit' 'pg_ctl start waits on the pg_ctl process only'
+Assert-Contains $startCode "'-l'" 'pg_ctl start still redirects the server log with -l'
 
 # ---------------------------------------------------------------------------
 # Load the definition region only: no param block, no dispatch, no side effects.
@@ -107,6 +112,83 @@ $env:LORETIDE_WIN_STATE = $FakeState
 $env:LORETIDE_WIN_RUNTIME = $FakeRuntime
 Initialize-InstanceContext -Root $FakeRoot
 
+# ---------------------------------------------------------------------------
+# Regression, found twice on real Windows: start must never wait on PostgreSQL.
+#
+# First `$out = & pg_ctl ... 2>&1` hung (postgres.exe inherits the captured
+# handles); then `Start-Process -Wait` hung for the same reason by another route
+# (on Windows -Wait waits for the whole process TREE, and postgres.exe is
+# pg_ctl's child). Both left start hanging minutes after the server was ready.
+#
+# Shadowing Start-Process is what makes this reachable without Windows: a
+# function beats a cmdlet in resolution order, so the real Start-PostgresServer
+# calls the stub. The stub records whether -Wait was passed, which is the exact
+# defect, and hands back a process whose WaitForExit outcome the case chooses.
+# ---------------------------------------------------------------------------
+$Definitions = $source.Substring($begin, $end - $begin)
+Set-Content -Path (Join-Path $FakeRuntime 'pgsql/bin/pg_ctl.exe') -Value 'stub'
+
+function New-FakeProcess {
+  param([int]$ExitCode = 0, [bool]$Exits = $true)
+  $p = [pscustomobject]@{ ExitCode = $ExitCode; Exits = $Exits; SawWait = $null; WaitForExitMs = 0 }
+  $p | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value {
+    param([int]$Milliseconds)
+    $this.WaitForExitMs = $Milliseconds
+    $this.Exits
+  }
+  $p
+}
+
+$StartProbe = {
+  param($Defs, $Root, $FakeProc)
+  . ([ScriptBlock]::Create($Defs))
+  function Start-Process {
+    param(
+      [string]$FilePath, [switch]$PassThru, [switch]$Wait, [string]$WindowStyle,
+      [string[]]$ArgumentList, [string]$WorkingDirectory,
+      [string]$RedirectStandardOutput, [string]$RedirectStandardError
+    )
+    $FakeProc.SawWait = $Wait.IsPresent
+    $FakeProc
+  }
+  Initialize-InstanceContext -Root $Root
+  Start-PostgresServer
+}
+
+# pg_ctl returns on its own: start reports its exit code and does not block.
+$fake = New-FakeProcess -ExitCode 0 -Exits $true
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
+$pgResult = & $StartProbe $Definitions $FakeRoot $fake
+$sw.Stop()
+Assert-True ($sw.Elapsed.TotalSeconds -lt 5) "starting PostgreSQL does not block (took $($sw.Elapsed.TotalSeconds)s)"
+Assert-Equal $false $fake.SawWait 'Start-Process is called without -Wait, so it cannot wait for postgres.exe'
+Assert-Equal 0 $pgResult.ExitCode 'a clean pg_ctl start reports exit code 0'
+Assert-Equal 60000 $fake.WaitForExitMs 'the wait on pg_ctl itself is bounded at 60s'
+
+# pg_ctl itself never returns: bounded wait, reported as a failure, still fast.
+$fakeHung = New-FakeProcess -ExitCode 0 -Exits $false
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
+$hungResult = & $StartProbe $Definitions $FakeRoot $fakeHung
+$sw.Stop()
+Assert-True ($sw.Elapsed.TotalSeconds -lt 5) 'a hung pg_ctl is bounded, not waited on forever'
+Assert-Equal 124 $hungResult.ExitCode 'a pg_ctl that does not return is reported as a failure'
+Assert-Contains $hungResult.Output 'postgres.log' 'the hung-start failure points at the server log'
+
+# Readiness is proven, not assumed: pg_ctl returning 0 is not the server
+# accepting connections. The real Wait-PostgresReady must give up on its budget.
+$ReadyProbe = {
+  param($Defs, $Root)
+  . ([ScriptBlock]::Create($Defs))
+  function Invoke-PgCtl { param([string[]]$PgArgument) [pscustomobject]@{ ExitCode = 3; Output = 'not ready' } }
+  Initialize-InstanceContext -Root $Root
+  Wait-PostgresReady -TimeoutSec 1
+}
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
+$ready = & $ReadyProbe $Definitions $FakeRoot
+$sw.Stop()
+Assert-Equal $false $ready 'Wait-PostgresReady gives up when the server never answers'
+Assert-True ($sw.Elapsed.TotalSeconds -lt 5) 'the readiness poll honours its timeout'
+
 # The placeholder stands in for the database password and JWT. No assertion
 # below may ever find it in output: FR-007 forbids printing secrets.
 $SecretMarker = 'PLACEHOLDER_SECRET'
@@ -122,6 +204,7 @@ $script:Procs = @{}
 $script:Listeners = @()
 $script:PgExit = 0
 $script:PgStartExit = 0
+$script:PgReady = $true
 $script:SupervisorSurvives = $true
 $script:HealthCalls = [System.Collections.Generic.List[string]]::new()
 
@@ -145,8 +228,9 @@ function Invoke-HealthProbe {
 }
 function Get-CheckoutCommit { param([string]$Root) 'abc1234' }
 function Start-PostgresServer {
-  [pscustomobject]@{ ExitCode = $script:PgStartExit; Output = 'stub pg_ctl start' }
+  [pscustomobject]@{ ExitCode = $script:PgStartExit; Output = 'stub pg_ctl start failed' }
 }
+function Wait-PostgresReady { param([int]$TimeoutSec = 30) $script:PgReady }
 # $script:SupervisorSurvives models the real failure the stub used to hide: the
 # process launches, then exits on a bad secrets.json without writing a live pid.
 function Start-SupervisorProcess {
@@ -172,6 +256,7 @@ function Reset-Fixture {
   $script:Listeners = @()
   $script:PgExit = 0
   $script:PgStartExit = 0
+  $script:PgReady = $true
   $script:SupervisorSurvives = $true
   $script:SupervisorStarted = $false
   $script:HealthCalls.Clear()
@@ -356,6 +441,30 @@ $out = (Test-StartPreconditions | Out-String)
 Assert-Contains $out '[api]' 'missing api.exe names the api component'
 Assert-Contains $out 'local-windows.ps1 build' 'the api failure points at build'
 Assert-NotContains $out $SecretMarker 'the api failure does not print the secret'
+
+# A server that starts but never becomes ready fails against postgres, rather
+# than letting start go on to launch a supervisor against a dead database.
+Reset-Fixture
+New-Secrets
+New-ApiExe
+$script:PgExit = 3          # not running, so start is attempted
+$script:PgStartExit = 0     # pg_ctl returns success
+$script:PgReady = $false    # but the server never answers a status check
+$out = (Test-StartPreconditions | Out-String)
+$ok = Test-StartPreconditions | Select-Object -Last 1
+Assert-Equal $false $ok 'preconditions fail when PostgreSQL never becomes ready'
+Assert-Contains $out '[postgres]' 'an unready server is reported against the postgres component'
+Assert-Contains $out 'postgres.log' 'the unready-server failure points at the server log'
+
+# A failing pg_ctl start is reported with what pg_ctl actually said.
+Reset-Fixture
+New-Secrets
+New-ApiExe
+$script:PgExit = 3
+$script:PgStartExit = 1
+$out = (Test-StartPreconditions | Out-String)
+Assert-Contains $out '[postgres]' 'a failed pg_ctl start names the postgres component'
+Assert-Contains $out 'stub pg_ctl start failed' 'the failure carries the reason pg_ctl reported'
 
 # T008: a foreign process holding the web port.
 Reset-Fixture
