@@ -29,6 +29,7 @@ function span(over: Partial<DiagnosticEvent> & {spanId: string}): DiagnosticEven
     runId: "r", attempt: 1, step: over.spanId, component: "api",
     severity: "info", durationMs: 0, safeMessage: "", retryable: false,
     nextAction: "", build: "b", isTest: true,
+    route: "", status: 0, headersPresent: [], upstreamTrace: "",
     ...over,
   };
 }
