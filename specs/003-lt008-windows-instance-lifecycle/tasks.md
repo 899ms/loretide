@@ -59,11 +59,15 @@
 
 主任务用 pwsh 7.6.6 在真机跑完整流程，发现三处云端桩测覆盖不到的缺陷。以下为修复与其验证层级。
 
-- [x] R001 [HIGH] `start` 在需要拉起 PostgreSQL 时挂死：`Invoke-PgCtl` 用 `$out = & pg_ctl ... 2>&1` 捕获管道，`pg_ctl start` 拉起的 `postgres.exe` 继承重定向句柄并持有到自身退出，PowerShell 等管道关闭即等数据库退出（实测 postgres ready 后 5 分钟未返回；杀 pwsh 后 postgres 仍在）。修复：新增 `Start-PostgresServer`，用 `Start-Process -Wait -PassThru -WindowStyle Hidden` 取 `ExitCode`，不接管道，保留 `-l postgres.log`；`status` 分支仍用 `Invoke-PgCtl` 捕获。**验证层级：Windows 实机验证**——句柄继承死锁无法用桩复现，桩测只断言调用形态（有 `Start-Process`、无 `2>&1`、仍有 `-l`）
+- [x] R001 [HIGH] `start` 在需要拉起 PostgreSQL 时挂死：`Invoke-PgCtl` 用 `$out = & pg_ctl ... 2>&1` 捕获管道，`pg_ctl start` 拉起的 `postgres.exe` 继承重定向句柄并持有到自身退出，PowerShell 等管道关闭即等数据库退出（实测 postgres ready 后 5 分钟未返回；杀 pwsh 后 postgres 仍在）。修复：新增 `Start-PostgresServer`，用 `Start-Process -Wait -PassThru -WindowStyle Hidden` 取 `ExitCode`，不接管道，保留 `-l postgres.log`；`status` 分支仍用 `Invoke-PgCtl` 捕获。**验证层级：Windows 实机验证**——句柄继承死锁无法用桩复现
 - [x] R002 [MEDIUM] `start` 未确认 supervisor 存活即报成功：supervisor 因 `secrets.json` ENOENT 立即退出（错误只进 `supervisor.err.log`），`start` 仍打印 `Local supervisor started` 并返回 0，第二次 `start` 又重复启动。修复：`Start-SupervisorProcess` 后 `Wait-SupervisorAlive` 最多轮询 10 秒，要求 `supervisor.pid` 存在、进程存活且命令行匹配；否则输出 `[supervisor]` + `err.log` 路径并退出 1。启动前先删除旧 pid 文件，避免陈旧 pid 让等待假通过。**验证层级：桩测覆盖**（`Start-SupervisorProcess` 桩不写 pid → 退出 1）+ Windows 实机复验
 - [x] R003 [MEDIUM] Next.js 子进程被误判为端口冲突：`web.pid=15872` 是 `next dev` 父进程，13000 的实际监听者是子 worker `pid 44772`，`status` 报 `conflict ... not this instance`、`ok=false`、`exit 1`，而实例一切正常。修复：新增 `Test-ListenerIsOurs`——监听者 pid 在已知组件 pid 集合内、或命令行/可执行路径位于 `$Root` 之内（与 `Test-ProcessOwned` 同一判定）、或父进程链（上溯 5 层，带自环保护）含已知组件 pid，三者任一成立即非冲突。`Get-ProcessInfo` 增取 `ParentProcessId`。**验证层级：桩测覆盖**（子 worker 命令行含 `$Root` → 非冲突、`ok=true`；仅靠父链的后代 → 非冲突；另一 checkout 的 next → 仍是冲突；父链自环 → 不挂起）+ Windows 实机复验
 
-三组回归用例均已对未修复代码验证过会失败（分别 3 / 5 / 3 条），非空断言。
+- [x] R004 [HIGH] R001 的第一版修法本身仍会挂死：`Start-Process -PassThru -Wait` 在 Windows 上等待的是**整个进程树**，而 `postgres.exe` 是 `pg_ctl` 的子进程，等价于等数据库退出——与最初的捕获管道是同一个坑的两条路径（主任务实测：postgres 15:02:39 已 ready，`start` 5 分钟未返回）。修复：去掉 `-Wait`，改 `$proc.WaitForExit(60000)`，只等 `pg_ctl` 自身；60 秒未返回记 `ExitCode=124` 并报失败。另新增 `Wait-PostgresReady`：`pg_ctl` 返回 0 不等于服务器可接受连接，故用 `Invoke-PgCtl status`（不派生子进程，可安全捕获）轮询最多 30 秒作为就绪判据，超时报 `[postgres]` + `postgres.log` 路径并退出 1。**验证层级：桩测覆盖**——本轮找到了让桩能触达的办法：在隔离子作用域内遮蔽 `Start-Process` 这个 cmdlet 本身（函数优先于 cmdlet 解析），于是真实的 `Start-PostgresServer` 会调到桩，桩记录**是否被传入 `-Wait`**，这正是缺陷本身；并断言不阻塞（Stopwatch < 5s）、`WaitForExit` 上限 60000、`pg_ctl` 不返回时报 124。仍需 Windows 实机复验
+
+四组回归用例均已对未修复代码验证过会失败（R001+R004 合计 5 条、R002 5 条、R003 3 条、就绪轮询 3 条），非空断言。
+
+R001 的教训值得记一笔：第一版修法只把「等待对象」从管道换成了进程树，两者都把「等 pg_ctl 返回」误写成「等 postgres 退出」。当时的桩测只断言调用形态（有 `Start-Process`、无 `2>&1`），恰好对新写法成立，所以没拦住。现在的断言改为记录实际传参，形态断言只作为补充。
 
 ## Dependencies
 
