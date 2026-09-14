@@ -43,8 +43,8 @@
 | 条目 | 证据 | 类型 | 备注 |
 |---|---|---|---|
 | 交付凭据字段准入与脱敏 | `log.go` `Sanitize()`、`safeToken()`、`oneOf()` | 自动测试已通过 | `TestLogRegressionSanitizeRules` |
-| 交付请求头脱敏规则 | 未在 `Sanitize()` 中找到按请求头名称的准入/脱敏分支 | **无证据** | `Event` 无请求头字段；脱敏按字段白名单而非按 header 名 |
-| 交付路径/URL 脱敏规则 | 未找到针对路径或 URL 的专门脱敏分支 | **无证据** | — |
+| 交付请求头脱敏规则 | `log.go` `headerAdmission()` 三档逐名准入 + 四条后缀模式（`*-token`/`*-secret`/`*-key`/`*-password`），未列入者默认不记；`headersPresent()` 只记名称 | 自动测试已通过 | `TestHeaderAdmissionTiers`、`TestHeadersPresentRecordsNamesOnly`（feature 005） |
+| 交付路径/URL 脱敏规则 | `log.go` `requestRoute()` / `safeRoute()`：只记注册时的路由模板 + 方法 + 状态码，不记原始路径、查询串取值与键名、路径哈希；无模板时留空而非回退 | 自动测试已通过 | `TestRequestRouteKeepsThePatternAndNothingElse`、`TestSanitizeDropsWholeValuesRatherThanTrimmingThem`、`TestContentDiagnosticExportCarriesNoRequestSecrets`（feature 005） |
 | 交付私有正文脱敏 | `Event.safe_message` 为固定枚举文案，不承载自由正文 | 代码存在但无测试 | 「不承载正文」由结构保证，未见针对「正文被塞入其他字段」的负例 |
 | 供全部 sink 及导出复用 | `SlogHandler` 与 `Store.Technical` 均经 `Sanitize()`；`Export` 复用同一 `Event` | 自动测试已通过 | `TestLogRegressionSlogHandlerLeakingPrevention` |
 | 验证嵌套字段 | `TestLogRegressionSanitizeRules` 覆盖字段级规则 | 代码存在但无测试 | 未见**嵌套**结构的负例；`Event` 为扁平结构，嵌套场景不适用但卡片明确要求 |
@@ -75,7 +75,7 @@
 |---|---|---|---|
 | 交付追加审计 | `store.go` `appendAudit()` / `Audit()` | 自动测试已通过 | `TestPostgresAuditRollbackIsolationAndRetention` |
 | 交付事务接口 | `withWorkspaceWrite()`（pgx 事务 + `WorkspaceWriteGuard`）；`CommitRun(..., failAudit bool)` | 自动测试已通过 | handler 侧 5 个 `TestContentDiagnosticWritesCoordinateWithWorkspaceDelete` 子用例 |
-| 交付 outbox 接口 | 全仓检索 `outbox` 无命中 | **无证据** | 卡片明确写「事务/outbox接口」；当前只有事务，没有 outbox |
+| 交付 outbox 接口 | `dispatch.go` `Outbox` 接口 + `MemoryOutbox`（事务内 `Register`、提交后 `Settle` 派发；幂等键去重、有界、失败计入既有 `LogBuffer`） | 自动测试已通过（**带限制**） | `TestOutbox*` 7 个用例（feature 005）。**限制**：进程内实现，进程退出丢失未派发项，由 `TestOutboxDoesNotSurviveTheProcess` 断言；持久落库版本列为后续任务。关键审计仍走 `Store.Audit` 的事务内路径，未改动 |
 | 交付授权查询 | `Store.Query(ctx, scope, filter)`；`Scope.Allows()` | 自动测试已通过 | `TestContentDiagnosticsAuthAndFaultGate` 五个子用例 |
 | 技术日志清理不清除审批证据 | `PruneTechnical()` 只 `DELETE FROM content_technical_log` | 自动测试已通过 | `TestPostgresAuditRollbackIsolationAndRetention` 明确断言审计独立保留 |
 | 验证成功/失败/回滚事件 | `CommitRun` 的 `failAudit` 分支 | 自动测试已通过 | `TestPostgresAuditRollbackIsolationAndRetention` |
@@ -87,7 +87,7 @@
 
 | 条目 | 证据 | 类型 | 备注 |
 |---|---|---|---|
-| 交付 HTTP trace 传播 | `transport.go` 注释称 `DecodeQueuedEnvelope` 是「HTTP 与 WS 适配器共用的合同」，但 `server/internal/handler/` 与 `server/internal/middleware/` 中检索 `Pack(`/`Unpack(`/`traceparent`/`TraceContext` **均无命中** | **无证据** | 合同存在，HTTP 一侧未接线 |
+| 交付 HTTP trace 传播 | `middleware/trace.go` `Trace`（全部 API 路由，建本实例 trace、回传 `X-Diagnostic-Trace`）与 `AdoptDaemonTrace`（仅认证后的 daemon 路径采信入站 `traceparent`）；`daemon/client.go` 出站注入 | 自动测试已通过 | `TestTracePropagationAtTheBoundary`、`TestAdoptDaemonTraceOnlyAfterDaemonAuthentication`、`TestContentDiagnosticTraceRunsThroughQueueAndDaemon`（HTTP→queue→daemon 三段同 trace）、`TestTracePropagatesWithoutRecordingOutsideDiagnostics`（传播全局、记录不变）（feature 005） |
 | 交付队列消息 trace 传播 | `transport.go` `DecodeQueuedEnvelope()` | 自动测试已通过 | `TestWebSocketQueuePropagationDuplicateAndRevocation` |
 | 交付 WebSocket/模拟 daemon 传播 | `transport.go` `ServeSimulationTransport()` | 自动测试已通过 | 同上 |
 | 交付结果回写 trace | `Run.Events` 携带 `operation_id`/`trace_id` | 代码存在但无测试 | 未见「回写链路」独立用例 |
@@ -339,12 +339,12 @@
 
    | 卡片 | 条目 | 性质 |
    |---|---|---|
-   | DIAG-02 | 交付请求头脱敏规则 | 实现缺失 |
-   | DIAG-02 | 交付路径/URL 脱敏规则 | 实现缺失 |
+   | ~~DIAG-02~~ | ~~交付请求头脱敏规则~~ | **已闭合**（feature 005） |
+   | ~~DIAG-02~~ | ~~交付路径/URL 脱敏规则~~ | **已闭合**（feature 005） |
    | DIAG-02 | 验证模型输出样例 | 测试缺失 |
    | DIAG-03 | 验证磁盘满模拟 | 测试缺失 |
-   | DIAG-04 | 交付 outbox 接口 | 实现缺失（卡片明文要求「事务/outbox接口」） |
-   | DIAG-05 | 交付 HTTP trace 传播 | 实现缺失 |
+   | ~~DIAG-04~~ | ~~交付 outbox 接口~~ | **已闭合（带限制）**（feature 005）：接口 + 进程内实现，不跨进程重启 |
+   | ~~DIAG-05~~ | ~~交付 HTTP trace 传播~~ | **已闭合**（feature 005） |
    | DIAG-08 | D13-V05 浏览器矩阵 | 手动未执行 |
    | DIAG-09 | 验证从操作到失败步骤定位 | 手动未执行 |
    | DIAG-09 | 验证分页/暂停 | 手动未执行 |
@@ -355,6 +355,12 @@
    | DIAG-13 | 浏览器可导出脱敏包 | 手动未执行 |
 
    其中影响面最大的是 **DIAG-05 的 HTTP trace 传播未接线**（`handler/`、`middleware/` 中检索不到 `Pack`/`Unpack`/`traceparent`），它直接让 D13-V03「从请求跨队列到模拟 daemon」的首段断裂——队列与 WebSocket 两段都已自动化，唯独入口一段没有。
+
+   > **2026-09-14 更新（`specs/005-diag-trace-and-sanitize` 实施后）**：上表 15 条中的 **3 条实现缺失已闭合**（DIAG-02 两条、DIAG-04 一条、DIAG-05 一条，共 4 行），见各卡片表内的证据列。**其余 11 条未动**：DIAG-02「验证模型输出样例」与 DIAG-03「验证磁盘满模拟」仍是测试缺失，DIAG-09「交付 trace 瀑布」仍是实现缺失，6 条浏览器手动矩阵与 DIAG-13 的 3 条仍未执行。
+   >
+   > DIAG-04 的闭合**带限制**：交付的是接口与进程内实现，进程退出会丢失未派发项（`TestOutboxDoesNotSurviveTheProcess` 就是这条限制的断言）。持久落库版本列为后续任务。
+   >
+   > **本次不改动任何 D13-V 的状态**：§4.2 的 12 条仍按原样。已有代码不等于已验收，浏览器矩阵未逐项通过之前 DG-01 仍不满足。
 
 4. **27 个条目「代码存在但无测试」**——其中 DIAG-09（7 项）与 DIAG-13（4 项）集中在浏览器面板层。按 constitution 原则 II 这些不补 UI 单测，只能由用户手动验收，因此 **DG-01 的出口天然依赖一份尚不存在的完整浏览器验收报告**。
 5. **两项对表未做，需主任务在文档仓库完成**：
