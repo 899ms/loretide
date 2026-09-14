@@ -12,7 +12,8 @@ import (
 //
 //	FR-009  a rollback dispatches nothing; a commit dispatches
 //	FR-010  a failed dispatch is visible and does not take the caller down
-//	FR-010a a process exit loses undispatched items — asserted as a limit
+//	FR-010a a process exit loses undispatched items — asserted as a limit of
+//	        MemoryOutbox (feature 009 added the durable counterpart)
 //	FR-011  the queue is bounded and an overflow is counted, not silent
 //	FR-017  the signature does not assume the in-process implementation
 
@@ -146,14 +147,21 @@ func TestOutboxIsBoundedAndCountsWhatItDrops(t *testing.T) {
 
 // FR-010a. The limit is asserted rather than described, so that replacing the
 // in-process implementation with a durable one has a test to turn green.
-func TestOutboxDoesNotSurviveTheProcess(t *testing.T) {
+// The subject of this assertion is MemoryOutbox, and it stays true: the
+// in-process implementation is still here for installations and tests with no
+// database, so its limit still needs a test. Its reverse for the durable
+// implementation is TestPostgresOutboxSurvivesTheProcess; the two are a pair,
+// and reversing this one in place would have deleted the record of the limit
+// the surviving implementation still has.
+func TestMemoryOutboxDoesNotSurviveTheProcess(t *testing.T) {
 	rec := &recorder{}
 	o := newOutbox(rec)
 	tx := new(int)
 	_ = o.Register(context.Background(), tx, item("a"))
 
 	// A new outbox is what a restarted process gets. The staged record is gone:
-	// nothing outside this process ever knew about it.
+	// nothing outside this process ever knew about it. PostgresOutbox is the
+	// implementation for which this is not true.
 	restarted := newOutbox(rec)
 	if n := restarted.Settle(context.Background(), tx, true); n != 0 {
 		t.Fatalf("a restarted process dispatched %d items; the in-process outbox cannot know about them", n)

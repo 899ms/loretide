@@ -16,14 +16,28 @@ import (
 // log sink cannot take a request down. Neither one can express "must not exist
 // if the transaction rolls back, must be sent once it commits".
 //
-// LIMIT, DELIBERATE: this implementation is in process. A process that exits
-// between commit and dispatch loses the record, and nothing outside the process
-// ever knew about it. The specification records that as an accepted limit
-// (FR-010a) rather than an oversight, and TestOutboxDoesNotSurviveTheProcess
-// asserts it so that a durable implementation has a test to turn green. A
-// durable version — a table written inside the same transaction and drained
-// after it — is a separate task; the interface below is shaped so it can
-// replace this one without any caller changing.
+// There are two implementations of the interface below, and the difference
+// between them is exactly one property:
+//
+//   - MemoryOutbox is in process. A process that exits between commit and
+//     dispatch loses the record, and nothing outside the process ever knew
+//     about it. That is a LIMIT OF THIS IMPLEMENTATION, not of the feature, and
+//     TestMemoryOutboxDoesNotSurviveTheProcess still asserts it — it is kept
+//     precisely because MemoryOutbox is still here for installations and tests
+//     with no database.
+//   - PostgresOutbox (dispatch_postgres.go) writes the record through the
+//     caller's transaction, so a restart loses nothing; Drainer (drain.go)
+//     picks up whatever a dead process left behind.
+//     TestPostgresOutboxSurvivesTheProcess is the reverse of the assertion
+//     above, and the two are meant to be read as a pair.
+//
+// Neither promises exactly-once across a crash between a successful delivery
+// and the row being marked delivered: nothing without a distributed transaction
+// can, so the receiver has to be idempotent. See specs/009-diag-durable-outbox.
+//
+// The interface is unchanged from when MemoryOutbox was the only
+// implementation — TestOutboxCallersDependOnTheInterfaceOnly is the standing
+// assertion that a caller swaps implementations without an edit.
 
 // DispatchItem is one record awaiting dispatch. The four parts are what a
 // durable implementation needs: an id to address it, a kind to route it, the
@@ -33,6 +47,12 @@ type DispatchItem struct {
 	Kind           string
 	Payload        []byte
 	IdempotencyKey string
+	// Workspace scopes the record for troubleshooting and for cleanup that has
+	// to stay inside one workspace. The in-process implementation ignores it;
+	// the durable one stores it. It is not part of the record's identity, and
+	// adding it did not change the Outbox interface — see
+	// TestOutboxCallersDependOnTheInterfaceOnly.
+	Workspace string
 }
 
 // Outbox stages records against a transaction and settles them with it.
