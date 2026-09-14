@@ -54,7 +54,7 @@ LIMIT <batch>
 |---|---|
 | 派发失败 | `LogBuffer.Errors` → `Overview.sink_errors` |
 | 丢弃 | `LogBuffer.Dropped` → `Overview.dropped` |
-| 进入死信 | MUST 可被观察到（计数或技术日志事件），MUST NOT 只写进表里没人看的一列 |
+| 进入死信 | MUST 走**既有技术日志事件**，MUST NOT 新增计数器或指标名，MUST NOT 只写进表里没人看的一列。复用 `Errors` 会把「又失败一次」与「不再重试了」混成同一个数字 |
 
 **MUST NOT 新增任何指标名或 `Overview` 字段**（FR-017、SC-005）。
 
