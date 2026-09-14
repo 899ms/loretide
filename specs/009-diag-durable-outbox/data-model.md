@@ -8,11 +8,12 @@
 
 | 列 | 类型 | 规则 |
 |---|---|---|
+| `sequence` | `bigint GENERATED ALWAYS AS IDENTITY` | **实施期新增**。行的稳定标识。**`item_id` 不唯一**——空幂等键时同一个 id 可以有多行——所以 `Settle` 在事务提交后按「本事务登记了哪几行」把记录取回来时，没有它就没有可寻址的行。与模块既有两张表（`content_operation_audit`、`content_technical_log`）的 `sequence` 写法一致 |
 | `item_id` | `text NOT NULL` | `DispatchItem.ID`。寻址用；调用方给什么就存什么 |
 | `kind` | `text NOT NULL` | `DispatchItem.Kind`。路由用。**不设 `CHECK` 白名单**——白名单会让新增一种 kind 需要改迁移，而 kind 的合法性是调用方的事 |
 | `payload` | `bytea NOT NULL` | `DispatchItem.Payload`。**大小上限在 `Register` 阶段判定**，超限即丢弃并计数，不写表（FR-019） |
 | `idempotency_key` | `text NOT NULL DEFAULT ''` | 空串表示不去重，与 `MemoryOutbox` 现有行为一致（FR-013） |
-| `workspace_id` | `text NOT NULL DEFAULT ''` | 跟随模块既有三张表的列形；用于排障与按工作区清理，**不开放给前端查询**（FR-023） |
+| `workspace_id` | `text NOT NULL DEFAULT ''` | 跟随模块既有三张表的列形；用于排障与按工作区清理，**不开放给前端查询**（FR-023）。来源见下方 `DispatchItem.Workspace` |
 | `attempt_count` | `integer NOT NULL DEFAULT 0` | 已尝试派发次数 |
 | `next_attempt_at` | `timestamptz NOT NULL DEFAULT now()` | 早于它不认领；失败后按退避推后 |
 | `claimed_until` | `timestamptz` | **行级租约**（FR-009a）。NULL 或已过期即可被认领 |
@@ -23,6 +24,19 @@
 | `updated_at` | `timestamptz NOT NULL DEFAULT now()` | 最近一次状态变更 |
 
 **无 `FOREIGN KEY`、无 `REFERENCES`、无 `ON DELETE` / `ON UPDATE` 级联**（constitution 原则 V、FR-022）。`workspace_id` 与工作区表的关系由应用代码负责，与模块既有三张表的做法一致。
+
+### 实施期修正：`DispatchItem` 增加 `Workspace` 字段
+
+本文件原先列了 `workspace_id` 列，但 `DispatchItem` 只有 `ID` / `Kind` / `Payload` / `IdempotencyKey` 四个字段，**没有任何东西可以填它**。两条出路：给 `DispatchItem` 加一个字段，或从表里删掉这一列。删列是对本文件更大的偏离，因此选前者：
+
+```text
+DispatchItem{ ID, Kind, Payload, IdempotencyKey, Workspace }
+```
+
+- **`Outbox` 接口的方法集与签名一字未改**，FR-001 仍然成立——`TestOutboxCallersDependOnTheInterfaceOnly` 不做任何改动即通过。
+- `MemoryOutbox` **忽略**该字段，对外行为不变（FR-002、SC-006）。
+- 该字段**不参与记录的身份**：去重仍然只看 `IdempotencyKey`。
+- 值由 `Store.CommitRunWithDispatch` 用运行所属工作区**覆盖**写入，调用方在 item 里放什么都不作数——入口拥有 scoping，这样一条记录不可能被登记到别的工作区名下。
 
 ## 索引（各自单语句、单文件）
 
