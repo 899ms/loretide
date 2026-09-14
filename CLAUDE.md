@@ -242,6 +242,7 @@ Useful checks:
 ```bash
 pnpm typecheck
 pnpm test
+pnpm check:content-boundaries
 make test
 pnpm exec playwright test
 make check

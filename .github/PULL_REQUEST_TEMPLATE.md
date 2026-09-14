@@ -38,6 +38,7 @@ Closes #
 - [ ] I have included a thinking path that traces from project context to this change
 - [ ] I have run tests locally and they pass
 - [ ] I have added or updated tests where applicable
+- [ ] If this PR adds or changes a migration, sqlc query, or storage-layer code, every table it touches is owned by the module this PR changes (module list: `scripts/content-boundaries.json`; ownership table: docs/12 §2 in the documentation repository, branch `main`); cross-module table access is explained in the PR body
 - [ ] If this change affects the UI, I have included before/after screenshots
 - [ ] I have updated relevant documentation to reflect my changes
 - [ ] If I added a new runtime / coding tool / UI tab, I synced the change to **landing copy** (`apps/web/features/landing/i18n/`) and **relevant docs** (`apps/docs/content/docs/`)

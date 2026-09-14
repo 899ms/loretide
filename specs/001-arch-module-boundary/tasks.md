@@ -14,7 +14,7 @@
 
 ## Phase 1: Setup（基线）
 
-- [ ] T001 记录基线：在仓库根运行 `node --version`、`node --test scripts/check-content-boundaries.test.mjs`、`node scripts/check-content-boundaries.mjs`，把 Node 版本、13 个用例结果、扫描结果与耗时写入 `specs/001-arch-module-boundary/baseline.txt`（不入库，仅 PR 正文引用）
+- [x] T001 记录基线：在仓库根运行 `node --version`、`node --test scripts/check-content-boundaries.test.mjs`、`node scripts/check-content-boundaries.mjs`，把 Node 版本、13 个用例结果、扫描结果与耗时写入 `specs/001-arch-module-boundary/baseline.txt`（不入库，仅 PR 正文引用）
 
 ## Phase 2: Foundational
 
@@ -26,11 +26,11 @@
 
 **Independent Test**: quickstart §1–§3。
 
-- [ ] T002 [US1] 在 `package.json` 的 `scripts` 中、`check:ui-radii` 之后新增 `"check:content-boundaries": "node --test scripts/check-content-boundaries.test.mjs && node scripts/check-content-boundaries.mjs"`
-- [ ] T003 [US1] 在 `scripts/check.sh` 的 typecheck 步骤之后插入 `pnpm check:content-boundaries`，失败即退出（沿用该脚本现有的失败处理方式）
-- [ ] T004 [P] [US1] 在 `CLAUDE.md` → Verification → Useful checks 代码块中增加一行 `pnpm check:content-boundaries`
-- [ ] T005 [P] [US1] 在 `docs/development/content-boundary-checks.md` 开头「It runs in … via」段落之后，补一段本地入口说明：命令、与 CI 逐字相同、Node ≥ 22（CI 为 22）
-- [ ] T006 [US1] 执行 quickstart §1（通过 + 计时）、§2（负例失败与恢复）、§3（`grep` 命中 check.sh），把命令、退出码、输出片段追加到 `baseline.txt`；另附本次 CI（`loretide-content.yml`）运行链接作为 Linux 侧证据（FR-002）
+- [x] T002 [US1] 在 `package.json` 的 `scripts` 中、`check:ui-radii` 之后新增 `"check:content-boundaries": "node --test scripts/check-content-boundaries.test.mjs && node scripts/check-content-boundaries.mjs"`
+- [x] T003 [US1] 在 `scripts/check.sh` 的 typecheck 步骤之后插入 `pnpm check:content-boundaries`，失败即退出（沿用该脚本现有的失败处理方式）
+- [x] T004 [P] [US1] 在 `CLAUDE.md` → Verification → Useful checks 代码块中增加一行 `pnpm check:content-boundaries`
+- [x] T005 [P] [US1] 在 `docs/development/content-boundary-checks.md` 开头「It runs in … via」段落之后，补一段本地入口说明：命令、与 CI 逐字相同、Node ≥ 22（CI 为 22）
+- [x] T006 [US1] 执行 quickstart §1（通过 + 计时）、§2（负例失败与恢复）、§3（`grep` 命中 check.sh），把命令、退出码、输出片段追加到 `baseline.txt`；另附本次 CI（`loretide-content.yml`）运行链接作为 Linux 侧证据（FR-002）
 
 **Checkpoint**: US1 完成即可独立交付。
 
@@ -40,8 +40,8 @@
 
 **Independent Test**: quickstart §4。
 
-- [ ] T007 [P] [US2] 在 `.github/PULL_REQUEST_TEMPLATE.md` Checklist 中、「I have added or updated tests where applicable」之后插入 research D3 的检查项原文
-- [ ] T008 [US2] 同步修改 `.github/pull_request_template.md`（当前两文件内容相同，`cmp` 确认改后仍相同）
+- [x] T007 [P] [US2] 在 `.github/PULL_REQUEST_TEMPLATE.md` Checklist 中、「I have added or updated tests where applicable」之后插入 research D3 的检查项原文
+- [x] T008 [US2] 同步修改 `.github/pull_request_template.md`（当前两文件内容相同，`cmp` 确认改后仍相同）（主任务确认：仅一个模板文件，任务书误记）
 
 ## Phase 5: User Story 3 - 主任务凭证据回写 ARCH-01/02 状态 (Priority: P3)
 
@@ -49,14 +49,14 @@
 
 **Independent Test**: quickstart §5。
 
-- [ ] T009 [US3] 核查 Go 私有入口覆盖（research D4）：阅读 `scripts/check-content-boundaries.test.mjs` 第 7 行与第 36 行用例，确认 Go 分组导入中的跨模块非公开路径是否被判为违规；结论写入 T010 的表格「备注」列；若未覆盖，只记录，不改规则
-- [ ] T010 [US3] 在 `docs/development/content-boundary-checks.md` 末尾新增 `## Acceptance mapping (ARCH-01/02)`，表格 6 行：ARCH-01 交付 / 验收 / 验证，ARCH-02 交付 / 验收 / 验证；每行列「满足与否 / 证据（命令 + 退出码 + 文件或用例名）/ 备注」，并写明检查器为静态导入检查、不覆盖 SQL 所有权与 content 根目录以外代码（FR-006）
-- [ ] T011 [P] [US3] 运行 quickstart §5 的模块集合比对，把 12 个模块名与 docs/12 §2 的 11 个 + `diagnostics` 的对照结果写入同一节（预期差异 0）
+- [x] T009 [US3] 核查 Go 私有入口覆盖（research D4）：阅读 `scripts/check-content-boundaries.test.mjs` 第 7 行与第 36 行用例，确认 Go 分组导入中的跨模块非公开路径是否被判为违规；结论写入 T010 的表格「备注」列；若未覆盖，只记录，不改规则
+- [x] T010 [US3] 在 `docs/development/content-boundary-checks.md` 末尾新增 `## Acceptance mapping (ARCH-01/02)`，表格 6 行：ARCH-01 交付 / 验收 / 验证，ARCH-02 交付 / 验收 / 验证；每行列「满足与否 / 证据（命令 + 退出码 + 文件或用例名）/ 备注」，并写明检查器为静态导入检查、不覆盖 SQL 所有权与 content 根目录以外代码（FR-006）
+- [x] T011 [P] [US3] 运行 quickstart §5 的模块集合比对，把 12 个模块名与 docs/12 §2 的 11 个 + `diagnostics` 的对照结果写入同一节（预期差异 0）
 
 ## Phase 6: Polish
 
-- [ ] T012 `git diff --stat` 确认改动文件 ⊆ {package.json, scripts/check.sh, CLAUDE.md, docs/development/content-boundary-checks.md, .github/PULL_REQUEST_TEMPLATE.md, .github/pull_request_template.md}；超出即回退
-- [ ] T013 再次运行 `pnpm check:content-boundaries`，退出 0；准备 PR 正文：改动文件与用途、实际命令与退出码、未验证项（如 Go 私有入口未覆盖）、UI 影响：无、手动 UI Todo：无、回滚：撤销本 PR 提交
+- [x] T012 `git diff --stat` 确认改动文件 ⊆ {package.json, scripts/check.sh, CLAUDE.md, docs/development/content-boundary-checks.md, .github/PULL_REQUEST_TEMPLATE.md, .github/pull_request_template.md}；超出即回退
+- [x] T013 再次运行 `pnpm check:content-boundaries`，退出 0；准备 PR 正文：改动文件与用途、实际命令与退出码、未验证项（如 Go 私有入口未覆盖）、UI 影响：无、手动 UI Todo：无、回滚：撤销本 PR 提交
 
 ## Dependencies
 
