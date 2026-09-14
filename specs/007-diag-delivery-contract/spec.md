@@ -55,6 +55,16 @@
 
 不改 `content-boundaries.json` 的模块图与依赖规则；不改既有边界检查器的任何规则；不改 CI 触发条件；不新增迁移；不实现任何业务模块；不改诊断包的既有行为。
 
+## Clarifications
+
+### Session 2026-09-14
+
+- Q: 错误码枚举当前未导出，合同怎么处理？ → A: 合同清单只写「向诊断包申请导出错误码枚举」，并把导出列为**后续任务**。**本功能不改生产代码**，静态检查 **MUST NOT** 要求该枚举存在。
+- Q: 检查脚本用什么作为最小证据？ → A: **三条同时满足**才算有证据，缺任一条要报出具体缺哪条：(1) `server/internal/content/<module>/` 内至少一个**非测试** `.go` 文件 import 了 `content/diagnostics`；(2) 同目录内至少出现一次**审计 / 技术日志 / trace 三类调用点之一**；(3) 至少一个 `_test.go` 引用 `diagnostics`。
+- Q: 合同要约束哪几个 content 根？ → A: **静态检查只约束 `server/internal/content/<module>/`**。`packages/core/content` 与 `packages/views/content` 的接入要求写进**合同文本**（消费诊断错误对象、不泄漏正文等），但本功能**不做前端侧静态检查**，列为后续任务。
+- Q（未答，按推荐项暂定）: 检查脚本本功能是否加进 `loretide-content.yml`？ → A: **暂定加入**，只新增运行步骤、触发条件一字不动。理由见 Assumptions；主任务可一句话改为「只交付脚本，CI 接入另立任务」。
+- Q（未答，按推荐项暂定）: 豁免登记放在哪里？ → A: **暂定放在本功能自有的 `scripts/diagnostics-contract.json`**，不碰 `scripts/content-boundaries.json`——后者是 ARCH-01/02 的产物，且本功能的既定姿态是尽量不动既有共享配置。若主任务更希望与 `adapters` 并列写进 `content-boundaries.json`，改动量是一行。
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - 新模块的作者知道「接入诊断」到底要做哪几件事 (Priority: P1)
@@ -122,20 +132,25 @@
 
 - **FR-001**: 交付 MUST 包含一份写下来的诊断接入清单，逐项覆盖：审计写入点、技术日志字段、trace 传播、错误码枚举、模拟场景与回归夹具。
 - **FR-002**: 清单的每一项 MUST 指向一个真实存在的公共入口或一个可执行的动作，MUST NOT 使用无法判定的措辞。
-- **FR-003**: 清单 MUST NOT 要求模块引用当前未导出的符号。错误码枚举目前私有（Current State §3），合同 MUST 明确该项的可执行做法 [NEEDS CLARIFICATION: 本功能只在清单里描述「向诊断包申请导出」并把导出列为后续任务（不改生产代码），还是把导出 `codes` 作为本功能的一部分交付（一处生产代码改动）？]。
+- **FR-003**: 清单 MUST NOT 要求模块引用当前未导出的符号。错误码枚举目前私有（Current State §3），合同清单 MUST 把该项写为「向诊断包申请导出错误码枚举」并注明导出是**后续任务**。本功能 MUST NOT 改动任何生产代码，静态检查 MUST NOT 把该枚举的存在作为判定条件。
 - **FR-004**: 交付 MUST 包含一个静态检查脚本，核对每个**已落地**的 content 模块具备诊断接入的最小证据。
 - **FR-005**: 检查 MUST 对「在模块图中声明但目录尚不存在」的模块保持沉默——既不失败也不告警。
-- **FR-006**: 检查失败时 MUST 指出是哪个模块缺哪一项，MUST NOT 只给一个总的失败。
+- **FR-006**: 检查失败时 MUST 指出是哪个模块缺哪一项，MUST NOT 只给一个总的失败（判定粒度见 FR-011a）。
 - **FR-007**: 检查脚本 MUST 有自己的测试套件，含正例与负例；负例 MUST 在对应规则被移除时变红。
 - **FR-008**: 检查脚本 MUST 与 `scripts/check-content-boundaries.mjs` 同类：纯 Node、无新增依赖、可独立运行、退出码表达结果。
 - **FR-009**: 检查 MUST NOT 修改 `.github/workflows/loretide-content.yml` 的触发条件；接入 CI 时只新增运行步骤。
 - **FR-010**: `.github/PULL_REQUEST_TEMPLATE.md` MUST 新增一条交付检查项，措辞可判定，与既有的存储所有权项并列。
-- **FR-011**: 「最小证据」的判定标准 MUST 明确且可静态核对 [NEEDS CLARIFICATION: 判定为「模块目录内出现对 diagnostics 包的 import」，还是「出现审计 / 技术日志 / trace 三类调用点」，还是「前者 + 模块内存在引用 diagnostics 的测试文件」？三者的误报率与实现复杂度依次上升]。
+- **FR-011**: 「最小证据」MUST 由以下**三条同时满足**构成，缺任一条即判定为无证据：
+  - **E1 import**：`server/internal/content/<module>/` 内至少一个**非测试** `.go` 文件 import 了 `content/diagnostics`；
+  - **E2 调用点**：同目录内至少出现一次审计、技术日志、trace 三类调用点**之一**；
+  - **E3 测试**：至少一个 `_test.go` 引用 `diagnostics`。
+- **FR-011a**: 检查失败时 MUST 点名缺的是 E1 / E2 / E3 中的**具体哪一条**，MUST NOT 只报「该模块无证据」。
 - **FR-012**: 合同 MUST 说明模块的诊断接入写在模块目录之外时如何登记豁免，MUST NOT 只能靠关闭检查绕过。
 - **FR-013**: 交付 MUST 在文档与检查表两处落地「模拟不代替真实通过」：模拟证据与真实执行器证据分列，后者在执行器禁用期间一律记为「未执行」。
 - **FR-014**: MUST NOT 存在一个可在真实执行器未跑的情况下达成的「全绿」状态。
 - **FR-015**: 本功能 MUST NOT 改动 `content-boundaries.json` 的模块图与依赖规则、既有边界检查器的规则、CI 触发条件；MUST NOT 新增迁移；MUST NOT 实现任何业务模块。
-- **FR-016**: 合同覆盖的 content 根范围 MUST 明确 [NEEDS CLARIFICATION: 只约束 `server/internal/content/<module>/`，还是同时约束 `packages/core/content/<module>/` 与 `packages/views/content/<module>/`？后两者今天同样只有 `diagnostics` 落地，且前端侧的「审计写入点」语义与服务端不同]。
+- **FR-016**: **静态检查** MUST 只约束 `server/internal/content/<module>/`；MUST NOT 对 `packages/core/content/` 与 `packages/views/content/` 作任何判定。
+- **FR-016a**: **合同文本** MUST 另列一节写明前端两根的接入要求（消费诊断错误对象、`next_action` 的呈现、不泄漏正文等），并 MUST 注明这些要求**当前无静态检查**、由人工审查把关，前端侧检查列为后续任务。
 - **FR-017**: 交付 MUST 更新 `docs/development/diagnostics-acceptance-mapping.md` 中 D13-V12 与 DIAG-13 的对应行，MUST NOT 声称 D13-V12 整体通过——第二条子句（真实 Codex 实测）在执行器禁用期间不可能通过。
 
 ### Key Entities
@@ -150,7 +165,7 @@
 ### Measurable Outcomes
 
 - **SC-001**: 拿接入清单对照 `diagnostics` 模块逐条核对，每条都能指到真实代码，无法指到的条目数为 0。
-- **SC-002**: 造一个有目录、无诊断接入的模块夹具，检查退出码非 0 且输出点名该模块与缺项；补上最小接入后退出码为 0。
+- **SC-002**: 造三个分别只缺 E1 / E2 / E3 的模块夹具，检查对每个都退出码非 0 且输出点名该模块与**具体缺失的那一条**；三条补齐后退出码为 0。
 - **SC-003**: 在当前代码上运行检查，退出码为 0，且不对 11 个尚无目录的模块产生任何输出。
 - **SC-004**: 检查脚本的测试套件在对应规则被移除时至少一条用例变红（变异验证，非「写完看绿」）。
 - **SC-005**: `.github/workflows/loretide-content.yml` 的 `on:` 段在本功能前后逐字节一致。
@@ -168,3 +183,5 @@
 - `diagnostics` 模块自身作为「已接入」的参照样本，不需要为满足本合同而改动。
 - 模块图以 `scripts/content-boundaries.json` 为唯一来源，本功能只读不写。
 - 本功能不产出任何手动 UI 验收项——没有页面改动。
+- **暂定（待主任务确认）**：检查脚本在本功能内加入 `loretide-content.yml`，只新增运行步骤、触发条件不动。现在加的理由是时机——等第一个新模块落地时再加，那个 PR 会同时背上「实现模块」与「引入新红线」两件事，最可能的结果是当场把检查删掉；现在加，它先在 `diagnostics` 上跑绿，新模块落地时自然生效。
+- **暂定（待主任务确认）**：豁免登记放在本功能自有的 `scripts/diagnostics-contract.json`，不碰 `scripts/content-boundaries.json`。后者是 ARCH-01/02 的交付物；改用它的 `adapters` 并列写法只需一行改动。
