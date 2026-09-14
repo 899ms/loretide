@@ -1,6 +1,6 @@
 # Loretide local development
 
-Read [AI collaboration](ai-collaboration.md) before claiming tasks and [Multica design requirements](design/README.md) before UI changes.
+Read [AI collaboration](ai-collaboration.md) before claiming tasks and [Multica design requirements](design/README.md) before UI changes. For a feature that goes through Spec Kit, [Spec Kit delivery workflow](spec-kit-workflow.md) is the operating procedure from spec to merge, including the three rules that decide whether a delivery counts: a skip is not a pass, a stub is not the target platform, a simulation is not a real pass.
 
 The active environment is native Windows on the current computer. API, Web, restored PostgreSQL, development login and the diagnostics overview have been verified locally. See [Windows startup, paths and limitations](native-windows.md). Full business acceptance, real executor acceptance and Windows reboot auto-start remain incomplete. Historical native-linux and reliability reports describe the previous VPS; they do not establish local readiness. The paused Sol task must not be resumed automatically.
 

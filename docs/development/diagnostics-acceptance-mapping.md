@@ -192,7 +192,7 @@
 |---|---|---|---|
 | 交付可控时间 | `Simulate()` 虚拟时钟；面板 `text080 = 固定种子与虚拟时钟` | 自动测试已通过 | `TestSimulatorRegressionDeterministicTimeAndIdentifiers` |
 | 交付可控种子 | `Simulate(..., seed, ...)`；面板 `text082 = 固定种子` | 自动测试已通过 | 同上 |
-| 交付需求 §7 全部故障场景 | `simulator.go` `Scenarios` 共 **16** 个：`normal` `slow` `timeout` `cancel` `reconnect` `duplicate` `late` `file_missing` `file_changed` `denied` `database` `model_auth` `model_quota` `schema` `search` `clock_skew` | 自动测试已通过 | `TestEverySimulatedFaultAndDeterministicTime`、`TestSimulatorRegressionScenarioContracts`。**未核对**该 16 个是否等于 `docs/13` §7 的完整列举——§7 原文不在本次读取范围（只读了第 9 节），需主任务对表 |
+| 交付需求 §7 全部故障场景 | `simulator.go` `Scenarios` 共 **16** 个：`normal` `slow` `timeout` `cancel` `reconnect` `duplicate` `late` `file_missing` `file_changed` `denied` `database` `model_auth` `model_quota` `schema` `search` `clock_skew` | 自动测试已通过 | `TestEverySimulatedFaultAndDeterministicTime`、`TestSimulatorRegressionScenarioContracts`。**对表已完成**（主任务 2026-09-14 于 `app-main` `c9cc63eca` 核对）：`docs/13` §7 列举的 **15 项全部在这 16 个之内**，多出的一个是 `clock_skew`。**超集不是缺口**——多一个场景不会让「全部列举故障可独立复现」不成立 |
 | 交付隔离复现入口 | handler `ContentDiagnosticSimulate`；`Service.Enabled` 门禁 | 自动测试已通过 | `TestContentDiagnosticsAuthAndFaultGate` |
 | 不默认调用真实模型 | `LORETIDE_EXECUTION_POLICY=disabled`；`transport.go` 非测试环境拒绝 | 自动测试已通过 | `TestTransportNonTestDenied`；另有 `pkg/executionpolicy` 门禁测试在 CI |
 | 验证场景可重复 | `TestSimulatorRegressionDeterministicTimeAndIdentifiers` | 自动测试已通过 | — |
@@ -262,7 +262,7 @@
 | **V06** | 输入快照固定版本和授权 | 已自动化 `TestSnapshotImmutableAndRevocation`、`TestSnapshotRegressionInputImmutability` |
 | V06 | 旧文件缺失明确不可完整复现 | 已自动化 `TestSnapshotRegressionReproductionGaps` |
 | V06 | 不新建自动媒体快照 | **无覆盖**（结构上无二进制字段，但无显式负例） |
-| **V07** | 固定数据与全部列举故障可独立复现 | 已自动化 `TestEverySimulatedFaultAndDeterministicTime`、`TestSimulatorRegressionDeterministicTimeAndIdentifiers`。**注**：「全部列举」与 `docs/13` §7 的对表未做 |
+| **V07** | 固定数据与全部列举故障可独立复现 | 已自动化 `TestEverySimulatedFaultAndDeterministicTime`、`TestSimulatorRegressionDeterministicTimeAndIdentifiers`。**「全部列举」的对表已完成**（主任务 2026-09-14 于 `app-main` `c9cc63eca` 核对）：`docs/13` §7 的 15 项全部落在 `Scenarios` 的 16 个里，多出 `clock_skew` |
 | V07 | 隔离实例之外注入被拒绝 | 已自动化 `TestTransportNonTestDenied`、`TestSimulatorRegressionRejectionAndSecurity` |
 | V07 | 不产生真实发布/审批/指标 | 已自动化 `TestSimulationCannotAuthorizeOrReplayHumanActions` |
 | **V08** | 诊断包可预览导出内容 | **需手动** V08-2、V08-3 |
@@ -321,7 +321,7 @@
 | D13-V04 | **部分** | 六类错误区分已自动化；界面呈现与下一动作无覆盖 |
 | D13-V05 | **部分** | 服务端与 core 状态机已自动化；浏览器 15 条全部待用户验证 |
 | D13-V06 | **部分** | 前两条子句已自动化；「不新建自动媒体快照」无显式负例 |
-| D13-V07 | **部分** | 三条子句均已自动化；但「全部列举故障」与 `docs/13` §7 的对表**未做** |
+| D13-V07 | **部分** | 三条子句均已自动化，**且「全部列举故障」与 `docs/13` §7 的对表已完成**（15 项全覆盖，`Scenarios` 多一个 `clock_skew`）。仍记「部分」而非「满足」的唯一原因是 **V07 没有对应的浏览器手动清单**，见 §4.3 第 1 条 |
 | D13-V08 | **部分** | 字段级脱敏与跨账号拒绝已自动化；成品包预览/负例 11 条待用户验证 |
 | D13-V09 | **部分** | 五条子句全部由 `regression.test.ts` 的纯函数覆盖（定位原故障 / 场景 / 模块 / 代码版本 / 未运行不当通过）；**浏览器侧仍全部手动**（`specs/006` V-1 ～ V-6、L-1 ～ L-5，11 条待用户验证）。**2026-09-14**：由「未满足」改为「部分」，因 #37 补齐了三条此前无覆盖的子句 |
 | D13-V10 | **未满足** | 四条子句中三条无覆盖；真实重跑因执行器禁用尚不可验证 |
@@ -388,9 +388,9 @@
    > **本次不改动 `Store.Audit` 与 `Store.CommitRun` 的语义**：新增的同事务入口 `CommitRunWithDispatch` 与它们并列，`CommitRun` 的事务体被原样提取为私有函数供两者共用。
 
 4. **24 个条目「代码存在但无测试」**（上一版 25，#44 的实施转化了 1 项）——其中 DIAG-09（7 项）与 DIAG-13（2 项）集中在浏览器面板层。按 constitution 原则 II 这些不补 UI 单测，只能由用户手动验收，因此 **DG-01 的出口天然依赖一份尚不存在的完整浏览器验收报告**。
-5. **两项对表未做，需主任务在文档仓库完成**：
-   - `simulator.go` 的 16 个场景是否等于 `docs/13` §7 的完整列举（本次只读了 §9，未读 §7）；
-   - 迁移 `468`～`473` 是否满足「无 FK、索引全部 `CONCURRENTLY`」（仓库现有迁移测试不检查这两项）。
+5. **对表：一项已完成，一项仍未做**：
+   - ~~`simulator.go` 的 16 个场景是否等于 `docs/13` §7 的完整列举~~ —— **已完成**（主任务 2026-09-14 于 `app-main` `c9cc63eca` 核对）：§7 列举 **15 项，全部在 `Scenarios` 之内**，多出的一个是 `clock_skew`。`Scenarios` 是 §7 的**超集**，不构成缺口。
+   - 迁移 `468`～`473` 是否满足「无 FK、索引全部 `CONCURRENTLY`」（仓库现有迁移测试不检查这两项）—— **仍未做**。
 
 ## 5. 剩余实现缺口（下一份 spec 的输入）
 
