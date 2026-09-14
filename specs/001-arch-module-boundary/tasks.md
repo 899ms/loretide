@@ -41,7 +41,7 @@
 **Independent Test**: quickstart §4。
 
 - [x] T007 [P] [US2] 在 `.github/PULL_REQUEST_TEMPLATE.md` Checklist 中、「I have added or updated tests where applicable」之后插入 research D3 的检查项原文
-- [x] T008 [US2] 同步修改 `.github/pull_request_template.md`（当前两文件内容相同，`cmp` 确认改后仍相同）
+- [x] T008 [US2] 同步修改 `.github/pull_request_template.md`（当前两文件内容相同，`cmp` 确认改后仍相同）（主任务确认：仅一个模板文件，任务书误记）
 
 ## Phase 5: User Story 3 - 主任务凭证据回写 ARCH-01/02 状态 (Priority: P3)
 
