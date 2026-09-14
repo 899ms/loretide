@@ -6,7 +6,7 @@
 
 ## Summary
 
-四个纯函数进 `packages/core/content/diagnostics/`，一个视图改写在 `packages/views/content/diagnostics/index.tsx`，一份手动 UI 清单。纯函数负责层级构造、时间轴计算、四态判定与四项定位；视图只消费它们的输出。Clarifications 已定：不动任何 Go 代码，不新增路由，不做概览聚合，上限 200 且按错误码保留祖先链。
+三个纯函数进 `packages/core/content/diagnostics/`：`buildTraceWaterfall`、`describeRegressionVerdict`、`describeRunLinkage`。加上一个视图改写（`packages/views/content/diagnostics/index.tsx`）与一份手动 UI 清单。层级构造、时间轴计算、折叠选择三项职责都由 `buildTraceWaterfall` 一个函数承担——职责有五项，函数是三个，不要把两者对应起来数。Clarifications 已定：不动任何 Go 代码，不新增路由，不做概览聚合，上限 200 且按错误码保留祖先链。
 
 ## Technical Context
 
@@ -26,7 +26,7 @@
 
 **Constraints**: 不改 Go 代码；不新增路由；不加概览指标；不写 UI 单测；输出不得包含密钥（沿用既有 `safe_message` 口径）
 
-**Scale/Scope**: 4 个纯函数 + 1 个视图文件改写 + 2 个测试文件 + 1 份手动清单 + 少量 i18n 文案键
+**Scale/Scope**: 3 个纯函数 + 1 个视图文件改写 + 2 个测试文件 + 1 份手动清单 + 少量 i18n 文案键
 
 ## Constitution Check
 
@@ -91,7 +91,7 @@ packages/views/locales/*/common.json   # 改：新增 diagnostics 文案键（�
 
 ## Complexity Tracking
 
-无违反项。四个函数分两个文件而非一个，是因为瀑布与回归关联是两条独立的验收线（US1 与 US2/US3），分开后任一条可单独交付与回退。
+无违反项。三个函数分两个文件而非一个，是因为瀑布与回归关联是两条独立的验收线（US1 与 US2/US3），分开后任一条可单独交付与回退。
 
 ## Phase 0 输出
 

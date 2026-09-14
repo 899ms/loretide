@@ -33,7 +33,7 @@ WaterfallResult = {
 3. **失败可见性**：任一 `errorCode` 非空的 span 必定出现在 `rows` 中，且其完整祖先链也在 `rows` 中——即使发生折叠（FR-004 / D3）。
 4. **非负偏移**：所有 `startOffsetMs >= 0`，且至少有一行为 0（基准点自身）。空输入除外。
 5. **无 NaN**：任何 `startOffsetMs` / `durationMs` 均不为 `NaN`，即使 `occurredAt` 无法解析（D2）。
-6. **不夹取**：`clockSkew` 行的 `startOffsetMs` 是其真实偏移，**不**被修正到父区间内（FR-002a）。
+6. **不夹取**：`clockSkew` 行的 `startOffsetMs` 是其真实偏移，**不**被修正到父区间内（FR-014）。
 7. **数量守恒**：`totalSpans === events.length`；所有 `collapsed` 行的 `collapsedCount` 之和 + `kind="span"` 行数 === `totalSpans`。
 
 ## 边界输入
@@ -43,6 +43,7 @@ WaterfallResult = {
 | `[]` | `rows: []`, `totalSpans: 0`, `collapsed: false`；调用方据此显示「本次运行没有可展示的 span」 |
 | 单个 span | 一行，`depth: 0`, `startOffsetMs: 0` |
 | 全部 `durationMs` 为 0 | 正常返回，不除零；宽度由调用方按最小可见宽度渲染 |
+| 某 span `durationMs` 为负 | 该行 `durationMs` 归一为 0 且 `anomaly: "invalidDuration"`；不得产生负宽度（spec Edge Cases / data-model 异常优先级第 5 级） |
 | `parentSpanId` 指向不存在的 span | 该行 `depth: 0`, `anomaly: "orphan"` |
 | `a→b→a` 成环 | 环上节点 `depth: 0`, `anomaly: "cycle"`，函数返回 |
 | 自引用（`parentSpanId === spanId`） | 同上，按 `cycle` 处理 |
