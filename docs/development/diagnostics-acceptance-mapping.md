@@ -45,7 +45,7 @@
 | 交付凭据字段准入与脱敏 | `log.go` `Sanitize()`、`safeToken()`、`oneOf()` | 自动测试已通过 | `TestLogRegressionSanitizeRules` |
 | 交付请求头脱敏规则 | `log.go` `headerAdmission()` 三档逐名准入 + 四条后缀模式（`*-token`/`*-secret`/`*-key`/`*-password`），未列入者默认不记；`headersPresent()` 只记名称 | 自动测试已通过 | `TestHeaderAdmissionTiers`、`TestHeadersPresentRecordsNamesOnly`（feature 005） |
 | 交付路径/URL 脱敏规则 | `log.go` `requestRoute()` / `safeRoute()`：只记注册时的路由模板 + 方法 + 状态码，不记原始路径、查询串取值与键名、路径哈希；无模板时留空而非回退 | 自动测试已通过 | `TestRequestRouteKeepsThePatternAndNothingElse`、`TestSanitizeDropsWholeValuesRatherThanTrimmingThem`、`TestContentDiagnosticExportCarriesNoRequestSecrets`（feature 005） |
-| 交付私有正文脱敏 | `Event.safe_message` 为固定枚举文案，不承载自由正文 | 代码存在但无测试 | 「不承载正文」由结构保证，未见针对「正文被塞入其他字段」的负例 |
+| 交付私有正文脱敏 | `Event.safe_message` 为固定枚举文案，不承载自由正文 | 自动测试已通过 | `TestModelOutputSamplesNeverSurviveSanitize` 把模型输出样本**逐一塞进 13 个字段**（`Step`/`Build`/`Version`/`Message`/`Next`/`Code`/`Component`/`Action`/`Outcome`/`Severity`/`ActorKind`/`Route`/`Upstream`）逐字段断言不残留；`TestLogRegressionSanitizeRules` 另有三处断言 `Message` 被错误码固定文案覆盖，其中一处**注入的正是一段恶意自由文本**。该行原备注要的「正文被塞入其他字段的负例」即此。**测试早于本次核实就存在（feature 005 / #32），本次只补引用**（feature 010） |
 | 供全部 sink 及导出复用 | `SlogHandler` 与 `Store.Technical` 均经 `Sanitize()`；`Export` 复用同一 `Event` | 自动测试已通过 | `TestLogRegressionSlogHandlerLeakingPrevention` |
 | 验证嵌套字段 | `TestLogRegressionSanitizeRules` 覆盖字段级规则 | 代码存在但无测试 | 未见**嵌套**结构的负例；`Event` 为扁平结构，嵌套场景不适用但卡片明确要求 |
 | 验证异常文本 | `TestSecretsNeverEnterTechnicalLog` | 自动测试已通过 | — |
@@ -60,7 +60,7 @@
 | 交付结构化 slog 适配 | `log.go` `SlogHandler` | 自动测试已通过 | `TestLogRegressionSlogHandlerLeakingPrevention` |
 | 交付有界缓冲 | `log.go` `LogBuffer{capacity, Dropped, Errors}` | 自动测试已通过 | `TestLogRegressionBufferCapacities`、`TestLogRegressionConcurrentAppendAndEvents` |
 | 交付滚动存储/索引 | `store.go` `PruneTechnical()`（按 `received_at` 与 `sequence` 双条件裁剪）；迁移 `468`～`473` | 自动测试已通过 | `TestPostgresAuditRollbackIsolationAndRetention` 覆盖保留裁剪 |
-| 交付级别配置 | `Event.severity`；`limits.go` | 代码存在但无测试 | 未见「按级别过滤写入」的配置路径与测试 |
+| 交付级别配置 | `Event.severity` 受 `Sanitize` 的四值枚举收敛（`log.go` `oneOf("debug","info","warn","error")`）；`limits.go` `ConfigureLimits` 的 `MaxLogs`(100..100000) 与 `Retention`(1..90 天) | 自动测试已通过 | `TestLogRegressionSanitizeRules`（非法级别收敛为 `unknown`）、`TestDiagnosticLimitsRejectInvalidConfiguration`（两项配置的边界与拒绝非法值）。**缺口性质更正（feature 010）**：卡片要求的「**按级别过滤写入**」在生产代码中**不存在**——`ConfigureLimits` 只有上述两项，全仓没有任何按 `severity` 过滤写入的分支。**缺的是功能不是测试**，已登记为后续任务，见 §4.3；写测试无法闭合它 |
 | 交付保留配置 | `store.go` `Store.Retention` / `Store.MaxLogs`；`limits.go` 校验 | 自动测试已通过 | `TestDiagnosticLimitsRejectInvalidConfiguration` |
 | 交付丢弃可见状态 | `Metrics.Dropped` / `Metrics.SinkErrors` 进入 `Overview` | 自动测试已通过 | `TestPostgresFullScenariosExportAndHealth` |
 | 验证写失败 | `Store.Technical` 失败时 `s.Log.Errors.Add(1)` 而不返回错误 | 自动测试已通过 | handler 侧 `TestContentDiagnosticWritesCoordinateWithWorkspaceDelete/technical_is_dropped_after_delete_commits` |
@@ -81,7 +81,7 @@
 | 验证成功/失败/回滚事件 | `CommitRun` 的 `failAudit` 分支 | 自动测试已通过 | `TestPostgresAuditRollbackIsolationAndRetention` |
 | 验证重复事件 | `Receiver.Receive()` 去重返回 `DUPLICATE` | 自动测试已通过 | `TestSimulatorRegressionReceiverContracts`、`TestWebSocketQueuePropagationDuplicateAndRevocation` |
 | 关键审计失败不得伪报业务成功 | `CommitRun` 审计失败即整体回滚 | 自动测试已通过 | `TestContentDiagnosticWritesCoordinateWithWorkspaceDelete/run_and_audit_are_rejected_after_delete_commits` |
-| 遵守无 FK / 并发索引迁移约束 | 迁移 `468_content_diagnostics`～`473_content_log_scope` | 代码存在但无测试 | 本次**未**逐文件核对迁移中是否无 `REFERENCES`、索引是否全部 `CONCURRENTLY`；仓库另有 `TestMigrationNumericPrefixesAreUnique` / `TestMigrationFilesHaveMatchingDirections`，但二者不检查这两项约束 |
+| 遵守无 FK / 并发索引迁移约束 | 迁移 `468_content_diagnostics`～`476_content_dispatch_outbox_due` | 自动测试已通过 | `TestContentMigrationConstraints`（feature 010）逐文件核对编号 ≥ 468 且文件名含 `content_` 的 **18 个迁移文件**：R1 无 `REFERENCES`/`FOREIGN KEY`、R2 无 `CASCADE`、R3 每条 `CREATE INDEX` 必须 `CONCURRENTLY`、R4 含并发索引的文件语句数为 1。判定前剥掉注释与字符串，另有四条负例夹具与一条「注释不误报」用例。**#48 记录的那次人工核对由此变成每次 CI 都跑的断言**（CI 的 `-run` 过滤已加入该测试名，触发段未动） |
 
 ### DIAG-05 · 贯通异步追踪（验收 D13-V03）
 
@@ -90,7 +90,7 @@
 | 交付 HTTP trace 传播 | `middleware/trace.go` `Trace`（全部 API 路由，建本实例 trace、回传 `X-Diagnostic-Trace`）与 `AdoptDaemonTrace`（仅认证后的 daemon 路径采信入站 `traceparent`）；`daemon/client.go` 出站注入 | 自动测试已通过 | `TestTracePropagationAtTheBoundary`、`TestAdoptDaemonTraceOnlyAfterDaemonAuthentication`、`TestContentDiagnosticTraceRunsThroughQueueAndDaemon`（HTTP→queue→daemon 三段同 trace）、`TestTracePropagatesWithoutRecordingOutsideDiagnostics`（传播全局、记录不变）（feature 005） |
 | 交付队列消息 trace 传播 | `transport.go` `DecodeQueuedEnvelope()` | 自动测试已通过 | `TestWebSocketQueuePropagationDuplicateAndRevocation` |
 | 交付 WebSocket/模拟 daemon 传播 | `transport.go` `ServeSimulationTransport()` | 自动测试已通过 | 同上 |
-| 交付结果回写 trace | `Run.Events` 携带 `operation_id`/`trace_id` | 代码存在但无测试 | 未见「回写链路」独立用例 |
+| 交付结果回写 trace | `Run.Events` 携带 `operation_id`/`trace_id`；`CommitRun` 在同一事务内把它们复制进审计事件 | 自动测试已通过 | `TestCommittedRunWritesBackItsOperationAndTraceIDs`（feature 010，DB 背书）走完「模拟 → 提交落库 → 读回」，断言读回的审计事件的 `trace_id`/`operation_id` **等于**运行自身的值。**断言相等而非非空**——`CommitRun` 落库前执行 `saved.Events = nil`，运行行不存事件，复制若产生一个新随机 id，非空断言依然会绿，而面板上那条追踪将指向不存在的地方 |
 | 交付重试 attempt | `Envelope.Attempt`；`Event.attempt` | 自动测试已通过 | `TestTracePropagationAndUntrustedIdentity` |
 | 交付去重序号 | `Envelope.Sequence`；`Receiver` | 自动测试已通过 | `TestSimulatorRegressionReceiverContracts` |
 | 验证父子链 | `Child()`；`TestTracePropagationAndUntrustedIdentity` | 自动测试已通过 | — |
@@ -122,12 +122,12 @@
 | 交付组件健康汇总 | `service.go` `Overview()` 汇总 `web/files/daemon/executor/search` 五组件 | 自动测试已通过 | `TestPostgresFullScenariosExportAndHealth` |
 | 交付心跳过期 | `Overview()`：`now.Sub(*c.LastSeen) > 30s` → `unavailable` / `heartbeat expired` | 自动测试已通过 | 同上 |
 | 交付版本 | `Component.Version`；`Overview.Build` | 自动测试已通过 | 同上 |
-| 交付队列统计 | `Metrics.QueueWait` | 代码存在但无测试 | 字段存在；未见断言其取值来源的用例 |
+| 交付队列统计 | `Metrics.QueueWait` | 自动测试已通过 | `TestOverviewQueueWaitCountsOnlyQueueEvents`（feature 010，DB 背书）：3 条 `component=queue`、40ms 的事件 → `QueueWait=120`；再写入 4 条 500ms 的非队列事件后 `QueueWait` **保持 120**，同时样本数升至 7（证明那 4 条确实入库）。**反面断言是关键**——只验正面时，删掉 `component=="queue"` 判断改为全部累加依然会绿 |
 | 交付耗时/错误/丢弃统计 | `Metrics{Count,Errors,P50,P95,Retries,Cancelled,Dropped,SinkErrors}` | 自动测试已通过 | `TestPostgresFullScenariosExportAndHealth` |
 | 未连接执行器明确未验证 | 无心跳时 `Status = "unverified"`，`Reason = "No real component heartbeat; simulation is separate"` | 自动测试已通过 | 同上；这是 D13-V01「不把未接入显示成功」的关键实现 |
 | 验证组件断开 | 心跳过期分支 | 自动测试已通过 | 同上 |
 | 验证慢响应 | `Metrics.P50` / `P95`；场景 `slow` | 自动测试已通过 | `TestEverySimulatedFaultAndDeterministicTime` |
-| 验证样本不足 | `Metrics.P95` 为 `*int64`（可空，样本不足时为 null） | 代码存在但无测试 | 未见专门断言「样本不足 → P95 为 null」的用例 |
+| 验证样本不足 | `Metrics.P95` 为 `*int64`（可空，样本不足时为 null） | 自动测试已通过 | `TestOverviewP95IsNullUntilThereAreEnoughSamples`（feature 010，DB 背书）**在阈值两侧各断言一次**：19 个样本 → `P95` 为 null；第 20 个样本写入后 → 非 null。只验一侧等于没验边界——只验 null 侧时把阈值改成 1000 也绿，只验非 null 侧时恒返回一个值也绿 |
 | 验证时钟偏差 | `Overview()`：`LastSeen` 超前 5 秒 → `unknown` / `clock skew`；场景 `clock_skew` | 自动测试已通过 | `TestEverySimulatedFaultAndDeterministicTime` |
 | 验证有限指标标签 | `oneOf()` 限定组件名白名单 | 自动测试已通过 | `TestLogRegressionSanitizeRules` |
 | 不默认触发真实模型探测 | `Service.Enabled` 门禁；`transport.go` 非测试环境拒绝 | 自动测试已通过 | `TestTransportNonTestDenied`、`TestSimulationCannotAuthorizeOrReplayHumanActions` |
@@ -149,7 +149,7 @@
 | 验证暂停续读 | core「does not reconnect while paused」「keeps the cursor across pause」 | 自动测试已通过 | — |
 | 验证游标过期 | `TestContentDiagnosticsRejectsMalformedCursorAndSensitiveInput`；面板 `text054 = 游标已过期，部分技术日志已清理。` | 自动测试已通过 | — |
 | 验证乱序 | core「orders by sequence」 | 自动测试已通过 | — |
-| 查询不能直接修改业务状态 | `Query`/`Runs`/`GetRun` 均为只读 SQL | 代码存在但无测试 | 未见「只读」的显式断言用例 |
+| 查询不能直接修改业务状态 | `Query`/`Runs`/`GetRun` 均为只读 SQL | 自动测试已通过 | `TestReadPathsDoNotWrite`（feature 010，DB 背书）对 diagnostics **四张表**取调用前后 `count(*)` 快照，断言三条读路径跑完后行数一致。**数行数而不是开只读事务**：只读事务证明的是「那个事务只读」，而这三个方法自己开连接，外层设置管不到它们 |
 | D13-V05 浏览器矩阵 | `specs/002-diag-package-stream-recovery/manual-ui-todo.md` V05-1～V05-15 | **无证据** | 15 条全部标「待用户验证」，本次未执行 |
 
 ### DIAG-09 · 完整浏览器诊断面板（验收 D13-V01～05）
@@ -209,13 +209,13 @@
 | 交付权限检查 | handler 导出授权门 | 自动测试已通过 | `TestContentDiagnosticExportRefusesUngrantedAccount` |
 | 交付审计与技术日志独立保留/清理 | `PruneTechnical()` 只删技术日志；面板 `text047 = 条；审计独立保留。` | 自动测试已通过 | `TestPostgresAuditRollbackIsolationAndRetention` |
 | 交付容量状态 | `Overview.Capacity`、`Overview.RetentionDays` | 自动测试已通过 | `TestPostgresFullScenariosExportAndHealth` |
-| 下载保存服务端原始字节与文件名 | handler 设 `Content-Disposition`；`apps/web/platform/content-diagnostics.ts` | 代码存在但无测试 | handler 侧 `TestContentDiagnosticExportDownloadNamesTheFileItWantsSaved` **已通过**；但前端保存路径的测试 `content-diagnostics.test.ts` 按政策不执行 |
+| 下载保存服务端原始字节与文件名 | handler 设 `Content-Disposition`；`apps/web/platform/content-diagnostics.ts` | 自动测试已通过 | `TestContentDiagnosticExportDownloadNamesTheFileItWantsSaved` 断言 `Content-Disposition` 以 `attachment;` 开头且含 `filename=`、响应体是服务端原样的 bundle、`redacted` 为 true、保留服务端的 wire key 名。**类型更正（feature 010）**：该行此前类型记「代码存在但无测试」而备注已写着「已通过」，**类型与备注自相矛盾**；测试早于本次核实就存在，本次只改类型与引用。前端保存路径的测试 `content-diagnostics.test.ts` 仍按 constitution 原则 II 不执行，**那一段没有自动覆盖** |
 | 非授权 run/account 拒绝且不生成文件 | `TestContentDiagnosticExportRefusesUngrantedAccount` | 自动测试已通过 | 「不生成文件」的**浏览器侧**行为为手动项 V08-7 |
 | 200 条上限标示 | core `STREAM_EVENT_CAP`；`mergeEvents` 上限 | 自动测试已通过 | core「keeps the newest page of events」 |
 | 验证跨账号导出拒绝 | `TestContentDiagnosticExportRefusesUngrantedAccount` | 自动测试已通过 | — |
 | 验证密钥和正文负例 | `TestSecretsNeverEnterTechnicalLog`、`TestLogRegressionSanitizeRules` | 自动测试已通过 | 字段级已测；**诊断包成品**的负例为手动项 V08-10 |
 | 日志清理不删批准记录 | `PruneTechnical()` | 自动测试已通过 | `TestPostgresAuditRollbackIsolationAndRetention` |
-| 不自动上传诊断包 | 代码中导出路径无外发请求 | 代码存在但无测试 | 手动项 V08-8 用 Network 面板核对 |
+| 不自动上传诊断包 | 代码中导出路径无外发请求 | 自动测试已通过 | `pnpm check:diagnostics-no-upload`（feature 010）静态核对导出链路**显式四文件**（`apps/web/platform/content-diagnostics.ts`、`packages/views/content/diagnostics/index.tsx`、`packages/core/content/diagnostics/queries.ts`、诊断页 `page.tsx`）不出现 `fetch`/`XMLHttpRequest`/`sendBeacon`/`new WebSocket`。**`packages/core/api/client.ts` 刻意排除**——下载经 `api.contentDiagnosticDownload` → `fetchRaw` 走共享客户端，那是合法同源调用。匹配按**词边界**（面板现有 4 处 `refetch()`，朴素子串匹配会全部误报）。清单内任一文件缺失即失败，不会静默变绿。手动项 V08-8 保留 |
 | D13-V08/V11 浏览器矩阵 | `manual-ui-todo.md` V08-1～V08-11、V11-1～V11-11 | **无证据** | 22 条全部「待用户验证」 |
 
 ### DIAG-13 · 回归关联与诊断端到端验收（验收 D13-V09/V12 及全部 D13 基础场景）
@@ -297,19 +297,19 @@
 | 卡片 | 自动测试已通过 | 代码存在但无测试 | 无证据 | 合计 |
 |---|---:|---:|---:|---:|
 | DIAG-01 | 10 | 0 | 0 | 10 |
-| DIAG-02 | 8 | 2 | 0 | 10 |
-| DIAG-03 | 10 | 1 | 0 | 11 |
+| DIAG-02 | 9 | 1 | 0 | 10 |
+| DIAG-03 | 11 | 0 | 0 | 11 |
 | DIAG-04 | 9 | 0 | 0 | 9 |
-| DIAG-05 | 10 | 1 | 0 | 11 |
+| DIAG-05 | 11 | 0 | 0 | 11 |
 | DIAG-06 | 8 | 3 | 0 | 11 |
-| DIAG-07 | 10 | 2 | 0 | 12 |
-| DIAG-08 | 13 | 1 | 1 | 15 |
+| DIAG-07 | 12 | 0 | 0 | 12 |
+| DIAG-08 | 14 | 0 | 1 | 15 |
 | DIAG-09 | 3 | 7 | 3 | 13 |
 | DIAG-10 | 9 | 2 | 0 | 11 |
 | DIAG-11 | 9 | 0 | 0 | 9 |
-| DIAG-12 | 9 | 3 | 1 | 13 |
+| DIAG-12 | 11 | 1 | 1 | 13 |
 | DIAG-13 | 5 | 2 | 3 | 10 |
-| **合计** | **113** | **24** | **8** | **145** |
+| **合计** | **121** | **16** | **8** | **145** |
 
 ### 4.2 D13-V01～V12 状态
 
@@ -379,6 +379,16 @@
    >
    > **本次交付不改动任何生产代码**：新增两个脚本文件与一份合同文档，改动 `package.json`、PR 模板、CI 工作流各一处，本文件回写。`server/` 与 `packages/` 下无一行改动，无新增迁移。
    >
+   > **2026-09-15 更新（五）`specs/010-diag-evidence-gaps` 实施后**：§2 中**非界面**的「代码存在但无测试」行全部处理完毕，**9 行**转为「自动测试已通过」，§4.1 按第 2 节逐行重新统计为 **121 / 16 / 8**（总数仍 145）。
+   >
+   > **其中 3 行没有写新测试**：DIAG-02「交付私有正文脱敏」与 DIAG-12「下载保存服务端原始字节与文件名」**早就有测试，只是本文件没引用**（前者是 #32 的 13 字段负例，后者是 handler 侧的下载用例）；DIAG-03「交付级别配置」按它**今天真正交付的东西**重新界定并引用既有测试，卡片要求的「按级别过滤写入」另记为功能缺口（第 5 条）。**按原样「补 8 条测试」会产出 2 条重复用例与 1 条测不到目标的用例。**
+   >
+   > **另 6 行由新测试支撑**：`TestContentMigrationConstraints`（迁移约束，18 个文件，四条规则）、`TestCommittedRunWritesBackItsOperationAndTraceIDs`（回写链路）、`TestOverviewQueueWaitCountsOnlyQueueEvents`、`TestOverviewP95IsNullUntilThereAreEnoughSamples`、`TestReadPathsDoNotWrite`、`pnpm check:diagnostics-no-upload`（静态检查）。
+   >
+   > **一处此前就存在的计数偏差已改正**：§4.1 原记 113 / 24 / 8，而按第 2 节逐行统计实为 **112 / 25 / 8**——DIAG-04 的「遵守无 FK / 并发索引迁移约束」行在 §2 里一直是「代码存在但无测试」，§4.1 却已把它算作已通过。本次该行**真的**有了测试，两边就此对齐；本文件的计数从此以第 2 节逐行统计为准。
+   >
+   > **本次交付不改动任何生产代码**：新增 3 个 Go 测试文件、2 个脚本文件，改动 `package.json`、CI 的 `-run` 过滤（`on:` 段逐字节未动）与本文件。`server/` 下非 `_test.go` 文件零改动，无新增迁移，**未为任何界面行补自动测试**。
+   >
    > **2026-09-14 更新（四）`specs/009-diag-durable-outbox` 实施后**：DIAG-04「交付 outbox 接口」行的 **「带限制」取消**，由「代码存在但无测试」转为「自动测试已通过」，§4.1 合计 **112 / 25 / 8 → 113 / 24 / 8**（总数仍 145）。
    >
    > 落库实现（`PostgresOutbox`）在调用方的事务里写记录，排水器（`Drainer`）按行级租约认领并派发，进程重启后未派发项不丢也不重复。`TestMemoryOutboxDoesNotSurviveTheProcess` 与 `TestPostgresOutboxSurvivesTheProcess` **两条并存、互为反面**——前者不是被删掉了，而是主语被点明：`MemoryOutbox` 仍为无数据库场景保留，它的限制依然真实。
@@ -387,10 +397,14 @@
    >
    > **本次不改动 `Store.Audit` 与 `Store.CommitRun` 的语义**：新增的同事务入口 `CommitRunWithDispatch` 与它们并列，`CommitRun` 的事务体被原样提取为私有函数供两者共用。
 
-4. **24 个条目「代码存在但无测试」**（上一版 25，#44 的实施转化了 1 项）——其中 DIAG-09（7 项）与 DIAG-13（2 项）集中在浏览器面板层。按 constitution 原则 II 这些不补 UI 单测，只能由用户手动验收，因此 **DG-01 的出口天然依赖一份尚不存在的完整浏览器验收报告**。
-5. **对表：一项已完成，一项仍未做**：
+4. **16 个条目「代码存在但无测试」**（上一版按逐行统计为 25，feature 010 转化了 9 项）——**剩下的 16 项里有 14 项是浏览器界面行**：DIAG-06（3）、DIAG-09（7）、DIAG-13（2）、DIAG-12 预览（1）、DIAG-10 模型参数快照（1）。按 constitution 原则 II 这些不补 UI 单测，只能由用户手动验收，因此 **DG-01 的出口天然依赖一份尚不存在的完整浏览器验收报告**。另外 2 项是非界面行，见第 6 条。
+5. **一项功能缺口，不是测试缺口**（feature 010 登记）：**DIAG-03 卡片要求的「按级别过滤写入」在生产代码中不存在**。`limits.go` 的 `ConfigureLimits` 只有 `MaxLogs` 与 `Retention` 两项，全仓没有任何按 `severity` 过滤写入的分支。写测试无法闭合它——测试只能固定现状，而现状里没有这个功能。**需要一个实现任务**，不属于补证据的范围。
+6. **两项非界面行留给后续 spec**（feature 010 显式排除）：
+   - DIAG-02「验证嵌套字段」：`Event` 为扁平结构，造不出真实的嵌套负例，宜与 `specs/008` 的快照字段清单一并处理；
+   - DIAG-10「不复制媒体」：**已被 `specs/008-diag-linkage-and-invariants` 的 FR-012 / FR-013 认领**（008 尚未实施），由 010 再写一遍会与之撞车。
+7. **对表：两项均已完成**：
    - ~~`simulator.go` 的 16 个场景是否等于 `docs/13` §7 的完整列举~~ —— **已完成**（主任务 2026-09-14 于 `app-main` `c9cc63eca` 核对）：§7 列举 **15 项，全部在 `Scenarios` 之内**，多出的一个是 `clock_skew`。`Scenarios` 是 §7 的**超集**，不构成缺口。
-   - ~~迁移 `468`～`473` 是否满足「无 FK、索引全部 `CONCURRENTLY`」~~ —— **已完成**（主任务 2026-09-14 于 `app-main` 核对）：六个 up/down 文件无 `REFERENCES` / `CASCADE`，5 条索引全部 `CREATE [UNIQUE] INDEX CONCURRENTLY IF NOT EXISTS`；仓库迁移测试仍不检查这两项，属人工核对。
+   - ~~迁移 `468`～`473` 是否满足「无 FK、索引全部 `CONCURRENTLY`」~~ —— **已完成**（主任务 2026-09-14 于 `app-main` 核对）：六个 up/down 文件无 `REFERENCES` / `CASCADE`，5 条索引全部 `CREATE [UNIQUE] INDEX CONCURRENTLY IF NOT EXISTS`。~~仓库迁移测试仍不检查这两项，属人工核对~~ —— **不再是人工核对**：feature 010 的 `TestContentMigrationConstraints` 每次 CI 都跑，范围已扩到 `468`～`476` 共 **18 个文件**。
 
 ## 5. 剩余实现缺口（下一份 spec 的输入）
 

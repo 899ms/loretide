@@ -80,5 +80,5 @@ jobs:
           # concurrency defect; failures are not swallowed (set -e + non-zero exit).
           go test -race ./internal/content/diagnostics -count=1
           go test ./pkg/executionpolicy ./pkg/agent ./internal/daemon/execenv -run 'TestMissingPolicy|TestConfiguredPolicy|TestLoretide' -count=1
-          go test ./internal/migrations -run 'TestMigrationNumericPrefixesAreUnique|TestMigrationFilesHaveMatchingDirections' -count=1
+          go test ./internal/migrations -run 'TestMigrationNumericPrefixesAreUnique|TestMigrationFilesHaveMatchingDirections|TestContentMigrationConstraints' -count=1
           go build ./cmd/server
