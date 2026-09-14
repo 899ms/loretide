@@ -87,14 +87,18 @@ flowchart LR
 | 项目 | 状态 |
 |---|---|
 | 工作流、PRD、技术方案、验收、Grilling 汇总 | 已整理，开发基线 v0.6.0 |
-| 开发工作包 | W-01～W-03 已拆为24项，W-04～W-09 保留6个阶段项，全部待实施 |
+| 开发工作包 | W-01～W-03 已拆为24项，W-04～W-09 保留6个阶段项。LT-001～002 已完成；ARCH-01/02（PR #19）、LT-008（PR #23）、DIAG-08/12（PR #21）已交付待验收；其余待实施 |
 | Git / GitHub | 本文档仓库已建立，私有，main 分支 |
 | Multica 和两个审核上游 | 已有本地固定版本；仓库收录来源/哈希，审核 Skill A 原始快照纳入 vendor |
-| 正式应用工程与数据库 | 尚未建立 |
-| 审核能力合并、默认 Skill 加载、Go 门禁 | 尚未实现 |
-| 浏览器应用、真实 Agent、远程恢复验收 | 尚未执行 |
+| 正式应用工程与数据库 | 已建立：同仓库 `app-main` 分支，原生 Windows 本机开发、无 Docker（app `docs/development/native-windows.md`）；PostgreSQL 为本机独立实例 |
+| 审核能力合并 | 尚未实现（`app-main` 无审核规则合并产物，仅有 vendor 原始快照） |
+| 默认 Skill 加载 | 尚未实现（app `server/internal/service/builtin_skills/` 仅有上游 Multica 自带项） |
+| Go 门禁（真实执行器禁用） | 已实现：`executionpolicy.Check()` 恒返回 `ErrDisabled`，非 UI 回归见 app `docs/development/execution-gate-tests.md`（PR #10），CI 中执行。这不等于真实执行器安全验收 |
+| 浏览器应用 | 已可运行：`scripts/local-windows.ps1 start` 后浏览器可打开开发实例，api/web health 200（PR #23 主任务 Windows 真机验证） |
+| 真实 Agent | 仍禁用，未验收 |
+| 远程恢复验收 | 未验收（云端原生实例有环境恢复记录，见 app `docs/development/native-env-reliability-2026-09-13.md`；不是业务验收） |
 
-本仓库目前没有应用启动命令，不能通过安装 vendor 依赖得到完整工作台。下一可执行项是 LT-001：建立独立应用 checkout 与 Git 边界。近期任务已明确依赖、交付物和验收标准。
+本仓库只保存文档，没有应用启动命令；应用代码与启动入口在同仓库的 `app-main` 分支。LT-001 已完成，下一批可执行项见 [近期任务](tasks/todo.md) 与 [诊断任务](tasks/diagnostics.md)。近期任务已明确依赖、交付物和验收标准。
 
 ## 文档与来源索引
 

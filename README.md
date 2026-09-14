@@ -89,14 +89,18 @@ The first real integration path uses local Codex. Prefer its search and page-rea
 | Item | Status |
 |---|---|
 | Workflow, PRD, technical design, acceptance, and decision summary | Documented at baseline v0.6.0 |
-| Work packages | W-01–W-03 split into 24 tasks; W-04–W-09 retained as 6 phase items; all pending |
+| Work packages | W-01–W-03 split into 24 tasks; W-04–W-09 retained as 6 phase items. LT-001–002 done; ARCH-01/02 (PR #19), LT-008 (PR #23) and DIAG-08/12 (PR #21) delivered pending acceptance; the rest pending |
 | Git / GitHub | Private documentation repository on `main` |
 | Multica and both review upstreams | Pinned local sources; provenance and hashes recorded; review Skill A snapshot included under vendor |
-| Application implementation and database | Not created |
-| Merged review capability, default Skill loading, and Go approval enforcement | Not implemented |
-| Browser application, real Agent, and remote recovery acceptance | Not run |
+| Application implementation and database | Created: `app-main` branch in this repository; day-to-day development runs on native Windows without Docker (app `docs/development/native-windows.md`), against a local PostgreSQL instance |
+| Merged review capability | Not implemented (no merged review rules on `app-main`; only the vendored upstream snapshot) |
+| Default Skill loading | Not implemented (app `server/internal/service/builtin_skills/` holds only upstream Multica entries) |
+| Go execution gate (real executor disabled) | Implemented: `executionpolicy.Check()` always returns `ErrDisabled`; non-UI regression in app `docs/development/execution-gate-tests.md` (PR #10), run in CI. This is not a real-executor security acceptance |
+| Browser application | Runnable: after `scripts/local-windows.ps1 start` the development instance opens in a browser, api and web health 200 (real-Windows run by the main task, PR #23) |
+| Real Agent | Still disabled, not accepted |
+| Remote recovery acceptance | Not accepted (the cloud native instance has an environment recovery record in app `docs/development/native-env-reliability-2026-09-13.md`; that is not business acceptance) |
 
-There is no application startup command in this repository yet. Installing vendor dependencies does not produce the complete workspace. The next executable task is LT-001: establish the isolated application checkout and Git boundary. Near-term tasks now include dependencies, deliverables, and acceptance criteria.
+This repository holds documentation only and has no application startup command; the application code and its entry points live on the `app-main` branch of the same repository. LT-001 is done; the next executable items are listed in [tasks/todo.md](tasks/todo.md) and [tasks/diagnostics.md](tasks/diagnostics.md). Near-term tasks include dependencies, deliverables, and acceptance criteria.
 
 ## Documentation and upstreams
 
