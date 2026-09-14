@@ -59,7 +59,7 @@
 - 预计位置：诊断读服务、handler/流协议、定向测试。
 
 ## DIAG-09 · 完整浏览器诊断面板
-- [ ] **TODO**；依赖：DIAG-06、DIAG-07、DIAG-08、ARCH-02；规模M，超出则按视图分卡；验收D13-V01～05。
+- [ ] **状态：部分交付，待用户验收**（PR [899ms/loretide#37](https://github.com/899ms/loretide/pull/37) 已合入 app-main `30ecd87d0`，2026-09-14）；依赖：DIAG-06、DIAG-07、DIAG-08、ARCH-02；规模M，超出则按视图分卡；验收D13-V01～05。本次闭合：trace 标签页改为层级瀑布（父子缩进、相对运行起点的时间轴、超过 200 事件折叠且保住失败步骤、可展开）；逻辑下沉 `packages/core/content/diagnostics/{trace-waterfall,regression}.ts` 有纯函数测试，UI 层无自动测试；20 条手动 UI 项在 app `specs/006-diag-trace-waterfall-regression/manual-ui-todo.md`，待用户本机验证。
 - 交付概览、操作时间线、日志筛选/实时流、trace瀑布及运行步骤入口；支持复制追踪编号和关联跳转。
 - 验证浏览器从操作到失败步骤定位、分页/暂停、断线提示和开发权限；不依赖Electron。
 - 预计位置：core诊断客户端、views诊断视图、Web路由及浏览器测试。
@@ -83,7 +83,7 @@
 - 预计位置：导出/生命周期服务、预览接口及测试。
 
 ## DIAG-13 · 回归关联与诊断端到端验收
-- [ ] **状态：D13-V12 部分交付，待用户验收**（公共接入合同规格 PR [899ms/loretide#33](https://github.com/899ms/loretide/pull/33)、实施 PR [899ms/loretide#35](https://github.com/899ms/loretide/pull/35) 已合入 app-main `b11803fd9`，2026-09-14）；依赖：DIAG-09、DIAG-11、DIAG-12；规模M；验收D13-V09/12及全部D13基础场景。本次闭合 D13-V12 第一、三子句：`docs/development/diagnostics-onboarding-contract.md`（消费方 E1/E2/E3、提供方 P1–P3、模拟/真实证据分栏）、`pnpm check:diagnostics-contract` 本地与 CI 同源、豁免登记 `scripts/diagnostics-contract.json` 须带到期日期、PR 模板两条检查项。第二子句（真实 Codex 实测）在执行器禁用期间不可能通过，对照表 V12 标「部分」。D13-V09 随 specs/006 实施中。
+- [ ] **状态：D13-V12 部分交付，待用户验收**（公共接入合同规格 PR [899ms/loretide#33](https://github.com/899ms/loretide/pull/33)、实施 PR [899ms/loretide#35](https://github.com/899ms/loretide/pull/35) 已合入 app-main `b11803fd9`，2026-09-14）；依赖：DIAG-09、DIAG-11、DIAG-12；规模M；验收D13-V09/12及全部D13基础场景。本次闭合 D13-V12 第一、三子句：`docs/development/diagnostics-onboarding-contract.md`（消费方 E1/E2/E3、提供方 P1–P3、模拟/真实证据分栏）、`pnpm check:diagnostics-contract` 本地与 CI 同源、豁免登记 `scripts/diagnostics-contract.json` 须带到期日期、PR 模板两条检查项。第二子句（真实 Codex 实测）在执行器禁用期间不可能通过，对照表 V12 标「部分」。D13-V09 回归四态判定（通过/未通过/未运行/无法判定，前端从 `regression`+`status` 推导，`"not_run"` 与空串均为未运行）与原运行/场景/模块/提交四项定位随 #37 合入，待用户按 006 手动清单验证。
 - 交付面板中的故障复现与回归结果入口、故障/场景/模块/提交关联、CI模拟检查和浏览器验证报告。
 - 验证修复前故障用例失败、修复后通过，未执行不显示通过；浏览器可从操作记录定位技术原因并导出脱敏包。
 - 预计位置：回归结果适配、诊断视图扩展、CI入口、浏览器测试和记录。
