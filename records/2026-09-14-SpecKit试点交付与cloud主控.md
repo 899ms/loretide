@@ -10,9 +10,9 @@
 | specs/001–004：spec / clarifications / plan / research / contracts / quickstart / tasks | 同上 | 随 #20 |
 | 001 ARCH-01/02 验收闭合与本地入口 | PR [#19](https://github.com/899ms/loretide/pull/19) → 基线分支 | 审查通过，待合并 |
 | 002 DIAG-12/08 下载保真与流断线恢复 | PR [#21](https://github.com/899ms/loretide/pull/21) → 基线分支 | 审查通过，待合并；26 条手动 UI 项待用户本机验证 |
-| 003 LT-008 Windows 实例生命周期 | cloud 会话进行中 | 分支 `claude/spec-003-lt008-windows-instance-lifecycle` |
+| 003 LT-008 Windows 实例生命周期 | PR [#23](https://github.com/899ms/loretide/pull/23) → 基线分支 | 审查通过，待合并；主任务在本机真机验证（测试 92/92；冷态 start / 幂等 / status / stop 全流程通过） |
 
-合并顺序：#19 → #21 → #20。合并动作由用户执行（Claude Code 自动模式将 `gh pr merge` 保留给人）。
+合并顺序：#19 → #21 → #23 → #20。合并动作由用户执行（Claude Code 自动模式将 `gh pr merge` 保留给人）。
 
 ## 状态回写
 
@@ -26,6 +26,8 @@
 4. `server/internal/handler/TestMain` 在无数据库时 `os.Exit(0)`，`go test` 会打印 `ok` 但零用例执行；002 会话自行启动本地 PostgreSQL 后才真实执行。后续 Go 相关任务书需明示此点。
 5. 任务卡与代码脱节（评估 F01）在四个功能上全部应验：ARCH 检查器与 CI、LT-008 启停脚本、DIAG 下载均已存在；规格以「Current State（以代码为准）」开头只覆盖缺口。
 6. `.github/PULL_REQUEST_TEMPLATE.md` 只有一个文件；Windows 上 `ls` 显示大小写两份是 NTFS 不区分大小写所致。
+7. 003 的三个真实缺陷（`pg_ctl start` 子进程继承管道导致 `start` 挂死、`start` 不确认 supervisor 存活、`next dev` 子 worker 被判为端口冲突）云端 61 个桩测试全绿却一个都没抓到，只有 Windows 真机跑出来。涉及本机运行时的任务，主任务必须在真机复跑 quickstart，不能以桩测试通过为准。
+8. 主任务给执行者的修复意见应描述**要达到的行为**而非具体 API：第一轮给出的 `Start-Process -Wait` 在 Windows 上等待整个后代进程树，把执行者引向了同样挂死的实现。
 
 ## 未完成
 
