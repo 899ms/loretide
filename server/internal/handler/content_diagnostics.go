@@ -9,6 +9,7 @@ import (
  "time"
 
  "github.com/multica-ai/multica/server/internal/content/diagnostics"
+ "github.com/multica-ai/multica/server/internal/middleware"
  "go.opentelemetry.io/otel/trace"
 )
 
@@ -52,8 +53,12 @@ func(w *diagnosticResponse)Flush(){if f,ok:=w.ResponseWriter.(http.Flusher);ok{f
 // DiagnosticTrace records safe HTTP boundaries. Read queries are excluded from
 // technical logging to avoid a live-log self-amplification loop.
 func(h *Handler)DiagnosticTrace(next http.Handler)http.Handler{return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
- ctx,_:=diagnostics.Child(r.Context());r=r.WithContext(ctx);sc:=trace.SpanContextFromContext(ctx);w.Header().Set("X-Diagnostic-Trace",sc.TraceID().String());start:=time.Now();wrapped:=&diagnosticResponse{w,200};next.ServeHTTP(wrapped,r)
+ // The trace and the X-Diagnostic-Trace header now come from the global
+ // propagation middleware, so every API route carries them and this one only
+ // opens its own span. Setting the header here too would restate a value the
+ // middleware already owns (specs/005-diag-trace-and-sanitize, FR-003).
+ ctx,parent:=diagnostics.Child(r.Context());r=r.WithContext(ctx);sc:=trace.SpanContextFromContext(ctx);start:=time.Now();wrapped:=&diagnosticResponse{w,200};next.ServeHTTP(wrapped,r)
  if r.Method==http.MethodGet && wrapped.status<400{return};if h.ContentDiagnostics==nil{return};ws:=h.resolveWorkspaceID(r);actor:=r.Header.Get("X-User-ID");if ws==""||actor==""{return};if _,err:=h.getWorkspaceMember(ctx,actor,ws);err!=nil{return}
  code:="";outcome:="success";if wrapped.status>=400{outcome="failed";switch wrapped.status{case 401,403,404:code="AUTHORIZATION_DENIED";case 400,409:code="INPUT_CONFLICT";default:code="INTERNAL"}}
- h.ContentDiagnostics.Store.Technical(ctx,diagnostics.Event{ID:diagnostics.NewID(),Workspace:ws,Actor:actor,ActorKind:"human",ObjectType:"diagnostics",Action:"execute",Outcome:outcome,Code:code,Operation:diagnostics.NewID(),Trace:sc.TraceID().String(),Span:sc.SpanID().String(),Occurred:start.UTC(),Received:time.Now().UTC(),Component:"api",Severity:"info",Duration:time.Since(start).Milliseconds(),Build:h.ContentDiagnostics.Build})
+ h.ContentDiagnostics.Store.Technical(ctx,diagnostics.Event{ID:diagnostics.NewID(),Workspace:ws,Actor:actor,ActorKind:"human",ObjectType:"diagnostics",Action:"execute",Outcome:outcome,Code:code,Operation:diagnostics.NewID(),Trace:sc.TraceID().String(),Span:sc.SpanID().String(),Parent:parent,Occurred:start.UTC(),Received:time.Now().UTC(),Component:"api",Severity:"info",Duration:time.Since(start).Milliseconds(),Build:h.ContentDiagnostics.Build,Upstream:middleware.UpstreamTraceFromContext(ctx)})
 })}

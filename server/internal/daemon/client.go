@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/propagation"
+
 	"github.com/multica-ai/multica/server/pkg/agent"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 	"github.com/multica-ai/multica/server/pkg/remotemcp"
@@ -179,6 +181,11 @@ func (c *Client) setIdentityHeaders(req *http.Request) {
 		req.Header.Set("X-Client-OS", c.os)
 	}
 	req.Header.Set("X-Client-Capabilities", daemonHTTPClientCapabilities())
+	// Carry the caller's trace to the server so the two sides of the hop land on
+	// one trace. The server adopts it only for an authenticated daemon path; a
+	// request without a trace in its context injects nothing
+	// (specs/005-diag-trace-and-sanitize, FR-002).
+	propagation.TraceContext{}.Inject(req.Context(), propagation.HeaderCarrier(req.Header))
 }
 
 // daemonClientCapabilities is the X-Client-Capabilities value the daemon

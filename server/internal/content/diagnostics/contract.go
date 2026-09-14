@@ -36,6 +36,17 @@ type Event struct {
  Component string `json:"component"`; Severity string `json:"severity"`; Duration int64 `json:"duration_ms"`
  Message string `json:"safe_message"`; Retryable bool `json:"retryable"`; Next string `json:"next_action"`
  Build string `json:"build"`; Test bool `json:"is_test"`
+ // Request identity, recorded only at an HTTP boundary. Route is the
+ // registered route pattern plus the method, never the path as requested, so
+ // it cannot carry a path parameter. Status completes the triple.
+ Route string `json:"route,omitempty"`; Status int `json:"status,omitempty"`
+ // HeadersPresent names the "presence only" headers that were on the request.
+ // Names only, drawn from a compile-time list, so it cannot carry a value.
+ HeadersPresent []string `json:"headers_present,omitempty"`
+ // Upstream is an inbound traceparent that was checked but deliberately not
+ // adopted as a parent. Correlation attribute only: never a query key, never
+ // used across workspaces, never part of an authorization decision.
+ Upstream string `json:"upstream_trace,omitempty"`
 }
 type Snapshot struct {
  ConfigVersion string `json:"config_version"`; PersonaRef string `json:"persona_ref"`
