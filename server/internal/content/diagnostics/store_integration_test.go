@@ -42,13 +42,15 @@ func testStore(t *testing.T) *Store {
 	}
 	t.Cleanup(func() {
 		pool.Close()
-		for _, table := range []string{"content_technical_log", "content_operation_audit", "content_diagnostic_run"} {
+		for _, table := range []string{"content_dispatch_outbox", "content_technical_log", "content_operation_audit", "content_diagnostic_run"} {
 			_, _ = admin.Exec(ctx, "DROP TABLE IF EXISTS "+schema+"."+table)
 		}
 		_, _ = admin.Exec(ctx, "DROP SCHEMA "+schema)
 		admin.Close()
 	})
-	for n := 468; n <= 473; n++ {
+	// 468-473 build the module's three original tables; 474-476 add the durable
+	// dispatch outbox and its two indexes.
+	for n := 468; n <= 476; n++ {
 		paths, _ := filepath.Glob(fmt.Sprintf("../../../migrations/%d_*.up.sql", n))
 		if len(paths) != 1 {
 			t.Fatalf("migration %d missing", n)

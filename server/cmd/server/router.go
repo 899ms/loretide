@@ -444,6 +444,22 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	if err := h.ContentDiagnostics.Store.ConfigureLimits(os.Getenv("LORETIDE_DIAG_MAX_LOGS"), os.Getenv("LORETIDE_DIAG_RETENTION_DAYS")); err != nil {
 		panic(err)
 	}
+	// Durable dispatch. The environment is read here and the values are handed
+	// to the module, which owns what counts as valid — the same split
+	// ConfigureLimits above already uses. The drainer is one goroutine in this
+	// process, not a separate service; it returns when its context is done.
+	contentDispatch, contentDrainer, err := diagnostics.NewDispatch(
+		h.ContentDiagnostics.Store,
+		os.Getenv("LORETIDE_DIAG_DISPATCH_INTERVAL_SECONDS"),
+		os.Getenv("LORETIDE_DIAG_DISPATCH_LEASE_SECONDS"),
+		os.Getenv("LORETIDE_DIAG_DISPATCH_MAX_ATTEMPTS"),
+		os.Getenv("LORETIDE_DIAG_DISPATCH_MAX_PAYLOAD_KB"),
+	)
+	if err != nil {
+		panic(err)
+	}
+	h.ContentDiagnostics.Store.Dispatch = contentDispatch
+	go contentDrainer.Start(context.Background())
 	invitationRateLimits := handler.DefaultInvitationRateLimits()
 	invitationRateLimits.Actor.Limit = envNonNegativeInt("RATE_LIMIT_INVITATION_ACTOR_10M", invitationRateLimits.Actor.Limit)
 	invitationRateLimits.Workspace.Limit = envNonNegativeInt("RATE_LIMIT_INVITATION_WORKSPACE_24H", invitationRateLimits.Workspace.Limit)

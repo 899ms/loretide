@@ -22,7 +22,16 @@ type Store struct {
 	Log       *LogBuffer
 	MaxLogs   int
 	Retention time.Duration
+	// Dispatch is the outbox CommitRunWithDispatch registers into. Nil means
+	// the installation has no durable dispatch wired, and the plain CommitRun
+	// path is unaffected either way.
+	Dispatch Outbox
 }
+
+// Pool exposes the connection pool the durable outbox and its drainer need to
+// re-read rows after the caller's transaction has already committed. Read-only
+// accessor; the Store keeps ownership of the pool's lifetime.
+func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 func NewStore(pool *pgxpool.Pool, guard WorkspaceWriteGuard) *Store {
 	return &Store{pool: pool, guard: guard, Log: NewLogBuffer(1000), MaxLogs: 10000, Retention: 7 * 24 * time.Hour}
@@ -76,10 +85,62 @@ func (s *Store) CommitRun(ctx context.Context, scope Scope, run Run, failAudit b
 	if !scope.Allows(run.Workspace, run.Account) || run.Actor != scope.Actor {
 		return ErrDenied
 	}
+	return s.withWorkspaceWrite(ctx, run.Workspace, s.commitRunWrite(ctx, scope, run, failAudit))
+}
+
+// CommitRunWithDispatch commits a run exactly as CommitRun does and, inside the
+// same transaction, registers one dispatch record. Once the transaction has
+// committed it settles the record, which dispatches it.
+//
+// This is the entry point that makes "same transaction as the business write"
+// something that can be exercised rather than asserted in prose: the run row,
+// its audit event and the dispatch record share one transaction, so the record
+// exists if and only if the run does. The business write is the module's own
+// (content_diagnostic_run plus its audit event) — this entry point touches no
+// other module's tables.
+//
+// CommitRun and Audit are unchanged; this sits beside them.
+func (s *Store) CommitRunWithDispatch(ctx context.Context, scope Scope, run Run, out Outbox, item DispatchItem) error {
+	if out == nil {
+		return s.CommitRun(ctx, scope, run, false)
+	}
+	if !scope.Allows(run.Workspace, run.Account) || run.Actor != scope.Actor {
+		return ErrDenied
+	}
+	// The entry point owns the scoping: a record registered here belongs to the
+	// run's workspace, whatever the caller put in the item.
+	item.Workspace = run.Workspace
+	write := s.commitRunWrite(ctx, scope, run, false)
+	var handle any
+	err := s.withWorkspaceWrite(ctx, run.Workspace, func(tx pgx.Tx) error {
+		if err := write(tx); err != nil {
+			return err
+		}
+		handle = tx
+		return out.Register(ctx, tx, item)
+	})
+	if err != nil {
+		// The transaction rolled back, so the row is gone. Settling with
+		// committed=false only clears the staging the outbox kept.
+		if handle != nil {
+			out.Settle(ctx, handle, false)
+		}
+		return err
+	}
+	// Past this point the transaction has committed and the handle is dead; the
+	// outbox treats it as a grouping key only.
+	out.Settle(ctx, handle, true)
+	return nil
+}
+
+// commitRunWrite is the body CommitRun has always run inside its transaction,
+// lifted so CommitRunWithDispatch can put a second write beside it in the same
+// transaction. Nothing about it changed.
+func (s *Store) commitRunWrite(ctx context.Context, scope Scope, run Run, failAudit bool) func(pgx.Tx) error {
 	saved := run
 	saved.Events = nil
 	body, _ := json.Marshal(saved)
-	return s.withWorkspaceWrite(ctx, run.Workspace, func(tx pgx.Tx) error {
+	return func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, "INSERT INTO content_diagnostic_run(run_id,workspace_id,account_id,payload) VALUES($1,$2,$3,$4)", run.ID, run.Workspace, run.Account, body); err != nil {
 			return ErrConflict
 		}
@@ -97,7 +158,7 @@ func (s *Store) CommitRun(ctx context.Context, scope Scope, run Run, failAudit b
 			}
 		}
 		return s.appendAudit(ctx, tx, e)
-	})
+	}
 }
 func (s *Store) appendAudit(ctx context.Context, tx pgx.Tx, e Event) error {
 	payload, _ := json.Marshal(Sanitize(e))

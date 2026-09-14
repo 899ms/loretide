@@ -75,7 +75,7 @@
 |---|---|---|---|
 | 交付追加审计 | `store.go` `appendAudit()` / `Audit()` | 自动测试已通过 | `TestPostgresAuditRollbackIsolationAndRetention` |
 | 交付事务接口 | `withWorkspaceWrite()`（pgx 事务 + `WorkspaceWriteGuard`）；`CommitRun(..., failAudit bool)` | 自动测试已通过 | handler 侧 5 个 `TestContentDiagnosticWritesCoordinateWithWorkspaceDelete` 子用例 |
-| 交付 outbox 接口 | `dispatch.go` `Outbox` 接口 + `MemoryOutbox`（事务内 `Register`、提交后 `Settle` 派发；幂等键去重、有界、失败计入既有 `LogBuffer`） | 自动测试已通过（**带限制**） | `TestOutbox*` 7 个用例（feature 005）。**限制**：进程内实现，进程退出丢失未派发项，由 `TestOutboxDoesNotSurviveTheProcess` 断言；持久落库版本列为后续任务。关键审计仍走 `Store.Audit` 的事务内路径，未改动 |
+| 交付 outbox 接口 | `dispatch.go` `Outbox` 接口；两个实现：`MemoryOutbox`（进程内）与 `PostgresOutbox` + `Drainer`（落库，`dispatch_postgres.go` / `drain.go`，表 `content_dispatch_outbox`，迁移 474～476） | 自动测试已通过 | `TestOutbox*` 7 个（feature 005）+ `TestPostgresOutbox*` 8 个、`TestDrainer*` 6 个、`TestCommitRunWithDispatch*` 2 个（feature 009），全部在真实 PostgreSQL 上实际跑过。**「带限制」已去掉**：进程重启不再丢未派发项，`TestPostgresOutboxSurvivesTheProcess` 是 `TestMemoryOutboxDoesNotSurviveTheProcess` 的反面断言，两条并存。关键审计仍走 `Store.Audit` 的事务内路径，**未改动** |
 | 交付授权查询 | `Store.Query(ctx, scope, filter)`；`Scope.Allows()` | 自动测试已通过 | `TestContentDiagnosticsAuthAndFaultGate` 五个子用例 |
 | 技术日志清理不清除审批证据 | `PruneTechnical()` 只 `DELETE FROM content_technical_log` | 自动测试已通过 | `TestPostgresAuditRollbackIsolationAndRetention` 明确断言审计独立保留 |
 | 验证成功/失败/回滚事件 | `CommitRun` 的 `failAudit` 分支 | 自动测试已通过 | `TestPostgresAuditRollbackIsolationAndRetention` |
@@ -299,7 +299,7 @@
 | DIAG-01 | 10 | 0 | 0 | 10 |
 | DIAG-02 | 8 | 2 | 0 | 10 |
 | DIAG-03 | 10 | 1 | 0 | 11 |
-| DIAG-04 | 8 | 1 | 0 | 9 |
+| DIAG-04 | 9 | 0 | 0 | 9 |
 | DIAG-05 | 10 | 1 | 0 | 11 |
 | DIAG-06 | 8 | 3 | 0 | 11 |
 | DIAG-07 | 10 | 2 | 0 | 12 |
@@ -309,7 +309,7 @@
 | DIAG-11 | 9 | 0 | 0 | 9 |
 | DIAG-12 | 9 | 3 | 1 | 13 |
 | DIAG-13 | 5 | 2 | 3 | 10 |
-| **合计** | **112** | **25** | **8** | **145** |
+| **合计** | **113** | **24** | **8** | **145** |
 
 ### 4.2 D13-V01～V12 状态
 
@@ -346,7 +346,7 @@
    | ~~DIAG-02~~ | ~~交付路径/URL 脱敏规则~~ | **已闭合**（feature 005） |
    | ~~DIAG-02~~ | ~~验证模型输出样例~~ | **已闭合**（2026-09-14 测试补齐） |
    | ~~DIAG-03~~ | ~~验证磁盘满模拟~~ | **已闭合**（2026-09-14 测试补齐） |
-   | ~~DIAG-04~~ | ~~交付 outbox 接口~~ | **已闭合（带限制）**（feature 005）：接口 + 进程内实现，不跨进程重启 |
+   | ~~DIAG-04~~ | ~~交付 outbox 接口~~ | **已闭合**（feature 005 交接口 + 进程内实现；**feature 009 补上落库实现与排水器，限制取消**） |
    | ~~DIAG-05~~ | ~~交付 HTTP trace 传播~~ | **已闭合**（feature 005） |
    | DIAG-08 | D13-V05 浏览器矩阵 | 手动未执行 |
    | DIAG-09 | 验证从操作到失败步骤定位 | 手动未执行 |
@@ -361,7 +361,7 @@
 
    > **2026-09-14 更新（一）`specs/005-diag-trace-and-sanitize` 实施后**：**4 行实现缺失已闭合**（DIAG-02 两条、DIAG-04 一条、DIAG-05 一条），见各卡片表内的证据列。
    >
-   > DIAG-04 的闭合**带限制**：交付的是接口与进程内实现，进程退出会丢失未派发项（`TestOutboxDoesNotSurviveTheProcess` 就是这条限制的断言）。持久落库版本列为后续任务。
+   > DIAG-04 当时的闭合**带限制**：交付的是接口与进程内实现，进程退出会丢失未派发项。**该限制已于 2026-09-14 更新（四）取消**，见下。
    >
    > **2026-09-14 更新（二）测试缺口补齐**：**2 行测试缺失已闭合**——DIAG-02「验证模型输出样例」与 DIAG-03「验证磁盘满模拟」，用例名见各卡片表。两者都只加测试，未改生产代码。
    >
@@ -378,8 +378,16 @@
    > **这一项刻意留着不闭合。** 合同第 4 节要求这一栏固定写「未执行（constitution 原则 IX）」，不写「N/A」、不留空、不用「暂不适用」代替——这三种写法都会在汇总时被当成没有问题。任何汇总口径若能在真实执行器没跑的情况下显示全绿，那个口径是错的。
    >
    > **本次交付不改动任何生产代码**：新增两个脚本文件与一份合同文档，改动 `package.json`、PR 模板、CI 工作流各一处，本文件回写。`server/` 与 `packages/` 下无一行改动，无新增迁移。
+   >
+   > **2026-09-14 更新（四）`specs/009-diag-durable-outbox` 实施后**：DIAG-04「交付 outbox 接口」行的 **「带限制」取消**，由「代码存在但无测试」转为「自动测试已通过」，§4.1 合计 **112 / 25 / 8 → 113 / 24 / 8**（总数仍 145）。
+   >
+   > 落库实现（`PostgresOutbox`）在调用方的事务里写记录，排水器（`Drainer`）按行级租约认领并派发，进程重启后未派发项不丢也不重复。`TestMemoryOutboxDoesNotSurviveTheProcess` 与 `TestPostgresOutboxSurvivesTheProcess` **两条并存、互为反面**——前者不是被删掉了，而是主语被点明：`MemoryOutbox` 仍为无数据库场景保留，它的限制依然真实。
+   >
+   > **一条不声称的保证**：派发已发出、成功标记尚未落库时崩溃，下一轮会重发。没有分布式事务就关不掉这个窗口，所以它由接收方的幂等吸收，**不记为本实现单方面保证的 exactly-once**。代码注释与规格 FR-011 都这么写。
+   >
+   > **本次不改动 `Store.Audit` 与 `Store.CommitRun` 的语义**：新增的同事务入口 `CommitRunWithDispatch` 与它们并列，`CommitRun` 的事务体被原样提取为私有函数供两者共用。
 
-4. **25 个条目「代码存在但无测试」**（上一版 28，#37 转化了 3 项）——其中 DIAG-09（7 项）与 DIAG-13（2 项）集中在浏览器面板层。按 constitution 原则 II 这些不补 UI 单测，只能由用户手动验收，因此 **DG-01 的出口天然依赖一份尚不存在的完整浏览器验收报告**。
+4. **24 个条目「代码存在但无测试」**（上一版 25，#44 的实施转化了 1 项）——其中 DIAG-09（7 项）与 DIAG-13（2 项）集中在浏览器面板层。按 constitution 原则 II 这些不补 UI 单测，只能由用户手动验收，因此 **DG-01 的出口天然依赖一份尚不存在的完整浏览器验收报告**。
 5. **两项对表未做，需主任务在文档仓库完成**：
    - `simulator.go` 的 16 个场景是否等于 `docs/13` §7 的完整列举（本次只读了 §9，未读 §7）；
    - 迁移 `468`～`473` 是否满足「无 FK、索引全部 `CONCURRENTLY`」（仓库现有迁移测试不检查这两项）。
@@ -416,6 +424,20 @@
 | `go run ./cmd/migrate up` | 0 | 迁移至 `473_content_log_scope` |
 | `go test ./internal/handler -count=1 -run 'TestContentDiagnostic\|TestDeleteWorkspace_PurgesContentDiagnostics' -v` | 0 | 8 个顶层用例 + 11 个子用例全部 PASS |
 | `pnpm --filter @multica/core exec vitest run content/diagnostics/contract.test.ts content/diagnostics/stream-state.test.ts` | 0 | 2 文件 15 用例全部通过 |
+
+**2026-09-14 更新（四）的命令**（在 `app-main` `8f60b607b` 上实际执行，PostgreSQL 16.13 本地实例、独立库 `loretide_diag_009`）：
+
+| 命令 | 退出码 | 结果 |
+|---|---:|---|
+| `go test -race ./internal/content/diagnostics -count=1 -v` | 0 | **53 PASS / 0 SKIP / 0 FAIL**（基线 37 PASS）。`LORETIDE_DIAG_TEST_DATABASE_URL` 已设，DB 背书用例真实执行，**无一条跳过** |
+| `go test ./internal/migrations -run 'TestMigrationNumericPrefixesAreUnique\|TestMigrationFilesHaveMatchingDirections' -count=1` | 0 | 迁移编号唯一、`.up`/`.down` 成对 |
+| `go build ./cmd/server` | 0 | — |
+| `pnpm check:content-boundaries` | 0 | 3539 files; 12 registered modules |
+| `pnpm check:diagnostics-contract` | 0 | checked 1 landed module; skipped 11 not yet landed |
+
+**变异验证**（6 处，每处改完即还原）：认领条件去掉 `delivered_at IS NULL`、去掉租约过期判断、去掉 `SKIP LOCKED`、部分唯一索引改成全表唯一、非事务句柄改为静默接受、排水中去掉清理——**六处全部变红**。
+
+> `SKIP LOCKED` 那一处**第一轮没有变红**：租约本身已经保证了正确性（第二个排水器会在第一个提交后重读该行并跳过），`SKIP LOCKED` 保证的是不阻塞。这是一处真实的测试缺口，已补 `TestDrainerDoesNotBlockOnARowAnotherTransactionHolds` 关掉——补完后该变异变红。代码注释也随之改成了变异实际证明的说法。
 
 **2026-09-14 更新（三）的命令**（在 `app-main` `47f818aa3` 上实际执行）：
 

@@ -11,7 +11,8 @@ Phase 0。Technical Context 无 NEEDS CLARIFICATION（三处已由 2026-09-14 �
 ## D2. 认领：`FOR UPDATE SKIP LOCKED` + 行级租约
 
 - **Decision**：认领一批到期记录用 `SELECT … WHERE dead_lettered_at IS NULL AND delivered_at IS NULL AND next_attempt_at <= now() AND (claimed_until IS NULL OR claimed_until <= now()) ORDER BY next_attempt_at, created_at FOR UPDATE SKIP LOCKED LIMIT n`，然后把 `claimed_until` 推到「现在 + 租约时长」。
-- **Rationale**：FR-009a 要求行级租约且租约过期可被重新认领。`SKIP LOCKED` 解决**同一瞬间**的并发（FR-012 前半），`claimed_until` 解决**认领方失联**（FR-012 后半）——两者缺一不可：只有行锁的话，持锁进程被 kill 后锁随连接释放、记录立刻可领，但没有「这条正在被谁处理」的持久证据；只有租约的话，两个排水器会在同一毫秒读到同一行。
+- **Rationale**：FR-009a 要求行级租约且租约过期可被重新认领。`claimed_until` 写在行上，活过认领方的连接，因此能表达「这条正在被谁处理」并在认领方失联后自动到期（FR-012 后半）。
+- **实施期修正（2026-09-14，变异验证得出）**：本条原文写「两者缺一不可」，**是错的**。删掉 `SKIP LOCKED` 后全部用例依旧通过——**正确性由租约单独保证**：没有 `SKIP LOCKED` 时第二个排水器会阻塞等第一个提交，之后重新求值 `WHERE`，此时 `claimed_until` 已在未来，该行被排除，仍不会重复派发。**`SKIP LOCKED` 买的是不阻塞**：没有它，排水器会串行排队在彼此后面，而不是分摊同一批。这是一处真实的测试缺口，已补 `TestDrainerDoesNotBlockOnARowAnotherTransactionHolds`（另开事务占住行锁，断言扫描立即返回 0 条而非阻塞到超时）关掉；补完后该变异变红。
 - **为什么租约不足以保证「只派发一次」**：租约过期后重新认领是**合法**的，此时前一个认领方可能已经派发成功却没来得及标记。所以「恰好一次」不能只靠租约，必须叠 D3 的幂等。
 
 ## D3. 「恰好一次」的真实含义与落点
