@@ -31,11 +31,18 @@ func(h *Handler)ContentDiagnosticEvents(w http.ResponseWriter,r *http.Request){s
 func(h *Handler)ContentDiagnosticSimulate(w http.ResponseWriter,r *http.Request){scope,ok:=h.diagnosticScope(w,r);if !ok{return};var body struct{Scenario string `json:"scenario"`;Seed int64 `json:"seed"`;Account string `json:"account_id"`;Original string `json:"original_run_id"`};decoder:=json.NewDecoder(http.MaxBytesReader(w,r.Body,4096));decoder.DisallowUnknownFields();if decoder.Decode(&body)!=nil{diagnosticError(w,diagnostics.ErrConflict);return};run,err:=h.ContentDiagnostics.Run(r.Context(),scope,body.Account,body.Scenario,body.Seed,body.Original);if err!=nil{diagnosticError(w,err);return};writeJSON(w,201,run)}
 func(h *Handler)ContentDiagnosticExport(w http.ResponseWriter,r *http.Request){scope,ok:=h.diagnosticScope(w,r);if !ok{return};download:=r.Method==http.MethodPost;bundle,err:=h.ContentDiagnostics.Export(r.Context(),scope,r.URL.Query().Get("run_id"),download);if err!=nil{diagnosticError(w,err);return};if download{w.Header().Set("Content-Disposition",`attachment; filename="loretide-diagnostics.json"`)};writeJSON(w,200,bundle)}
 func(h *Handler)ContentDiagnosticClient(w http.ResponseWriter,r *http.Request){scope,ok:=h.diagnosticScope(w,r);if !ok{return};var body struct{Code string `json:"code"`;Heartbeat bool `json:"heartbeat"`};decoder:=json.NewDecoder(http.MaxBytesReader(w,r.Body,1024));decoder.DisallowUnknownFields();if decoder.Decode(&body)!=nil{diagnosticError(w,diagnostics.ErrConflict);return};if body.Heartbeat{h.ContentDiagnostics.Heartbeat("web","browser",time.Now().UTC());writeJSON(w,200,map[string]bool{"ok":true});return};event,err:=h.ContentDiagnostics.ClientError(r.Context(),scope,body.Code);if err!=nil{diagnosticError(w,err);return};writeJSON(w,201,event)}
-func(h *Handler)ContentDiagnosticStream(w http.ResponseWriter,r *http.Request){scope,ok:=h.diagnosticScope(w,r);if !ok{return};f,err:=diagnosticFilter(r);if err!=nil{diagnosticError(w,err);return};flusher,ok:=w.(http.Flusher);if !ok{writeError(w,503,"stream unavailable");return};w.Header().Set("Content-Type","application/x-ndjson");w.Header().Set("Cache-Control","no-store");w.Header().Set("X-Accel-Buffering","no");ticker:=time.NewTicker(time.Second);defer ticker.Stop();deadline:=time.NewTimer(25*time.Second);defer deadline.Stop()
+// diagnosticStreamWindow bounds one stream connection so membership is
+// rechecked from a fresh request regularly. Ending the window is planned, not
+// a failure: the last page carries Rotate so the client resumes without
+// reporting a disconnect. Tests shorten it.
+var diagnosticStreamWindow=25*time.Second
+func(h *Handler)ContentDiagnosticStream(w http.ResponseWriter,r *http.Request){scope,ok:=h.diagnosticScope(w,r);if !ok{return};f,err:=diagnosticFilter(r);if err!=nil{diagnosticError(w,err);return};flusher,ok:=w.(http.Flusher);if !ok{writeError(w,503,"stream unavailable");return};w.Header().Set("Content-Type","application/x-ndjson");w.Header().Set("Cache-Control","no-store");w.Header().Set("X-Accel-Buffering","no");ticker:=time.NewTicker(time.Second);defer ticker.Stop();deadline:=time.NewTimer(diagnosticStreamWindow);defer deadline.Stop();rotate:=false
  for { // Recheck membership on each batch so revocation closes an active stream.
   member,err:=h.getWorkspaceMember(r.Context(),scope.Actor,scope.Workspace);if err!=nil||!roleAllowed(member.Role,"owner","admin"){return}
-  page,err:=h.ContentDiagnostics.Store.Query(r.Context(),scope,f);if err!=nil{return};b,err:=json.Marshal(page);if err!=nil{return};if _,err=fmt.Fprintf(w,"%s\n",b);err!=nil{return};flusher.Flush();f.After=page.Cursor
-  select{case <-r.Context().Done():return;case <-deadline.C:return;case <-ticker.C:}
+  page,err:=h.ContentDiagnostics.Store.Query(r.Context(),scope,f);if err!=nil{return};page.Rotate=rotate;b,err:=json.Marshal(page);if err!=nil{return};if _,err=fmt.Fprintf(w,"%s\n",b);err!=nil{return};flusher.Flush();f.After=page.Cursor
+  // The window closed, so this page was the planned last one.
+  if rotate{return}
+  select{case <-r.Context().Done():return;case <-deadline.C:rotate=true;case <-ticker.C:}
  }
 }
 

@@ -670,6 +670,20 @@ export class ApiClient {
   async contentDiagnosticStream(query: string, signal: AbortSignal): Promise<Response> {
     return this.fetchRaw(`/api/content-diagnostics/stream?${query}`, {signal});
   }
+
+  // Returns the raw export response so the caller can save the bytes the
+  // server sent. Decoding the bundle into an object and re-serializing it
+  // would rewrite the keys, and the bundle exists to be read next to the
+  // server's own logs. fetchRaw already raises ApiError with the parsed
+  // diagnostic error body on a non-2xx status.
+  async contentDiagnosticDownload(query: string, signal?: AbortSignal): Promise<Response> {
+    return this.fetchRaw(`/api/content-diagnostics/export?${query}`, {
+      method: "POST",
+      body: "{}",
+      signal,
+      extraHeaders: {"Content-Type": "application/json"},
+    });
+  }
   private baseUrl: string;
   private token: string | null = null;
   private logger: Logger;
