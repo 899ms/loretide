@@ -1,6 +1,7 @@
 package execenv
 
 import (
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,6 +22,7 @@ import (
 const legacyTaskHomeDirName = "home"
 
 func TestPrepareCodexKeepsRealHomeAndScopesOnlyCodexHome(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -54,6 +56,7 @@ func TestPrepareCodexKeepsRealHomeAndScopesOnlyCodexHome(t *testing.T) {
 }
 
 func TestPrepareCodexLocalDirectoryChatKeepsRolloutAcrossTaskIDs(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Given: a direct chat runs against the same local directory in two tasks.
 	sharedHome := t.TempDir()
 	t.Setenv("CODEX_HOME", sharedHome)
@@ -131,6 +134,7 @@ func TestCodexSessionStoreKeyUsesChatSessionIDWhenIssueAbsent(t *testing.T) {
 // daemon: its leftover `home/` directory (including the credential symlinks it
 // seeded) must neither break reuse nor be adopted as a HOME again.
 func TestReuseCodexToleratesLegacyTaskHome(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()

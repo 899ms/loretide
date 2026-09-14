@@ -1,4 +1,9 @@
-//go:build !windows
+// Every test in this file reaches execenv.Prepare / execenv.Reuse / LoadConfig,
+// all of which fail closed on the Loretide execution gate. These are upstream
+// Multica tests: they require the execution gate to be open, so they are not
+// built by a default `go test`. Run them with -tags loretide_gate_open once a
+// reviewed adapter opens the gate. See constitution principle IX.
+//go:build !windows && loretide_gate_open
 
 package daemon
 

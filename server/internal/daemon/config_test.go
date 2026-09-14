@@ -16,6 +16,7 @@ import (
 
 	"github.com/multica-ai/multica/server/internal/cli"
 	"github.com/multica-ai/multica/server/internal/daemon/execenv"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 )
 
 func TestResolveAgentExecutablePath_PreservesDispatchShimName(t *testing.T) {
@@ -110,6 +111,7 @@ func TestPatternsFromEnv_DefaultsWhenUnset(t *testing.T) {
 // self-host branch of defaultGCCompletedTaskTTL: retention stays unbounded until
 // an operator opts in, and a daemon upgrade never starts deleting on its own.
 func TestLoadConfig_CompletedTaskTTLDefaultsDisabledOnSelfHostAndReadsEnv(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("SHELL", filepath.Join(t.TempDir(), "missing-shell"))
@@ -143,6 +145,7 @@ func TestLoadConfig_CompletedTaskTTLDefaultsDisabledOnSelfHostAndReadsEnv(t *tes
 }
 
 func TestLoadConfig_WSClaimPollIntervalPrecedence(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("SHELL", filepath.Join(t.TempDir(), "missing-shell"))
@@ -183,6 +186,7 @@ func TestLoadConfig_WSClaimPollIntervalPrecedence(t *testing.T) {
 }
 
 func TestLoadConfig_CompletedTaskTTLDefaultsBoundedOnOfficialCloud(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("SHELL", filepath.Join(t.TempDir(), "missing-shell"))
@@ -475,6 +479,7 @@ func stageFakeAgent(t *testing.T) string {
 }
 
 func TestLoadConfig_DiscoversQwenCode(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell fixture is unavailable on Windows")
 	}
@@ -513,6 +518,7 @@ func TestLoadConfig_DiscoversQwenCode(t *testing.T) {
 }
 
 func TestLoadConfig_SkipsMulticaHooksShadowingAgentBinaries(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell not available on Windows")
 	}
@@ -569,6 +575,7 @@ func TestLoadConfig_SkipsMulticaHooksShadowingAgentBinaries(t *testing.T) {
 }
 
 func TestLoadConfig_SkipsMulticaHooksFromLoginShellFallback(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell not available on Windows")
 	}
@@ -635,6 +642,7 @@ func TestLoadConfig_SkipsMulticaHooksFromLoginShellFallback(t *testing.T) {
 // AutoUpdateEnabled to false, because self-host operators frequently run a
 // fork and the upstream GitHub release would silently overwrite it.
 func TestLoadConfig_AutoUpdateDefault_SelfHostOff(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	cfg, err := LoadConfig(Overrides{
 		ServerURL:      "http://localhost:8080",
@@ -649,6 +657,7 @@ func TestLoadConfig_AutoUpdateDefault_SelfHostOff(t *testing.T) {
 }
 
 func TestLoadConfig_CodexHandshakeTimeout(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	t.Setenv("MULTICA_CODEX_HANDSHAKE_TIMEOUT", "")
 
@@ -729,6 +738,7 @@ func TestLoadConfig_CodexHandshakeTimeout(t *testing.T) {
 }
 
 func TestLoadConfig_CodexTurnInterruptTimeout(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	t.Setenv("MULTICA_CODEX_TURN_INTERRUPT_TIMEOUT", "750ms")
 
@@ -762,6 +772,7 @@ func TestLoadConfig_CodexTurnInterruptTimeout(t *testing.T) {
 // value is honored verbatim. There is deliberately no Overrides/CLI parity — this
 // knob is environment-only.
 func TestLoadConfig_CodexFirstTurnNoProgressTimeout(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	t.Setenv("MULTICA_CODEX_FIRST_TURN_TIMEOUT", "")
 
@@ -808,6 +819,7 @@ func TestLoadConfig_CodexFirstTurnNoProgressTimeout(t *testing.T) {
 // first-turn timeout is >= the semantic timeout, and stay quiet only when the
 // semantic timeout is strictly greater.
 func TestLoadConfig_CodexFirstTurnTimeoutEqualToSemanticWarns(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 
 	const warnNeedle = "MULTICA_CODEX_FIRST_TURN_TIMEOUT is greater than or equal to the semantic-inactivity timeout"
@@ -854,6 +866,7 @@ func TestLoadConfig_CodexFirstTurnTimeoutEqualToSemanticWarns(t *testing.T) {
 // who raises the idle budget cannot accidentally leave tool calls capped at a
 // lower, invisible ceiling.
 func TestLoadConfig_ToolWatchdogDefaultsToIdleWatchdog(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	t.Setenv("MULTICA_AGENT_IDLE_WATCHDOG", "")
 	t.Setenv("MULTICA_AGENT_TOOL_WATCHDOG", "")
@@ -919,6 +932,7 @@ func TestLoadConfig_ToolWatchdogDefaultsToIdleWatchdog(t *testing.T) {
 // before the daemon budget that was supposed to protect it, and the raised
 // budget is a lie for Codex users.
 func TestLoadConfig_CodexSemanticInactivityDerivesFromWatchdog(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	for _, key := range []string{
 		"MULTICA_AGENT_IDLE_WATCHDOG",
@@ -984,6 +998,7 @@ func TestLoadConfig_CodexSemanticInactivityDerivesFromWatchdog(t *testing.T) {
 }
 
 func TestLoadConfig_OpenCodeIdleWatchdog(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	t.Setenv("MULTICA_OPENCODE_IDLE_WATCHDOG", "")
 
@@ -1031,6 +1046,7 @@ func TestLoadConfig_OpenCodeIdleWatchdog(t *testing.T) {
 // NormalizeServerBaseURL maps it through to the http host the detector
 // inspects.
 func TestLoadConfig_AutoUpdateDefault_CloudOn(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	cfg, err := LoadConfig(Overrides{
 		ServerURL:      "wss://api.multica.ai/ws",
@@ -1047,6 +1063,7 @@ func TestLoadConfig_AutoUpdateDefault_CloudOn(t *testing.T) {
 // TestLoadConfig_AutoUpdateEnv_ForcesOnForSelfHost lets a self-host operator
 // re-enable auto-update via env var, overriding the new conservative default.
 func TestLoadConfig_AutoUpdateEnv_ForcesOnForSelfHost(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	t.Setenv("MULTICA_DAEMON_AUTO_UPDATE", "true")
 	cfg, err := LoadConfig(Overrides{
@@ -1064,6 +1081,7 @@ func TestLoadConfig_AutoUpdateEnv_ForcesOnForSelfHost(t *testing.T) {
 // TestLoadConfig_AutoUpdateEnv_ForcesOffForCloud covers the inverse: a cloud
 // user can still opt out via env var.
 func TestLoadConfig_AutoUpdateEnv_ForcesOffForCloud(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	t.Setenv("MULTICA_DAEMON_AUTO_UPDATE", "false")
 	cfg, err := LoadConfig(Overrides{
@@ -1082,6 +1100,7 @@ func TestLoadConfig_AutoUpdateEnv_ForcesOffForCloud(t *testing.T) {
 // flag working: --no-auto-update (translated into overrides.DisableAutoUpdate)
 // forces auto-update off even when the cloud default and env var would enable.
 func TestLoadConfig_AutoUpdate_NoFlagWinsOverCloudDefault(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	t.Setenv("MULTICA_DAEMON_AUTO_UPDATE", "true")
 	cfg, err := LoadConfig(Overrides{
@@ -1104,6 +1123,7 @@ func TestLoadConfig_AutoUpdate_NoFlagWinsOverCloudDefault(t *testing.T) {
 // would clobber it — an argument that says nothing about a binary the operator
 // installed by hand.
 func TestLoadConfig_AutoReload_DefaultsOnEvenForSelfHost(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	t.Setenv("MULTICA_DAEMON_AUTO_UPDATE", "")
 	t.Setenv("MULTICA_DAEMON_AUTO_RELOAD", "")
@@ -1126,6 +1146,7 @@ func TestLoadConfig_AutoReload_DefaultsOnEvenForSelfHost(t *testing.T) {
 // the env layer: turning GitHub polling off must not silently stop the daemon
 // from following a hand-installed binary.
 func TestLoadConfig_AutoReload_NotGatedOnAutoUpdateEnv(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	t.Setenv("MULTICA_DAEMON_AUTO_UPDATE", "false")
 	t.Setenv("MULTICA_DAEMON_AUTO_RELOAD", "")
@@ -1146,6 +1167,7 @@ func TestLoadConfig_AutoReload_NotGatedOnAutoUpdateEnv(t *testing.T) {
 // overrides.DisableAutoReload in cmd_daemon.go, so it is covered by the same
 // assertion as the flag.
 func TestLoadConfig_AutoReload_OffSwitches(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	cases := []struct {
 		name      string
 		env       string
@@ -1350,6 +1372,7 @@ func TestLoadConfig_SkipsLoginShellWhenLookPathSucceeds(t *testing.T) {
 }
 
 func TestLoadConfig_UsesCodexDesktopAppBundleFallback(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	pathDir := t.TempDir()
 	fakeCodex := filepath.Join(pathDir, "Codex.app", "Contents", "Resources", "codex")
 	if err := os.MkdirAll(filepath.Dir(fakeCodex), 0o755); err != nil {
@@ -1392,6 +1415,7 @@ func TestLoadConfig_UsesCodexDesktopAppBundleFallback(t *testing.T) {
 // Multica must resolve the bundled CLI under ChatGPT.app (and prefer it over
 // the legacy Codex.app path when both exist).
 func TestLoadConfig_UsesChatGPTAppBundleCodexPath(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	pathDir := t.TempDir()
 	fakeChatGPT := filepath.Join(pathDir, "ChatGPT.app", "Contents", "Resources", "codex")
 	fakeLegacy := filepath.Join(pathDir, "Codex.app", "Contents", "Resources", "codex")
@@ -1463,6 +1487,7 @@ func TestCodexDesktopAppBundlePaths_IncludesChatGPTAndLegacy(t *testing.T) {
 }
 
 func TestLoadConfig_CodexDesktopFallbackDoesNotOverrideExplicitPath(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	pathDir := t.TempDir()
 	fakeCodex := filepath.Join(pathDir, "Codex.app", "Contents", "Resources", "codex")
 	if err := os.MkdirAll(filepath.Dir(fakeCodex), 0o755); err != nil {
@@ -1654,6 +1679,7 @@ func TestOpenclawOverrideFrom_NavigationCases(t *testing.T) {
 // (with no env vars set), and verify the openclaw probe picked up the
 // configured BinaryPath and the OPENCLAW_STATE_DIR env var was injected.
 func TestLoadConfig_AppliesBackendOverridesFromConfigFile(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	// stageFakeAgent left "claude" on PATH; we also need a fake "openclaw"
 	// at a custom path that the config file points at (mimicking a non-default
@@ -1714,6 +1740,7 @@ func TestLoadConfig_AppliesBackendOverridesFromConfigFile(t *testing.T) {
 // CLI config file (or with an empty one) behaves identically to before
 // commit 1 — agents discovered from PATH, no env injection.
 func TestLoadConfig_BackendOverrides_BackwardCompat_NoConfigFile(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 
 	// Point HOME at an empty dir — no config.json present.
@@ -1744,6 +1771,7 @@ func TestLoadConfig_BackendOverrides_BackwardCompat_NoConfigFile(t *testing.T) {
 // partial-write recovery — the daemon should log and proceed using
 // env-var-only configuration.
 func TestLoadConfig_BackendOverrides_MalformedConfigFileNonFatal(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	stageFakeAgent(t)
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)

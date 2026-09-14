@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 	"gopkg.in/yaml.v3"
 )
 
@@ -750,6 +751,7 @@ func TestPrepareHermesHomeFailsOnMissingNamedProfile(t *testing.T) {
 // top blocker: a Hermes task with no bound skills must NOT get a redirected
 // HERMES_HOME.
 func TestPrepareHermesNoSkillsLeavesHomeUnset(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	env, err := Prepare(PrepareParams{
 		WorkspacesRoot: t.TempDir(),
@@ -775,6 +777,7 @@ func TestPrepareHermesNoSkillsLeavesHomeUnset(t *testing.T) {
 // had a skill and lost its last one must drop the redirect and remove the
 // overlay.
 func TestReuseHermesTearsDownWhenSkillsRemoved(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	sharedHome := t.TempDir()
 	mustWrite(t, filepath.Join(sharedHome, "config.yaml"), "model: hermes-4\n")

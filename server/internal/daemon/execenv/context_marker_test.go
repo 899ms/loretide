@@ -2,6 +2,7 @@ package execenv
 
 import (
 	"encoding/json"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,6 +112,7 @@ func TestEnsureWorkspacesRootMarker(t *testing.T) {
 // root-level marker on every task start, so a marker deleted while the
 // daemon is running is restored before the next agent spawns.
 func TestPrepare_WritesWorkspacesRootMarker(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	root := t.TempDir()
 	env, err := Prepare(PrepareParams{
 		WorkspacesRoot: root,
@@ -139,6 +141,7 @@ func TestPrepare_WritesWorkspacesRootMarker(t *testing.T) {
 // on the reuse path too: a marker deleted while the daemon runs must be back
 // before a reused task spawns, not only after the next fresh Prepare.
 func TestReuse_SelfHealsWorkspacesRootMarker(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	root := t.TempDir()
 	env, err := Prepare(PrepareParams{
 		WorkspacesRoot: root,

@@ -19,7 +19,14 @@ func testLogger() *slog.Logger {
 }
 
 func TestGitEnv(t *testing.T) {
-	t.Parallel()
+	// GIT_CONFIG_COUNT is process-wide and t.Setenv cannot be used in a parallel
+	// test, so this one runs sequentially - same reason as
+	// TestGitEnvPreservesExistingConfig below. Pinning the count to 0 is what
+	// makes "no pre-existing config" true: a sandbox or CI runner that injects
+	// git config of its own (credential helpers, url.insteadOf) would otherwise
+	// push safe.directory past index 0 and fail this on the environment rather
+	// than on gitEnv.
+	t.Setenv("GIT_CONFIG_COUNT", "0")
 	env := gitEnv()
 
 	// Must contain GIT_TERMINAL_PROMPT=0.
@@ -50,7 +57,9 @@ func TestGitEnv(t *testing.T) {
 		t.Error("gitEnv() must include HOME from os.Environ()")
 	}
 
-	// Must set safe.directory=* via GIT_CONFIG env vars.
+	// Must set safe.directory=* via GIT_CONFIG env vars, at index 0 because the
+	// count was pinned to 0 above. TestGitEnvPreservesExistingConfig covers the
+	// non-empty case.
 	envHas := func(env []string, want string) bool {
 		for _, e := range env {
 			if e == want {
@@ -355,7 +364,11 @@ func TestCreateWorktreeContextCancelsRunningGitProcessTree(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("CreateWorktreeContext error = %v, want deadline exceeded", err)
 	}
-	if elapsed := time.Since(started); elapsed > time.Second {
+	// Loose for the same reason as processtree's run_unix_test.go: cancellation
+	// goes through processtree, which waits for the killed git process group to
+	// disappear, and that last step is the host init's reaping speed rather than
+	// anything this package controls.
+	if elapsed := time.Since(started); elapsed > 3*time.Second {
 		t.Fatalf("CreateWorktreeContext took %s after cancellation", elapsed)
 	}
 

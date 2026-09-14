@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/multica-ai/multica/server/internal/daemon/execenv"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 )
 
 // TestHandleTask_DoesNotCallStartTaskItself is the regression guard for
@@ -89,6 +90,7 @@ func TestHandleTask_DoesNotCallStartTaskItself(t *testing.T) {
 // workdir already exists on disk at the moment /start is hit; before the
 // fix it did not.
 func TestRunTask_StartTaskCalledAfterWorkdirOnDisk(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 
 	workspacesRoot := t.TempDir()
@@ -161,6 +163,7 @@ func TestRunTask_StartTaskCalledAfterWorkdirOnDisk(t *testing.T) {
 }
 
 func TestRunTask_InjectsPrivateTaskTempDir(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("shell-script agent fixture is POSIX-only")
 	}
@@ -403,6 +406,7 @@ func TestTaskTempBaseDir(t *testing.T) {
 // temp vars point at one fresh private dir under the configured base, agent
 // custom_env still cannot override them, and the dir is removed on task exit.
 func TestRunTask_TaskTempBaseOverride(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("shell-script agent fixture is POSIX-only")
 	}
@@ -509,6 +513,7 @@ printf '%s\n' '{"type":"result","subtype":"success","is_error":false,"session_id
 // MULTICA_AGENT_TEMP_BASE fails the task with a message naming the variable,
 // and the agent never starts against a /tmp dir it did not ask for.
 func TestRunTask_TaskTempBaseInvalidFailsStartup(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("shell-script agent fixture is POSIX-only")
 	}
@@ -575,6 +580,7 @@ printf 'ran\n' > "$CAPTURE_FILE"
 }
 
 func TestRunTask_ExtendsPrepareLeaseDuringStartTask(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	oldRefresh := taskPrepareLeaseRefresh
 	oldTimeout := taskPrepareLeaseTimeout
 	taskPrepareLeaseRefresh = 10 * time.Millisecond
@@ -674,6 +680,7 @@ func (t *prepareLeaseCountingTransport) RoundTrip(req *http.Request) (*http.Resp
 const prepareBudgetForBlockedStart = 2 * time.Second
 
 func TestRunTask_PrepareTimeoutStopsLeaseDuringBlockedStartTask(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	oldRefresh := taskPrepareLeaseRefresh
 	oldTimeout := taskPrepareLeaseTimeout
 	taskPrepareLeaseRefresh = 10 * time.Millisecond

@@ -231,6 +231,12 @@ func TestPrepareHermesHomeWithoutStoreKeepsTaskLocalMemories(t *testing.T) {
 // survive and the overlay must fail, because the caller deletes the source
 // directory as soon as migration reports success.
 func TestMigrateHermesTaskMemoriesFailureKeepsSource(t *testing.T) {
+	// The failure this pins is built with chmod 0o000, which root ignores: the
+	// directory stays readable and the migration legitimately succeeds. Same
+	// guard as local_directory_test.go's unwritable-directory case.
+	if os.Getuid() == 0 {
+		t.Skip("test cannot run as root; chmod is a no-op")
+	}
 	t.Parallel()
 	taskDir := t.TempDir()
 	storeDir := t.TempDir()

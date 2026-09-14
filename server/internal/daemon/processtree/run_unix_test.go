@@ -30,7 +30,12 @@ func TestCombinedOutputKillsDescendantsHoldingOutput(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("CombinedOutput error = %v, want deadline exceeded", err)
 	}
-	if elapsed := time.Since(started); elapsed > time.Second {
+	// The bound is deliberately loose. controller.finish polls until the process
+	// group is gone, and a killed descendant stays in the group as a zombie
+	// until the host's init reaps it. A sandbox init that reaps on an interval
+	// rather than immediately adds ~2s here with nothing wrong in this package,
+	// so 3s separates "bounded" from "hung" without pinning the host's reaper.
+	if elapsed := time.Since(started); elapsed > 3*time.Second {
 		t.Fatalf("CombinedOutput took %s, want a hard bounded return", elapsed)
 	}
 

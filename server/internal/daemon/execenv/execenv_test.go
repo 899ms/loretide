@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy/policytest"
 	"io"
 	"log/slog"
 	"os"
@@ -65,6 +66,7 @@ func TestPredictRootDir(t *testing.T) {
 }
 
 func TestResolveRootDirFreezesReadableNamesBeforePrepare(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 
 	root := t.TempDir()
@@ -472,6 +474,7 @@ func TestRepoNameFromURL(t *testing.T) {
 }
 
 func TestPrepareDirectoryMode(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 
@@ -548,6 +551,7 @@ func TestPrepareDirectoryMode(t *testing.T) {
 }
 
 func TestPrepareWithProjectResources(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 
@@ -747,6 +751,7 @@ func TestWriteProjectResourcesSkippedWhenNone(t *testing.T) {
 }
 
 func TestPrepareWithRepoContext(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 
@@ -1005,6 +1010,7 @@ func TestWriteContextFilesCodebuddyNativeSkills(t *testing.T) {
 // via its sidecar manifest before re-writing, so each skill lands at its
 // natural slug on every dispatch instead of dodging its own prior output.
 func TestReuseRefreshesSkillsWithoutDuplicating(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 
 	workspacesRoot := t.TempDir()
@@ -1071,6 +1077,7 @@ func TestReuseRefreshesSkillsWithoutDuplicating(t *testing.T) {
 // platform-owned skill directory so the refreshed skill stays at its natural
 // slug.
 func TestReuseReclaimsManagedSkillDirWithStrayAgentFile(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 
 	workspacesRoot := t.TempDir()
@@ -1223,6 +1230,7 @@ func TestMcodeUsesNativeProjectSkillRoot(t *testing.T) {
 }
 
 func TestCleanupPreservesLogs(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 
@@ -2212,6 +2220,7 @@ func TestWriteContextFilesAntigravityNativeSkills(t *testing.T) {
 }
 
 func TestPrepareWithRepoContextOpencode(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 
@@ -4329,6 +4338,7 @@ func TestPrepareCodexHomeWritesManagedSandboxBlock(t *testing.T) {
 }
 
 func TestReuseRestoresCodexHome(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -4383,6 +4393,7 @@ func TestReuseRestoresCodexHome(t *testing.T) {
 }
 
 func TestReuseRestoresCodexPluginCache(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -4428,6 +4439,7 @@ func TestReuseRestoresCodexPluginCache(t *testing.T) {
 }
 
 func TestReusePreservesTaskLocalModelsCacheWhenSharedMissing(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -4470,6 +4482,7 @@ func TestReusePreservesTaskLocalModelsCacheWhenSharedMissing(t *testing.T) {
 }
 
 func TestReusePreservesTaskLocalModelsCacheOverStaleSharedSnapshot(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -4515,6 +4528,7 @@ func TestReusePreservesTaskLocalModelsCacheOverStaleSharedSnapshot(t *testing.T)
 }
 
 func TestReuseInvalidatesTaskLocalModelsCacheWhenProviderConfigChanges(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -4595,6 +4609,7 @@ func TestReuseInvalidatesTaskLocalModelsCacheWhenProviderConfigChanges(t *testin
 }
 
 func TestReuseInvalidatesTaskLocalModelsCacheWhenModelCatalogChanges(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -4652,6 +4667,7 @@ func TestReuseInvalidatesTaskLocalModelsCacheWhenModelCatalogChanges(t *testing.
 }
 
 func TestReuseInvalidatesUnboundLegacyModelsCache(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -4713,6 +4729,7 @@ func TestReuseInvalidatesUnboundLegacyModelsCache(t *testing.T) {
 }
 
 func TestReuseWritesMissingCodexWorkspaceSkills(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -4767,6 +4784,7 @@ func TestReuseWritesMissingCodexWorkspaceSkills(t *testing.T) {
 }
 
 func TestReuseUpdatesCodexWorkspaceSkills(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -4830,6 +4848,7 @@ func TestReuseUpdatesCodexWorkspaceSkills(t *testing.T) {
 // inside a Multica task, despite the daemon redirecting CODEX_HOME to a
 // per-task directory.
 func TestPrepareCodexSeedsUserSkills(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -4895,6 +4914,7 @@ func TestPrepareCodexSeedsUserSkills(t *testing.T) {
 // skill, the workspace version fully replaces the user version (rather than
 // leaving stale user files lingering).
 func TestPrepareCodexWorkspaceSkillBeatsUserSkillOnConflict(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -4947,6 +4967,7 @@ func TestPrepareCodexWorkspaceSkillBeatsUserSkillOnConflict(t *testing.T) {
 // when ~/.codex/skills doesn't exist, the seed step is a no-op and Prepare
 // still succeeds.
 func TestPrepareCodexNoUserSkillsDir(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -4976,6 +4997,7 @@ func TestPrepareCodexNoUserSkillsDir(t *testing.T) {
 // following a chain that breaks the moment the installer re-points it, and
 // never dangling.
 func TestPrepareCodexResolvesUserSkillSymlinks(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink semantics differ on Windows; covered by Unix path")
 	}
@@ -5040,6 +5062,7 @@ func TestPrepareCodexResolvesUserSkillSymlinks(t *testing.T) {
 // TestReuseSeedsUserSkillUpdates ensures that user-skill edits between two
 // runs of the same task (the Reuse path) propagate into the per-task home.
 func TestReuseSeedsUserSkillUpdates(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -5092,6 +5115,7 @@ func TestReuseSeedsUserSkillUpdates(t *testing.T) {
 // with a workspace skill `Writing`, the user-version support files must not
 // linger under the workspace skill's directory.
 func TestReuseClearsUserSkillResidueOnWorkspaceConflict(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -5153,6 +5177,7 @@ func TestReuseClearsUserSkillResidueOnWorkspaceConflict(t *testing.T) {
 // per-task home on Reuse — otherwise users would still see deleted skills
 // surface to the codex CLI.
 func TestReuseClearsRemovedUserSkill(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	// Cannot use t.Parallel() with t.Setenv.
 
 	sharedHome := t.TempDir()
@@ -6259,6 +6284,7 @@ func TestInjectRuntimeConfigCodexCommentFormattingUnchanged(t *testing.T) {
 // (the daemon's logbook), but the workdir slot is the user's path.
 
 func TestPrepareLocalWorkDir(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 	userDir := t.TempDir()
@@ -6310,6 +6336,7 @@ func TestPrepareLocalWorkDir(t *testing.T) {
 }
 
 func TestEnvironmentCleanupPreservesLocalDirectory(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 	userDir := t.TempDir()
@@ -6371,6 +6398,7 @@ func TestEnvironmentCleanupPreservesLocalDirectory(t *testing.T) {
 // a non-local_directory env preserves its existing semantics so the
 // local_directory branch can't silently regress the regular flow.
 func TestEnvironmentCleanupStandardModeRemovesWorkdir(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 
@@ -6449,6 +6477,7 @@ func TestLocalWorktreeBranchDistinctForSharedUUIDv7Prefix(t *testing.T) {
 // os.RemoveAll over task A's *running* env root, destroying its identity
 // files, worktree and task-scoped config while A was still executing.
 func TestPrepareDoesNotDeleteConcurrentTaskEnv(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 
@@ -6531,6 +6560,7 @@ func TestTaskKeyReadsTheRandomTail(t *testing.T) {
 // not impossible, and the cost of being wrong is deleting a running task's
 // work — so a foreign owner must stop Prepare rather than be overwritten.
 func TestPrepareRefusesEnvRootOwnedByAnotherTask(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 	const taskID = "01a01ec0-e69d-7000-8000-0123456789ab"
@@ -6576,6 +6606,7 @@ func TestPrepareRefusesEnvRootOwnedByAnotherTask(t *testing.T) {
 // TestPrepareResetsItsOwnEnvRoot is the other half: a rerun of the SAME task
 // owns the path and must still get a clean directory.
 func TestPrepareResetsItsOwnEnvRoot(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 	const taskID = "01a01ec0-e69d-7000-8000-0123456789ab"
@@ -6624,6 +6655,7 @@ func TestPrepareResetsItsOwnEnvRoot(t *testing.T) {
 // Started together, exactly one must win: the other has to fail without
 // touching the winner's tree.
 func TestPrepareConcurrentSameKeyTasksClaimExclusively(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 	ids := []string{
@@ -6760,6 +6792,7 @@ func prepareSameTask(t *testing.T, workspacesRoot, taskID string) (*Environment,
 // workdir, config and worktree: the very cross-execution deletion the env-root
 // claim exists to prevent, arriving through the one door it left open.
 func TestPrepareRefusesOverlappingExecutionOfSameTask(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 	const taskID = "01a01ec0-e69d-7000-8000-0123456789ab"
@@ -6794,6 +6827,7 @@ func TestPrepareRefusesOverlappingExecutionOfSameTask(t *testing.T) {
 // is what distinguishes the two cases, and the kernel drops it when the holder
 // exits, so no stale-state cleanup path is needed for a crashed execution.
 func TestPrepareResetsAfterPriorExecutionEnded(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 	const taskID = "01a01ec0-e69d-7000-8000-0123456789ab"
@@ -6954,6 +6988,7 @@ func TestReuseCodexRejectsUnusableHome(t *testing.T) {
 // Windows, pinning the directory against removal. The daemon defers
 // ReleaseLock for the task run; this covers the contract it relies on.
 func TestReleaseLockFreesEnvRootForALaterDispatch(t *testing.T) {
+	policytest.SkipIfExecutionGated(t)
 	t.Parallel()
 	workspacesRoot := t.TempDir()
 	const taskID = "01a01ec0-e69d-7000-8000-0123456789ab"
