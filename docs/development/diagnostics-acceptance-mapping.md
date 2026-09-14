@@ -183,7 +183,7 @@
 | 验证配置不可回写历史 | `CloneSnapshot()` 深拷贝 | 自动测试已通过 | `TestSnapshotRegressionCloneIsolation`、`TestSnapshotRegressionInputImmutability` |
 | 验证文件缺失/变化 | 场景 `file_missing` / `file_changed` | 自动测试已通过 | `TestSnapshotRegressionReproductionGaps` |
 | 验证授权撤销 | `TestSnapshotImmutableAndRevocation` | 自动测试已通过 | — |
-| 不复制媒体 | `Snapshot` 只存哈希与标识，无二进制字段 | 代码存在但无测试 | 由结构保证；未见显式负例 |
+| 不复制媒体 | `snapshot_media_test.go` 3 条：16 字段清单逐项比对名称与类型、集合元素只许字符串、全结构无字节容器 | 自动测试已通过 | **2026-09-14 由 008 闭合**（FR-012 / FR-013，#50 的第 6 项已预先登记归属）。此前记「由结构保证；未见显式负例」——现在有了：变异验证中加 `Blob []byte` 变红，**加一个合法 `string` 字段也变红**，所以新增字段必须有人显式确认它不是媒体 |
 | 日志中不保存完整私有资料 | `safe_message` 固定枚举 | 自动测试已通过 | `TestSecretsNeverEnterTechnicalLog` |
 
 ### DIAG-11 · 模拟执行器与固定故障场景（验收 D13-V07/10）
@@ -304,12 +304,12 @@
 | DIAG-06 | 8 | 3 | 0 | 11 |
 | DIAG-07 | 12 | 0 | 0 | 12 |
 | DIAG-08 | 14 | 0 | 1 | 15 |
-| DIAG-09 | 3 | 7 | 3 | 13 |
-| DIAG-10 | 9 | 2 | 0 | 11 |
+| DIAG-09 | 4 | 6 | 3 | 13 |
+| DIAG-10 | 10 | 1 | 0 | 11 |
 | DIAG-11 | 9 | 0 | 0 | 9 |
 | DIAG-12 | 11 | 1 | 1 | 13 |
 | DIAG-13 | 5 | 2 | 3 | 10 |
-| **合计** | **121** | **16** | **8** | **145** |
+| **合计** | **123** | **14** | **8** | **145** |
 
 ### 4.2 D13-V01～V12 状态
 
@@ -397,11 +397,11 @@
    >
    > **本次不改动 `Store.Audit` 与 `Store.CommitRun` 的语义**：新增的同事务入口 `CommitRunWithDispatch` 与它们并列，`CommitRun` 的事务体被原样提取为私有函数供两者共用。
 
-4. **16 个条目「代码存在但无测试」**（上一版按逐行统计为 25，feature 010 转化了 9 项）——**剩下的 16 项里有 14 项是浏览器界面行**：DIAG-06（3）、DIAG-09（7）、DIAG-13（2）、DIAG-12 预览（1）、DIAG-10 模型参数快照（1）。按 constitution 原则 II 这些不补 UI 单测，只能由用户手动验收，因此 **DG-01 的出口天然依赖一份尚不存在的完整浏览器验收报告**。另外 2 项是非界面行，见第 6 条。
+4. **14 个条目「代码存在但无测试」**（feature 010 后为 16，**008 再转化 2 项**：DIAG-09「支持关联跳转」与 DIAG-10「不复制媒体」）——**剩下的 14 项里有 13 项是浏览器界面行**：DIAG-06（3）、DIAG-09（6）、DIAG-13（2）、DIAG-12 预览（1）、DIAG-10 模型参数快照（1）。按 constitution 原则 II 这些不补 UI 单测，只能由用户手动验收，因此 **DG-01 的出口天然依赖一份尚不存在的完整浏览器验收报告**。另外 1 项是非界面行（DIAG-02「验证嵌套字段」），见第 6 条。
 5. **一项功能缺口，不是测试缺口**（feature 010 登记）：**DIAG-03 卡片要求的「按级别过滤写入」在生产代码中不存在**。`limits.go` 的 `ConfigureLimits` 只有 `MaxLogs` 与 `Retention` 两项，全仓没有任何按 `severity` 过滤写入的分支。写测试无法闭合它——测试只能固定现状，而现状里没有这个功能。**需要一个实现任务**，不属于补证据的范围。
 6. **两项非界面行留给后续 spec**（feature 010 显式排除）：
    - DIAG-02「验证嵌套字段」：`Event` 为扁平结构，造不出真实的嵌套负例，宜与 `specs/008` 的快照字段清单一并处理；
-   - DIAG-10「不复制媒体」：**已被 `specs/008-diag-linkage-and-invariants` 的 FR-012 / FR-013 认领**（008 尚未实施），由 010 再写一遍会与之撞车。
+   - ~~DIAG-10「不复制媒体」~~ —— **已闭合**：`specs/008` 的 FR-012 / FR-013 已实施（`snapshot_media_test.go`），该行已转为「自动测试已通过」。原文：**已被 `specs/008-diag-linkage-and-invariants` 的 FR-012 / FR-013 认领**（008 尚未实施），由 010 再写一遍会与之撞车。
 7. **对表：两项均已完成**：
    - ~~`simulator.go` 的 16 个场景是否等于 `docs/13` §7 的完整列举~~ —— **已完成**（主任务 2026-09-14 于 `app-main` `c9cc63eca` 核对）：§7 列举 **15 项，全部在 `Scenarios` 之内**，多出的一个是 `clock_skew`。`Scenarios` 是 §7 的**超集**，不构成缺口。
    - ~~迁移 `468`～`473` 是否满足「无 FK、索引全部 `CONCURRENTLY`」~~ —— **已完成**（主任务 2026-09-14 于 `app-main` 核对）：六个 up/down 文件无 `REFERENCES` / `CASCADE`，5 条索引全部 `CREATE [UNIQUE] INDEX CONCURRENTLY IF NOT EXISTS`。~~仓库迁移测试仍不检查这两项，属人工核对~~ —— **不再是人工核对**：feature 010 的 `TestContentMigrationConstraints` 每次 CI 都跑，范围已扩到 `468`～`476` 共 **18 个文件**。
@@ -489,14 +489,20 @@
 
 | 命令 | 退出码 | 结果 |
 |---|---:|---|
-| `pnpm check:content-boundaries` | 0 | 13 自测 PASS；`3541 files; 12 registered modules`（新增的 `linkage.ts` 未越界） |
+| `pnpm check:content-boundaries` | 0 | 自测 PASS；新增的 `linkage.ts` 未越界 |
+| `pnpm check:diagnostics-no-upload` | 0 | `4 files checked; 1 excluded by design` |
 | `pnpm check:diagnostics-contract` | 0 | 26 自测 PASS；`checked 1 landed module; skipped 11 not yet landed` |
-| `pnpm typecheck` | 0 | 9/9 任务，**4 个真实执行**（非全缓存）。见下方「基线缺陷」 |
-| `go test ./internal/content/diagnostics -count=1 -race -v` | 0 | **47 PASS / 0 SKIP / 0 FAIL**（已设 `LORETIDE_DIAG_TEST_DATABASE_URL`，Postgres 集成用例真实执行）。含本次新增的 `TestNextAction*` 4 条、`TestSnapshotHasNoMedia*` 3 条、`TestReproduce*` 3 条 |
+| `pnpm typecheck --force` | 0 | 9/9 任务，**0 cached**——全部真实执行，不是缓存命中。见下方「基线缺陷」 |
+| `go test ./internal/content/diagnostics -count=1 -race -v` | 0 | **67 PASS / 0 SKIP / 0 FAIL**（已设 `LORETIDE_DIAG_TEST_DATABASE_URL`，Postgres 集成用例真实执行）。含本次新增的 `TestNextAction*` 4 条、`TestSnapshot{HasNoMediaPayload,CollectionsCarryOnlyText,HasNoByteContainerAnywhere}` 3 条、`TestReproduce*` 3 条，用例名逐条核对 |
 | `go test ./internal/handler -run 'TestContentDiagnostic\|TestDeleteWorkspace_PurgesContentDiagnostics' -v` | 0 | **17 PASS / 0 SKIP / 0 FAIL**，含本次新增的 `TestContentDiagnosticLinkage*` 3 条 |
 | `pnpm --filter @multica/core exec vitest run …5 个文件` | 0 | **5 文件 74 用例**全部通过，含新增 `linkage.test.ts` 18 条 |
+| `pnpm --filter @multica/views exec vitest run locales/parity.test.ts` | 0 | 160 用例通过（四语言键齐） |
 
 vitest **逐文件指定**（`contract` / `stream-state` / `trace-waterfall` / `regression` / `linkage`），不用 `content/diagnostics/` 目录通配——通配会把原则 II 排除的 `queries.test.tsx` 一并跑掉。
+
+**本次重跑是在 rebase 到 `app-main` `50733c7`（含 #47 #48 #49 #50 #52）之后进行的**，诊断包用例数由 47 升到 67 是 #50 带入的新用例，不是本特性新增。
+
+**重跑期间本机 PostgreSQL 实例一度消失**（容器临时目录被清），当时 `internal/handler` 打印 `ok`、退出码 **0**、**一个用例都没跑**——正是本节末尾那条陷阱的实况。重建实例并跑完迁移后才得到上表数字，`h3` 日志中无 `Skipping tests` 行。**这再次说明：handler 包的证据必须看用例名，不能看退出码。**
 
 **变异验证**（本次 7 处，每处改完即还原，均确认变红）：
 
