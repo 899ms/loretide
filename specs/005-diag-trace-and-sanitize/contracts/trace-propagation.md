@@ -21,7 +21,9 @@
 
 ## Response
 
-- `X-Diagnostic-Trace: <32 hex trace-id>` —— **既有头，形状不变**，安装版客户端可能已依赖。
+- `X-Diagnostic-Trace: <32 hex trace-id>` —— **取值形状不变**，安装版客户端可能已依赖。
+- **设置方改变**：今天由 `DiagnosticTrace` 设置，因而只有 `/api/content-diagnostics` 的响应才有；改为由**传播中间件**设置，于是**全部已传播的 API 路由**的响应都带它。取值不变、出现范围扩大——这是放宽，不是破坏（spec FR-003、FR-012）。
+- 回传值**等于**该请求所写技术事件的 `trace_id`（若该路由写技术事件）。
 - 本功能不在响应上新增 `traceparent`。
 
 ## 下游传播
@@ -40,7 +42,7 @@
 
 - `upstream_trace` **MUST NOT** 作为查询键、**MUST NOT** 用于跨 workspace 关联、**MUST NOT** 参与授权判定。
 - 采样位为「不采样」不影响 trace-id 的建立与传播。
-- 非诊断路由经过传播中间件后，响应形状、状态码与错误语义**不变**，也不因此产生技术事件。
+- 非诊断路由经过传播中间件后，除新增 `X-Diagnostic-Trace` 响应头外，响应形状、状态码与错误语义**不变**，也不因此产生技术事件。
 
 ## Compatibility
 

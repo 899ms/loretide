@@ -9,7 +9,7 @@
 (cd server && GOTOOLCHAIN=auto go test ./internal/middleware -run Trace -count=1 -v)
 
 # 脱敏规则与派发接口：不需要数据库
-(cd server && GOTOOLCHAIN=auto go test ./internal/content/diagnostics -run 'Sanitize|Dispatch' -count=1 -v)
+(cd server && GOTOOLCHAIN=auto go test ./internal/content/diagnostics -run 'Sanitize|LogRegression|Dispatch' -count=1 -v)
 
 # handler 三段连续性：需要 PostgreSQL
 (cd server && GOTOOLCHAIN=auto go test ./internal/handler -run ContentDiagnostic -count=1 -v)
@@ -36,8 +36,8 @@ pnpm check:content-boundaries       # 无此脚本时：node --test scripts/chec
    ```
    响应的 `X-Diagnostic-Trace` **不等于** `1111…`；该请求成功（与不带该头时一致）。
 3. **非法值不失败**：把上面的 `traceparent` 换成 `garbage`，响应仍为 200，且 `upstream_trace` 不留存该值。
-4. **记录范围不变**：打一个非诊断业务路由（例如 `GET /api/assignee-frequency`），确认它有 trace 传播但**没有**新增技术事件。
-5. **脱敏负例（SC-004）**：带 `Authorization`、路径参数与 `?token=abc` 请求诊断端点，导出诊断包后 `grep` 包内容，`abc`、令牌串、查询串键名出现次数均为 0。
+4. **记录范围不变**：打一个非诊断业务路由（例如 `GET /api/workspaces`），确认响应**带** `X-Diagnostic-Trace`，但 `content_technical_log` **没有**新增行。
+5. **脱敏负例（SC-004）**：带 `Authorization`、`X-Api-Key`、`User-Agent`、路径参数与 `?token=abc` 请求诊断端点，导出诊断包后 `grep` 包内容：`abc`、令牌串、查询串**键名**、`User-Agent` 取值出现次数均为 0；请求身份只出现为 `<METHOD> <路由模板>` 加状态码。
 6. **派发边界（SC-005）**：构造事务回滚场景确认派发 0 次；构造提交后派发失败确认失败计数上升且业务操作成功。
 
 ## 未执行项的记录方式

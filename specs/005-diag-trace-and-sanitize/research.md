@@ -18,14 +18,15 @@ Phase 0。Technical Context 无 NEEDS CLARIFICATION（三处已由 2026-09-14 cl
 
 ## D3. 请求身份的安全形状
 
-- **Decision**: 记录**路由模板 + HTTP 方法**，例如 `GET /api/content-diagnostics/events`。路由模板取自 chi 的 `RouteContext().RoutePattern()`，它返回的是注册时的模式（含 `{id}` 占位符），**不是**实际路径，因此天然不含取值。查询串整体不记。
+- **Decision**: 记录**路由模板 + HTTP 方法 + 响应状态码**三元组，由 `Event.route`（`<METHOD> <模式>`）与 `Event.status`（状态码）两个字段承载。路由模板取自 chi 的 `RouteContext().RoutePattern()`，它返回的是注册时的模式（含 `{id}` 占位符），**不是**实际路径，因此天然不含取值。查询串的取值与**键名**都不记，原始路径与路径哈希都不记。
 - **Rationale**: `RoutePattern()` 给出的是编译期就确定的有限集合，可证明不含用户输入；不需要任何正则清洗，也就不存在「清洗漏一种写法」的风险。
-- **Status**: 主任务对 clarify 第 4 题未回答，本决策按推荐项暂定。改为更细的形状（加查询串键名或路径哈希）属放宽，不会使已写的验收失效。
+- **Status**: 主任务 2026-09-14 补答确认，并明确排除查询串键名与路径哈希。状态码为补答新增的一项——它使「哪个请求失败了」可以直接从事件读出，而不必回到日志里对时间。
 - **Alternatives considered**: 对 `r.URL.Path` 做正则替换 —— 需要枚举所有 id 形态（UUID、slug、数字、hex），漏一种就泄漏，且无法自证完备，否决。
 
 ## D4. 请求头准入规则的形状
 
-- **Decision**: 与既有 `Sanitize()` 同口径——**列举允许项，其余一律不记**（allowlist，不是 denylist）。名称比对大小写不敏感（`textproto.CanonicalMIMEHeaderKey`）。允许项首批只放确定安全的诊断相关头；`Authorization`、`Cookie`、`Set-Cookie`、`X-CSRF-Token` 等不在名单上，因此既不出现名称也不出现取值。同名多值不拼接，按整体丢弃处理。
+- **Decision**: 三档，逐名列举见 `contracts/request-sanitization.md`——**记值 / 只记存在 / 一律不记**，未列入者默认不记。名称比对大小写不敏感（`textproto.CanonicalMIMEHeaderKey`）。第三档除逐名项外还有四条后缀模式（`*-token` / `*-secret` / `*-key` / `*-password`），且优先于前两档。同名多值不拼接，按整体丢弃处理。
+- **第二档为什么只记「存在」**：`user-agent` 与 `accept` 对诊断有用（区分客户端、内容协商），但取值是自由文本、可被调用方塞入任意内容。记「存在」保住了诊断价值，又不给自由文本留入口。**长度也不记**——长度是取值的一种泄漏。
 - **Rationale**: `log.go` 现有全部规则都是 allowlist（`oneOf`、`token` 正则、`hexID`）。denylist 的失败模式是「新增一个敏感头就漏」，与仓库既有姿态不一致。
 - **Alternatives considered**: 记录头名称但屏蔽取值 —— 头名称本身可能暴露内部结构，且 FR-005 明确「名称、取值、片段、长度」都不得进入，否决。
 

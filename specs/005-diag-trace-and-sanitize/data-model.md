@@ -7,19 +7,23 @@
 | 字段 | 类型 | 变化 |
 |---|---|---|
 | 既有全部字段 | — | 不变 |
-| **route** | string，可选，默认 `""` | **新增**：脱敏后的请求身份，形如 `GET /api/content-diagnostics/events`（路由模板 + 方法，不含路径参数取值与查询串） |
+| **route** | string，可选，默认 `""` | **新增**：请求身份的前两项，形如 `GET /api/content-diagnostics/events`（路由模板 + 方法）。不含原始路径、查询串取值与键名、路径哈希 |
+| **status** | number，可选，默认 `0` | **新增**：请求身份的第三项，响应状态码。与 `route` 合起来构成「路由模板 + 方法 + 状态码」三元组 |
+| **headers_present** | string[]，可选，默认 `[]` | **新增**：第二档（只记存在）中**确实出现**的请求头**名称**列表，取值恒为第二档名单的子集。只有名称，没有取值、长度或摘要 |
 | **upstream_trace** | string，可选，默认 `""` | **新增**：入站 `traceparent` 的关联属性形式。仅在校验通过且**未**被采信为父级时写入；被采信时不写（此时 `trace_id` 本身即是它）。**不作查询键、不跨 workspace 关联、不用于授权** |
 
-两个字段都带 `omitempty`，旧读者忽略未知字段（`contract.test.ts` 的「accepts additive fields」用例已覆盖该方向）。
+四个字段都带 `omitempty`，旧读者忽略未知字段（`contract.test.ts` 的「accepts additive fields」用例已覆盖该方向）。
 
 客户端 `eventSchema` 相应新增：
 
 ```text
-route:          z.string().optional().default("")
-upstream_trace: z.string().optional().default("")
+route:           z.string().optional().default("")
+status:          z.number().optional().default(0)
+headers_present: z.array(z.string()).optional().default([])
+upstream_trace:  z.string().optional().default("")
 ```
 
-transform 后为 `route` / `upstreamTrace`，经 `parseWithFallback`。
+transform 后为 `route` / `status` / `headersPresent` / `upstreamTrace`，经 `parseWithFallback`。
 
 ## Trace 上下文（进程内，跨中间件传递）
 
@@ -40,13 +44,20 @@ candidate:  校验通过的入站 traceparent，等待认证后决定是否提�
 | 3 | 其余全部路由 | `candidate` 不提升；若该请求写技术事件，则以 `upstream_trace` 形式记录 |
 | 4 | `Pack(ctx,…)` | 从 ctx 注入 carrier，队列与 WS 两段沿用（**既有代码，不改**） |
 
-## 请求头准入名单
+## 请求头准入名单（三档）
 
 ```text
-allow:  一份显式列举的头名称集合（大小写不敏感比对）
-其余:   既不记名称也不记取值、片段或长度
-多值:   不拼接，整体按未准入处理
+第一档 记值:     traceparent, tracestate, x-diagnostic-trace, x-request-id,
+                 x-workspace-id, content-type, content-length
+第二档 只记存在: user-agent, accept          （不记值、不记长度）
+第三档 一律不记: authorization, cookie, set-cookie, x-api-key,
+                 proxy-authorization, 以及 *-token / *-secret / *-key / *-password
+默认:            未列入者不记
+多值:            不拼接，整体按未列入处理
+优先级:          第三档优先于第一、二档
 ```
+
+逐名清单与理由见 `contracts/request-sanitization.md`。
 
 ## 待派发记录（进程内，不落库）
 

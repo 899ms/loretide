@@ -8,8 +8,8 @@
 
 三处闭合，一条主线：**让 HTTP 边界的 `context.Context` 携带正确的 span context**，其余各段自动成立。
 
-1. **传播**：新增全局中间件为每个 API 请求建立本实例 trace；由于队列与 WS 两段已经用 `Pack(ctx,…)` 从 ctx 注入 carrier，边界一修好，`请求 → 队列 → daemon` 的连续性无需改动那两段即成立。父级采信的判定放在认证之后（`X-Actor-Source` 由认证中间件写入，客户端值被剥离），只有 daemon 的 machine credential 路径能把入站 `traceparent` 提升为父级。
-2. **脱敏**：把「请求头准入」与「路径/URL 安全形状」从副作用变成两条具名、可复用的规则，放在既有 `Sanitize()` 同一处，供全部 sink 与导出共用。
+1. **传播**：新增全局中间件为每个 API 请求建立本实例 trace，并接手 `X-Diagnostic-Trace` 响应头的设置（今天由 `DiagnosticTrace` 设，因而只有诊断路由才有）；由于队列与 WS 两段已经用 `Pack(ctx,…)` 从 ctx 注入 carrier，边界一修好，`请求 → 队列 → daemon` 的连续性无需改动那两段即成立。父级采信的判定放在认证之后（`X-Actor-Source` 由认证中间件写入，客户端值被剥离），只有 daemon 的 machine credential 路径能把入站 `traceparent` 提升为父级。
+2. **脱敏**：把「请求头准入」（三档逐名清单 + 四条后缀模式）与「请求身份形状」（路由模板 + 方法 + 状态码）从副作用变成两条具名、可复用的规则，放在既有 `Sanitize()` 同一处，供全部 sink 与导出共用。
 3. **派发接口**：`事务内登记 + 提交后派发`，进程内实现、不落库、不新增迁移；签名按可被持久实现替换设计。
 
 记录范围不变：只有 `/api/content-diagnostics` 路由组写技术事件（clarify FR-015）。
@@ -32,7 +32,7 @@
 
 **Constraints**: 传播全局、记录模块内；入站 `traceparent` 默认不采信；不新增表与迁移；不改 `Pack`/`Unpack` 线上形状；不改既有 `Sanitize` 已通过的字段级规则
 
-**Scale/Scope**: server 中间件 1 新文件 + 1 测试；handler 2 文件；diagnostics 包 3 文件 + 测试；daemon 客户端 1 文件；core 2 文件；文档 1 份。预计手写文件约 11 个
+**Scale/Scope**: server 中间件 2 文件（1 新 + `daemon_auth.go` 一处调用）+ 1 新测试；handler 2 文件；diagnostics 包 3 文件 + 2 测试；daemon 客户端 1 文件；core 2 文件；文档 1 份。预计手写文件约 11 个
 
 ## Constitution Check
 
@@ -76,23 +76,23 @@ specs/005-diag-trace-and-sanitize/
 ### Source Code (repository root)
 
 ```text
-server/internal/middleware/trace.go                       # 新增：全局传播中间件（建 trace、校验入站值、暂存候选父级）
-server/internal/middleware/trace_test.go                  # 新增：表驱动，覆盖建 trace / 不采信 / 非法值 / 不改响应
+server/internal/middleware/trace.go                       # 新增：全局传播中间件（建 trace、校验入站值、暂存候选父级、设 X-Diagnostic-Trace）
+server/internal/middleware/trace_test.go                  # 新增：表驱动，覆盖建 trace / 不采信 / 非法值 / 不改响应 / 回传头
 server/internal/middleware/daemon_auth.go                 # 认证后提升候选父级的挂点（只加一处调用）
 server/cmd/server/router.go                               # 全局栈挂 trace 传播；记录范围不变
 
-server/internal/handler/content_diagnostics.go            # DiagnosticTrace 改为沿用 ctx 中的 span，不再自行 Child 新开；写入请求身份
-server/internal/handler/content_diagnostics_test.go       # + 连续性、来源区分、记录范围不变、请求身份形状用例
+server/internal/handler/content_diagnostics.go            # DiagnosticTrace 沿用 ctx 中的 span；移交 X-Diagnostic-Trace 给中间件；写入请求身份三元组
+server/internal/handler/content_diagnostics_test.go       # + 连续性、来源区分、记录范围不变（非诊断路由负例）、请求身份三元组用例
 
-server/internal/content/diagnostics/contract.go            # Event 增请求身份与关联属性字段（可选，omitempty）
-server/internal/content/diagnostics/log.go                 # 新增请求头准入规则与路径/URL 安全形状规则，接入 Sanitize
+server/internal/content/diagnostics/contract.go            # Event 增 Route / Status / Upstream 三字段（可选，omitempty）
+server/internal/content/diagnostics/log.go                 # 新增三档请求头准入（逐名 + 四条后缀模式）与请求身份规则，接入 Sanitize
 server/internal/content/diagnostics/log_regression_test.go # + 请求头 / 路径 / 查询串负例
 server/internal/content/diagnostics/dispatch.go            # 新增：事务内登记 + 提交后派发接口（进程内实现）
 server/internal/content/diagnostics/dispatch_test.go       # 新增：回滚不派发 / 提交派发 / 失败可见 / 幂等键 / 有界
 
 server/internal/daemon/client.go                           # 出站请求注入 traceparent
 
-packages/core/content/diagnostics/contract.ts              # eventSchema 增可选字段，经 parseWithFallback
+packages/core/content/diagnostics/contract.ts              # eventSchema 增 route / status / upstream_trace，经 parseWithFallback
 packages/core/content/diagnostics/contract.test.ts         # + 新字段缺省与畸形响应兜底
 
 docs/development/diagnostics-acceptance-mapping.md         # §4.3 三行的闭合证据回写（FR-014）
