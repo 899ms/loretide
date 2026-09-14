@@ -8,6 +8,7 @@ import (
  "strconv"
  "time"
 
+ "github.com/go-chi/chi/v5"
  "github.com/multica-ai/multica/server/internal/content/diagnostics"
  "github.com/multica-ai/multica/server/internal/middleware"
  "go.opentelemetry.io/otel/trace"
@@ -60,5 +61,11 @@ func(h *Handler)DiagnosticTrace(next http.Handler)http.Handler{return http.Handl
  ctx,parent:=diagnostics.Child(r.Context());r=r.WithContext(ctx);sc:=trace.SpanContextFromContext(ctx);start:=time.Now();wrapped:=&diagnosticResponse{w,200};next.ServeHTTP(wrapped,r)
  if r.Method==http.MethodGet && wrapped.status<400{return};if h.ContentDiagnostics==nil{return};ws:=h.resolveWorkspaceID(r);actor:=r.Header.Get("X-User-ID");if ws==""||actor==""{return};if _,err:=h.getWorkspaceMember(ctx,actor,ws);err!=nil{return}
  code:="";outcome:="success";if wrapped.status>=400{outcome="failed";switch wrapped.status{case 401,403,404:code="AUTHORIZATION_DENIED";case 400,409:code="INPUT_CONFLICT";default:code="INTERNAL"}}
- h.ContentDiagnostics.Store.Technical(ctx,diagnostics.Event{ID:diagnostics.NewID(),Workspace:ws,Actor:actor,ActorKind:"human",ObjectType:"diagnostics",Action:"execute",Outcome:outcome,Code:code,Operation:diagnostics.NewID(),Trace:sc.TraceID().String(),Span:sc.SpanID().String(),Parent:parent,Occurred:start.UTC(),Received:time.Now().UTC(),Component:"api",Severity:"info",Duration:time.Since(start).Milliseconds(),Build:h.ContentDiagnostics.Build,Upstream:middleware.UpstreamTraceFromContext(ctx)})
+ // The request identity is built from the registered route pattern, never the
+ // path as requested, so a path parameter cannot reach the log (FR-006).
+ // RouteContext is nil when a handler is reached outside the router, so the
+ // pattern is read defensively; no pattern means no identity, never the path.
+ pattern:="";if rctx:=chi.RouteContext(r.Context());rctx!=nil{pattern=rctx.RoutePattern()}
+ route,status,present:=diagnostics.RequestIdentity(r.Method,pattern,wrapped.status,r.Header)
+ h.ContentDiagnostics.Store.Technical(ctx,diagnostics.Event{Route:route,Status:status,HeadersPresent:present,ID:diagnostics.NewID(),Workspace:ws,Actor:actor,ActorKind:"human",ObjectType:"diagnostics",Action:"execute",Outcome:outcome,Code:code,Operation:diagnostics.NewID(),Trace:sc.TraceID().String(),Span:sc.SpanID().String(),Parent:parent,Occurred:start.UTC(),Received:time.Now().UTC(),Component:"api",Severity:"info",Duration:time.Since(start).Milliseconds(),Build:h.ContentDiagnostics.Build,Upstream:middleware.UpstreamTraceFromContext(ctx)})
 })}

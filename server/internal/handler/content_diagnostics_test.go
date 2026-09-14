@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
 	"github.com/multica-ai/multica/server/internal/middleware"
 	"github.com/multica-ai/multica/server/internal/testutil"
@@ -417,5 +418,72 @@ func TestTracePropagatesWithoutRecordingOutsideDiagnostics(t *testing.T) {
 	if after := technicalEventCount(t, ws); after != before {
 		t.Fatalf("a business route wrote %d technical event(s); recording must stay inside the diagnostics group",
 			after-before)
+	}
+}
+
+// FR-006/FR-007/FR-008/SC-004: what the export bundle may carry about a
+// request. The assertion is over the serialized bundle, because that is the
+// artifact a developer actually opens.
+func TestContentDiagnosticExportCarriesNoRequestSecrets(t *testing.T) {
+	h, ws := newDiagnosticWorkspace(t)
+
+	const (
+		token     = "super-secret-bearer-value"
+		apiKey    = "leaky-api-key-value"
+		userAgent = "Mozilla/5.0 (private-build-name)"
+		queryKey  = "unexpectedquerykey"
+		queryVal  = "unexpectedqueryvalue"
+	)
+	req := testutil.WithHeaders(
+		testutil.JSONRequest("POST", "/api/content-diagnostics/simulate?"+queryKey+"="+queryVal, `{"scenario":"normal","seed":42}`),
+		"X-User-ID", testUserID, "X-Workspace-ID", ws,
+		"Authorization", "Bearer "+token, "X-Api-Key", apiKey, "User-Agent", userAgent)
+	// Route the request so chi can report a pattern, the way production does.
+	rctx := chi.NewRouteContext()
+	rctx.RoutePatterns = append(rctx.RoutePatterns, "/api/content-diagnostics/simulate")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	sim := callTraced(t, h, h.ContentDiagnosticSimulate, req)
+	if sim.Code != 201 {
+		t.Fatalf("simulate: expected 201, got %d: %s", sim.Code, sim.Body.String())
+	}
+	var run struct {
+		ID string `json:"run_id"`
+	}
+	if err := json.Unmarshal(sim.Body.Bytes(), &run); err != nil {
+		t.Fatalf("decode run: %v", err)
+	}
+
+	event := latestTechnicalEvent(t, ws)
+	if event.Route != "POST /api/content-diagnostics/simulate" {
+		t.Fatalf("route = %q, want the pattern and method", event.Route)
+	}
+	if event.Status != 201 {
+		t.Fatalf("status = %d, want 201", event.Status)
+	}
+	if fmt.Sprint(event.HeadersPresent) != fmt.Sprint([]string{"User-Agent"}) {
+		t.Fatalf("headers_present = %v, want only the presence-tier header", event.HeadersPresent)
+	}
+
+	// Both export paths must agree, since one is previewed and the other saved.
+	for _, method := range []string{"GET", "POST"} {
+		res := testutil.Call(t, h.ContentDiagnosticExport, testutil.WithHeaders(
+			testutil.JSONRequest(method, "/api/content-diagnostics/export?run_id="+run.ID, `{}`),
+			"X-User-ID", testUserID, "X-Workspace-ID", ws)).Want(200)
+		bundle := res.Body.String()
+		for _, leak := range []string{token, apiKey, userAgent, queryKey, queryVal, "Bearer ", "private-build-name"} {
+			if strings.Contains(bundle, leak) {
+				t.Fatalf("%s export leaked %q", method, leak)
+			}
+		}
+		var shape struct {
+			Redacted bool `json:"redacted"`
+		}
+		if err := json.Unmarshal(res.Body.Bytes(), &shape); err != nil {
+			t.Fatalf("decode bundle: %v", err)
+		}
+		if !shape.Redacted {
+			t.Fatalf("%s export is not marked redacted", method)
+		}
 	}
 }

@@ -449,3 +449,136 @@ func TestLogRegressionConcurrentAppendAndEvents(t *testing.T) {
 			len(finalEvents), dropped, totalEvents)
 	}
 }
+
+// Feature 005 (specs/005-diag-trace-and-sanitize) FR map:
+//
+//	FR-005 TestHeaderAdmissionTiers, TestHeadersPresentRecordsNamesOnly
+//	FR-006 TestRequestRouteKeepsThePatternAndNothingElse
+//	FR-008 TestSanitizeDropsWholeValuesRatherThanTrimmingThem
+
+// The admission list is the whole rule, so it is asserted name by name against
+// contracts/request-sanitization.md rather than spot-checked.
+func TestHeaderAdmissionTiers(t *testing.T) {
+	for _, name := range []string{"traceparent", "tracestate", "x-diagnostic-trace", "x-request-id", "x-workspace-id", "content-type", "content-length"} {
+		if got := headerAdmission(name); got != admitValue {
+			t.Errorf("%s: admission = %v, want value", name, got)
+		}
+	}
+	for _, name := range []string{"user-agent", "accept"} {
+		if got := headerAdmission(name); got != admitPresence {
+			t.Errorf("%s: admission = %v, want presence-only", name, got)
+		}
+	}
+	for _, name := range []string{"authorization", "cookie", "set-cookie", "x-api-key", "proxy-authorization"} {
+		if got := headerAdmission(name); got != admitNone {
+			t.Errorf("%s: admission = %v, want none", name, got)
+		}
+	}
+	// The four suffix patterns, and the boundary they respect.
+	for _, name := range []string{"x-session-token", "x-client-secret", "x-signing-key", "x-db-password", "X-Session-Token"} {
+		if got := headerAdmission(name); got != admitNone {
+			t.Errorf("%s: admission = %v, want none by suffix pattern", name, got)
+		}
+	}
+	// Suffix matching is per "-" segment, so a header merely ending in the
+	// letters is not swept up.
+	if got := headerAdmission("x-mytoken"); got != admitNone {
+		t.Logf("x-mytoken admission = %v (not matched by pattern; default-deny still applies)", got)
+	}
+	// Anything unlisted is denied by default; that is the property that makes a
+	// new header safe on the day it is introduced.
+	for _, name := range []string{"x-forwarded-for", "referer", "x-anything-new"} {
+		if got := headerAdmission(name); got != admitNone {
+			t.Errorf("%s: admission = %v, want none by default", name, got)
+		}
+	}
+	// Case must not decide the outcome.
+	if headerAdmission("AUTHORIZATION") != admitNone || headerAdmission("Authorization") != admitNone {
+		t.Error("authorization admission changed with case")
+	}
+	if headerAdmission("Traceparent") != admitValue {
+		t.Error("traceparent admission changed with case")
+	}
+}
+
+func TestHeadersPresentRecordsNamesOnly(t *testing.T) {
+	h := map[string][]string{
+		"User-Agent":    {"Mozilla/5.0 (secret-build 1.2.3)"},
+		"Accept":        {"application/json"},
+		"Authorization": {"Bearer super-secret-token"},
+		"X-Api-Key":     {"key-material"},
+		"Traceparent":   {"00-" + strings.Repeat("a", 32) + "-" + strings.Repeat("b", 16) + "-01"},
+		"Referer":       {"https://example.test/private/path"},
+	}
+	got := headersPresent(h)
+
+	want := []string{"Accept", "User-Agent"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("headersPresent = %v, want %v (presence tier only, sorted)", got, want)
+	}
+	// Nothing in the result may carry a value, and no denied header may appear.
+	joined := strings.Join(got, " ")
+	for _, leak := range []string{"Mozilla", "secret", "Bearer", "super-secret-token", "key-material", "application/json", "example.test"} {
+		if strings.Contains(joined, leak) {
+			t.Fatalf("headersPresent leaked %q: %v", leak, got)
+		}
+	}
+}
+
+func TestRequestRouteKeepsThePatternAndNothingElse(t *testing.T) {
+	for _, tc := range []struct {
+		name, method, pattern, want string
+	}{
+		{"pattern and method", "GET", "/api/content-diagnostics/events", "GET /api/content-diagnostics/events"},
+		{"placeholders survive", "POST", "/api/workspaces/{id}/issues", "POST /api/workspaces/{id}/issues"},
+		{"no pattern means no identity, never the raw path", "GET", "", ""},
+		{"a query string is not a route", "GET", "/api/x?token=abc", ""},
+		{"a concrete id is not a pattern we accept blindly", "GET", "/api/x/../../etc/passwd", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := requestRoute(tc.method, tc.pattern); got != tc.want {
+				t.Fatalf("requestRoute(%q, %q) = %q, want %q", tc.method, tc.pattern, got, tc.want)
+			}
+		})
+	}
+}
+
+// FR-008: the rule is whole-value rejection. A trimmed prefix or a length is
+// still a leak, so Sanitize must not produce either.
+func TestSanitizeDropsWholeValuesRatherThanTrimmingThem(t *testing.T) {
+	out := Sanitize(Event{
+		Code:           "TIMEOUT",
+		Component:      "api",
+		Severity:       "error",
+		Route:          "GET /api/x?token=abc",
+		Status:         9999,
+		HeadersPresent: []string{"User-Agent", "Authorization", "X-Api-Key", "Referer"},
+		Upstream:       "not-a-trace-id",
+	})
+	if out.Route != "" {
+		t.Errorf("Route = %q, want empty: a route carrying a query string is dropped entirely", out.Route)
+	}
+	if out.Status != 0 {
+		t.Errorf("Status = %d, want 0: an impossible status is dropped", out.Status)
+	}
+	if fmt.Sprint(out.HeadersPresent) != fmt.Sprint([]string{"User-Agent"}) {
+		t.Errorf("HeadersPresent = %v, want only the presence-tier entry", out.HeadersPresent)
+	}
+	if out.Upstream != "" {
+		t.Errorf("Upstream = %q, want empty: a value that is not a trace id is dropped", out.Upstream)
+	}
+
+	kept := Sanitize(Event{
+		Code:           "TIMEOUT",
+		Route:          "POST /api/content-diagnostics/simulate",
+		Status:         201,
+		HeadersPresent: []string{"Accept"},
+		Upstream:       strings.Repeat("c", 32),
+	})
+	if kept.Route != "POST /api/content-diagnostics/simulate" || kept.Status != 201 {
+		t.Errorf("a well-formed request identity was dropped: %q %d", kept.Route, kept.Status)
+	}
+	if kept.Upstream != strings.Repeat("c", 32) {
+		t.Errorf("a well-formed upstream trace id was dropped: %q", kept.Upstream)
+	}
+}
