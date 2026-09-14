@@ -19,6 +19,7 @@ jobs:
       - run: pnpm install --frozen-lockfile --filter @multica/web...
       - run: node --test scripts/check-content-boundaries.test.mjs
       - run: node scripts/check-content-boundaries.mjs
+      - run: pnpm check:diagnostics-contract
       # Non-UI checks only. Per Loretide policy, UI unit tests (React hook /
       # DOM behaviour) are NOT run in CI and are not acceptance evidence; see
       # docs/development/README.md and docs/development/ci-diagnostics.md. The
