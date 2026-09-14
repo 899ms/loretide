@@ -33,6 +33,10 @@ type Page struct {
 	Cursor int64   `json:"cursor"`
 	Gap    bool    `json:"gap"`
 	More   bool    `json:"has_more"`
+	// Rotate marks the last page of a planned stream window. It tells the
+	// client the connection is ending on schedule so it resumes silently
+	// instead of reporting a disconnect.
+	Rotate bool `json:"rotate,omitempty"`
 }
 type Filter struct {
 	After     int64

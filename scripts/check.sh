@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # ==========================================================================
-# Full verification pipeline: typecheck → unit tests → Go tests → E2E
+# Full verification pipeline: typecheck → content module boundaries → unit
+# tests → Go tests → E2E
 # Usage: bash scripts/check.sh
 # ==========================================================================
 
@@ -82,6 +83,10 @@ bash scripts/ensure-postgres.sh "$ENV_FILE"
 echo ""
 echo "==> [1/5] TypeScript typecheck..."
 pnpm typecheck || { EXIT_CODE=1; exit 1; }
+
+echo ""
+echo "==> Content module boundaries..."
+pnpm check:content-boundaries || { EXIT_CODE=1; exit 1; }
 
 # --------------------------------------------------------------------------
 # Step 2: TypeScript unit tests (Vitest)

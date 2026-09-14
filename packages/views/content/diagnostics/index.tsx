@@ -8,6 +8,8 @@ import {
   useDiagnosticStream,
   recordDiagnosticClientError,
   describeDiagnosticError,
+  STREAM_EVENT_CAP,
+  type DiagnosticDownload,
   type DiagnosticEvent,
   type DiagnosticRun,
 } from "@multica/core/content/diagnostics";
@@ -54,7 +56,11 @@ import {
 type Props = {
   wsId: string;
   copy: (text: string) => Promise<void>;
-  download: (data: unknown) => void;
+  // Receives the export response as the server sent it, so the saved file is
+  // byte-for-byte what the endpoint returned. Injected by the platform layer:
+  // this package holds no platform APIs, which is what lets desktop adopt the
+  // same page later.
+  download: (result: DiagnosticDownload) => void;
 };
 const tabs = [
   "概览",
@@ -279,7 +285,17 @@ function DiagnosticsContent({ wsId, copy, download }: Props) {
   if (from) params.set("from", new Date(from).toISOString());
   if (until) params.set("until", new Date(until).toISOString());
   const d = useDiagnostics(wsId, runId, params.toString());
-  const stream = useDiagnosticStream(wsId, live);
+  // The live stream answers the same question as the paged technical log, so a
+  // resume after a rotation or a dropped connection keeps the same filter.
+  const stream = useDiagnosticStream(wsId, live, {
+    kind: "technical",
+    traceId: trace,
+    component,
+    severity,
+    errorCode: code,
+    from: from ? new Date(from).toISOString() : "",
+    until: until ? new Date(until).toISOString() : "",
+  });
   const overview = d.overview.data;
   const run = d.detail.data;
   const onTrace = (event: DiagnosticEvent) => {
@@ -595,6 +611,14 @@ function DiagnosticsContent({ wsId, copy, download }: Props) {
                         <AlertDescription>{stream.notice}</AlertDescription>
                       </Alert>
                     )}
+                    {stream.gap && (
+                      <Button variant="outline" onClick={stream.clearGap}>
+                        清除缺口提示
+                      </Button>
+                    )}
+                    {stream.events.length >= STREAM_EVENT_CAP && (
+                      <p role="status">仅显示最近 {STREAM_EVENT_CAP} 条</p>
+                    )}
                     <Events events={stream.events} onTrace={onTrace} />
                   </>
                 )}
@@ -738,7 +762,11 @@ function DiagnosticsContent({ wsId, copy, download }: Props) {
                             void d.download
                               .mutateAsync()
                               .then(download)
-                              .catch(() => setNotice("导出失败，未生成文件"))
+                              .catch((cause: unknown) =>
+                                setNotice(
+                                  `导出失败，未生成文件：${describeDiagnosticError(cause).message}`,
+                                ),
+                              )
                           }
                         >
                           {t(($) => $.diagnostics.text078)}
