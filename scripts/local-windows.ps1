@@ -58,7 +58,7 @@ function Get-ProcessInfo {
   param([Parameter(Mandatory)][int]$ProcessId)
   try {
     Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction Stop |
-      Select-Object -First 1 ProcessId, ExecutablePath, CommandLine, CreationDate
+      Select-Object -First 1 ProcessId, ParentProcessId, ExecutablePath, CommandLine, CreationDate
   } catch {
     $null
   }
@@ -75,12 +75,31 @@ function Get-PortListener {
   }
 }
 
+# Read-only pg_ctl calls (status). Capturing output here is safe because the
+# command exits on its own.
 function Invoke-PgCtl {
   param([Parameter(Mandatory)][string[]]$PgArgument)
   $exe = Join-Path $script:PgBin 'pg_ctl.exe'
   if (-not (Test-Path $exe)) { return [pscustomobject]@{ ExitCode = 127; Output = "pg_ctl.exe not found at $exe" } }
   $out = & $exe @PgArgument 2>&1
   [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($out | Out-String).Trim() }
+}
+
+# `pg_ctl start` must NOT be run through a captured pipeline. The postgres.exe
+# it launches inherits the redirected handles and keeps them open for its whole
+# life, so `$out = & pg_ctl ... 2>&1` waits for the database to shut down rather
+# than for pg_ctl to return: start never comes back even though PostgreSQL is
+# ready. Start-Process gives the child its own handles, so this waits only for
+# pg_ctl itself. Server output already goes to postgres.log via -l.
+function Start-PostgresServer {
+  $exe = Join-Path $script:PgBin 'pg_ctl.exe'
+  if (-not (Test-Path $exe)) { return [pscustomobject]@{ ExitCode = 127; Output = "pg_ctl.exe not found at $exe" } }
+  $logPath = Join-Path $script:Runtime 'postgres.log'
+  $proc = Start-Process -FilePath $exe -PassThru -Wait -WindowStyle Hidden -ArgumentList @(
+    '-D', "`"$($script:PgData)`"", '-l', "`"$logPath`"",
+    '-o', "`"-p $($script:Ports.postgres) -h 127.0.0.1`"", '-w', 'start'
+  )
+  [pscustomobject]@{ ExitCode = $proc.ExitCode; Output = "pg_ctl start exited $($proc.ExitCode); server log: $logPath" }
 }
 
 # Status code only; the body is never read, so a slow page cannot hold up status.
@@ -175,6 +194,35 @@ function Test-PathInsideRoot {
   $root = ConvertTo-ComparablePath $script:Root
   if (-not $root) { return $false }
   (ConvertTo-ComparablePath $Text).Contains($root)
+}
+
+# The pid holding a port is often not the pid we recorded. `next dev` forks a
+# worker and that child owns 13000, so matching the component pid alone reported
+# a healthy instance as a conflict against itself. A listener is ours when it is
+# a recorded pid, or runs out of this checkout, or descends from a recorded pid.
+function Test-ListenerIsOurs {
+  param([Parameter(Mandatory)][int]$ProcessId, [int[]]$OurPids = @())
+  if ($ProcessId -le 0) { return $false }
+  if ($OurPids -contains $ProcessId) { return $true }
+
+  $proc = Get-ProcessInfo -ProcessId $ProcessId
+  if (-not $proc) { return $false }
+
+  $exe = if ($proc.PSObject.Properties['ExecutablePath']) { [string]$proc.ExecutablePath } else { '' }
+  $cmd = if ($proc.PSObject.Properties['CommandLine']) { [string]$proc.CommandLine } else { '' }
+  if (Test-PathInsideRoot "$exe $cmd") { return $true }
+
+  # Walk the parent chain, bounded so a recycled or looping ppid cannot hang us.
+  $current = $proc
+  for ($depth = 0; $depth -lt 5; $depth++) {
+    if (-not $current.PSObject.Properties['ParentProcessId'] -or -not $current.ParentProcessId) { break }
+    $parentId = [int]$current.ParentProcessId
+    if ($parentId -le 0 -or $parentId -eq [int]$current.ProcessId) { break }
+    if ($OurPids -contains $parentId) { return $true }
+    $current = Get-ProcessInfo -ProcessId $parentId
+    if (-not $current) { break }
+  }
+  $false
 }
 
 function Test-ProcessAlive {
@@ -279,12 +327,12 @@ function Get-InstanceStatus {
   $components.api = Get-ChildComponentState -Name 'api' -Port $script:Ports.api -HealthUrl "http://127.0.0.1:$($script:Ports.api)/health"
   $components.web = Get-ChildComponentState -Name 'web' -Port $script:Ports.web -HealthUrl "http://localhost:$($script:Ports.web)"
 
-  # Any listener on our ports that is not one of our own pids is someone else's
-  # process. Without this, a foreign server answering 200 reads as healthy.
+  # Any listener on our ports that is not one of ours is someone else's process.
+  # Without this, a foreign server answering 200 reads as healthy.
   $ourPids = @($components.Values | ForEach-Object { if ($_.owned) { [int]$_.pid } } | Where-Object { $_ -gt 0 })
   $conflicts = @()
   foreach ($listener in (Get-PortListener -Port @($script:Ports.postgres, $script:Ports.api, $script:Ports.web))) {
-    if ($ourPids -contains $listener.OwningProcess) { continue }
+    if (Test-ListenerIsOurs -ProcessId $listener.OwningProcess -OurPids $ourPids) { continue }
     $proc = Get-ProcessInfo -ProcessId $listener.OwningProcess
     $name = 'unknown'
     if ($proc -and $proc.ExecutablePath) { $name = Split-Path $proc.ExecutablePath -Leaf }
@@ -379,7 +427,7 @@ function Test-StartPreconditions {
     return $false
   }
   if ($pgStatus.ExitCode -ne 0) {
-    $started = Invoke-PgCtl -PgArgument @('-D', $script:PgData, '-l', (Join-Path $script:Runtime 'postgres.log'), '-o', "-p $($script:Ports.postgres) -h 127.0.0.1", '-w', 'start')
+    $started = Start-PostgresServer
     if ($started.ExitCode -ne 0) {
       Write-PreconditionFailure -Component 'postgres' -Reason 'PostgreSQL failed to start' `
         -NextStep "read $(Join-Path $script:Runtime 'postgres.log')"
@@ -424,9 +472,37 @@ function Invoke-InstanceStart {
   if (-not (Test-StartPreconditions)) { return 1 }
 
   Set-Content -Path (Get-StatePath 'build.txt') -Value (Get-CheckoutCommit -Root $script:Root) -NoNewline
+  # Clear the previous run's pid so the wait below cannot pass on a stale file.
+  Remove-Item (Get-StatePath 'supervisor.pid') -Force -ErrorAction SilentlyContinue
   Start-SupervisorProcess -Root $script:Root -ScriptDir $ScriptDir
+
+  if (-not (Wait-SupervisorAlive)) {
+    # Launching the process is not the same as it surviving. The supervisor
+    # reads secrets.json and exits immediately if anything in it is wrong, and
+    # that error only reaches supervisor.err.log - so reporting success here
+    # left a dead instance looking started, and the next start launched another.
+    Write-PreconditionFailure -Component 'supervisor' `
+      -Reason 'the supervisor exited immediately after launch' `
+      -NextStep "read $(Get-StatePath 'supervisor.err.log')"
+    return 1
+  }
+
   Write-Output 'Local supervisor started. Browser: http://localhost:13000/loretide-dev-check/diagnostics'
   0
+}
+
+# Poll for the supervisor to write its pid and still be running under it.
+# Both halves matter: the pid file alone proves only that it got far enough to
+# write one.
+function Wait-SupervisorAlive {
+  param([int]$TimeoutSec = 10)
+  $deadline = (Get-Date).AddSeconds($TimeoutSec)
+  do {
+    $processId = Read-PidFile 'supervisor.pid'
+    if ($processId -gt 0 -and (Test-ProcessAlive -ProcessId $processId -Component 'supervisor')) { return $true }
+    Start-Sleep -Milliseconds 500
+  } while ((Get-Date) -lt $deadline)
+  $false
 }
 
 # --- Stop ------------------------------------------------------------------
