@@ -13,7 +13,7 @@
 
 | 类型 | 含义 |
 |---|---|
-| **自动测试已通过** | 存在自动测试，且本次实际运行并通过（命令与退出码见第 5 节） |
+| **自动测试已通过** | 存在自动测试，且本次实际运行并通过（命令与退出码见第 6 节） |
 | **代码存在但无测试** | 实现可在代码中定位，但没有自动测试固定该行为；或测试存在却按 Loretide 政策不执行（UI 单测） |
 | **无证据** | 在应用代码中找不到对应实现，或找到的部分不足以支撑该条 |
 
@@ -160,7 +160,7 @@
 | 交付操作时间线 | 面板 `audit` 标签；`Event` 时间线渲染 | 代码存在但无测试 | — |
 | 交付日志筛选 | `text057 = 清除筛选`、`text052/053 = 开始/结束时间` | 代码存在但无测试 | 筛选**序列化**已由 core 契约测试覆盖，**界面**未测 |
 | 交付实时流 | `text058 = 实时日志 · 最近 200 条` | 代码存在但无测试 | 状态机已由 `stream-state.test.ts` 覆盖，界面接线未测 |
-| 交付 trace 瀑布 | `packages/views/content/diagnostics/index.tsx` 已有按 span 的扁平耗时条（宽度 = duration ÷ max）与 span id 文本；缺父子层级与时间轴偏移定位 | 代码存在但无测试 | 2026-09-14 主任务修正：原记「实现缺失」不准确；剩余缺口由 specs/006-diag-trace-waterfall-regression 覆盖 |
+| 交付 trace 瀑布 | `packages/core/content/diagnostics/trace-waterfall.ts` `buildTraceWaterfall`：由 `parent_span_id` 构层级、由 `occurred_at` 相对最早值定位、按 `duration_ms` 定宽、超 `STREAM_EVENT_CAP`(200) 时保留含 `error_code` 的 span 及其完整祖先链后折叠。`trace-waterfall.test.ts` 20 条用例覆盖契约七条不变量与边界表八行 | 自动测试已通过 | **派生逻辑**已测；**界面渲染**（缩进、偏移、折叠交互）无自动测试，按原则 II 交手动项 `specs/006` W-1 ～ W-9。2026-09-14 由 #37 交付 |
 | 交付运行步骤入口 | `text089 = 查看运行`、`text060 = 选择运行` | 代码存在但无测试 | — |
 | 支持复制追踪编号 | `text068 = 复制追踪编号` | 代码存在但无测试 | — |
 | 支持关联跳转 | `text006 = 查看追踪` | 代码存在但无测试 | — |
@@ -224,11 +224,11 @@
 |---|---|---|---|
 | 交付面板中的故障复现入口 | 面板 `text079 = 固定故障复现`、`text083 = 运行模拟场景` | 代码存在但无测试 | — |
 | 交付回归结果入口 | 面板 `text085 = 回归结果`、`text086`（「通过表示模拟结果符合该故障预期」） | 代码存在但无测试 | — |
-| 故障/场景/模块/提交关联 | `Run{Scenario, Module, Build, Original}` 四字段齐备 | 代码存在但无测试 | 字段存在；未见断言四者关联关系的用例 |
+| 故障/场景/模块/提交关联 | `packages/core/content/diagnostics/regression.ts` `describeRunLinkage(run, readableRunIds)`：四项定位各带可用性状态，`originalRun` 分 `self` / `linkable` / `unreadable` / `missing`（后者按 `/^[0-9a-f]{32}$/` 判定）。`regression.test.ts` 8 条用例，含「`self` 与 `missing` 的返回结果不相等」 | 自动测试已通过 | 从字段齐备变为**关联关系被断言**。浏览器跳转 **需手动** `specs/006` L-1 ～ L-5。2026-09-14 由 #37 交付 |
 | CI 模拟检查 | `.github/workflows/loretide-content.yml` 第 80 行 `go test -race ./internal/content/diagnostics -count=1` | 自动测试已通过 | CI 仅在 push/PR 到 `app-main` 时触发 |
-| 浏览器验证报告 | `manual-ui-todo.md` 存在，但 37 条全部「待用户验证」 | **无证据** | 报告尚未产生 |
+| 浏览器验证报告 | 两份 `manual-ui-todo.md` 存在，但 57 条全部「待用户验证」 | **无证据** | 报告尚未产生 |
 | 验证修复前故障用例失败、修复后通过 | `Evaluate(run)`：`Actual == Expected` → `passed`，否则 `failed` | 自动测试已通过 | `TestSimulatorRegressionScenarioContracts`。但**「修复前失败→修复后通过」的成对证据**未见 |
-| 未执行不显示通过 | 面板 `text007 = 暂无记录。未执行不表示已通过。` | 代码存在但无测试 | 文案存在；未见断言该状态的用例 |
+| 未执行不显示通过 | `regression.ts` `describeRegressionVerdict`：四态判定，后端初始值 `"not_run"`（`simulator.go:15`）与空串同判为「未运行」；`regression.test.ts` 含不变量用例「遍历 7 × 5 组输入，断言除 `passed` 行外无一返回 `passed`」 | 自动测试已通过 | 面板此前把原始 token `not_run` 直接渲染进判定列；现为显式四态。文案 `text007` 是列表为空提示，与本条是两件事。2026-09-14 由 #37 交付 |
 | 浏览器可从操作记录定位技术原因 | — | **无证据** | 需浏览器手验 |
 | 浏览器可导出脱敏包 | 手动项 V08-2、V08-3 | **无证据** | 待用户验证 |
 | 公共接入合同 | `docs/development/diagnostics-onboarding-contract.md`（第 2 节 7 行三列「要做什么 / 公共入口 / 怎么算做到了」）+ `scripts/check-diagnostics-contract.mjs`（26 用例）+ PR 模板两条 + `loretide-content.yml` 一个 run 步骤 | 自动测试已通过 | 合同第二列的 **23 个公共入口**由检查的提供方规则 **P2** 机器核对——改名或删掉其中一个，检查变红；另有一条用例反向核对这 23 个名字都出现在合同文本里，两边不会单方面漂移。**检查只证明痕迹存在**，不证明接入语义正确，合同第 5 节写明了这一点 |
@@ -246,7 +246,7 @@
 | V02 | 可跳到对象版本 | **无覆盖**（`Event.object_version` 字段存在，跳转路径无证据） |
 | V02 | 人工/Agent/系统可区分 | 已自动化 — `Event.actor_kind` + `oneOf()` 白名单，`TestLogRegressionSanitizeRules` |
 | V02 | 失败不产生虚假成功审计 | 已自动化 `TestContentDiagnosticWritesCoordinateWithWorkspaceDelete/run_and_audit_are_rejected_after_delete_commits`、`TestPostgresAuditRollbackIsolationAndRetention` |
-| **V03** | 从请求跨队列到模拟 daemon/工具/回写的 trace 连续 | 部分已自动化 `TestWebSocketQueuePropagationDuplicateAndRevocation`（队列+WS）；**HTTP 一段无覆盖**（handler/middleware 无 trace 传播） |
+| **V03** | 从请求跨队列到模拟 daemon/工具/回写的 trace 连续 | 已自动化。HTTP 入口：`middleware/trace.go` `Trace` 全局挂载（`router.go:1295`），`TestTracePropagationAtTheBoundary` / `TestTraceMintsADistinctTracePerRequest`；队列 + WS：`TestWebSocketQueuePropagationDuplicateAndRevocation`；端到端：handler 侧 `TestContentDiagnosticTraceRunsThroughQueueAndDaemon`、`TestContentDiagnosticBoundaryReportsTheTraceItRanUnder`。**2026-09-14 更新**：此前记「HTTP 一段无覆盖」，已由 #30 闭合 |
 | V03 | 重试独立 attempt | 已自动化 `TestTracePropagationAndUntrustedIdentity` |
 | V03 | 重复去重 | 已自动化 `TestSimulatorRegressionReceiverContracts` |
 | V03 | 迟到与缺口可见 | 已自动化 `TestEverySimulatedFaultAndDeterministicTime`（`late`）；缺口 UI **需手动** V11-5～V11-7 |
@@ -269,17 +269,17 @@
 | V08 | 凭据/私有正文不泄漏 | 已自动化（字段级）`TestSecretsNeverEnterTechnicalLog`、`TestLogRegressionSanitizeRules`；**成品包**级 **需手动** V08-6 |
 | V08 | 敏感字段负例检查 | 已自动化（字段级）`TestLogRegressionSanitizeRules`；**需手动** V08-10 |
 | V08 | 跨账号导出拒绝 | 已自动化 `TestContentDiagnosticExportRefusesUngrantedAccount`；浏览器 **需手动** V08-7、V08-11 |
-| **V09** | 回归结果能定位原故障 | **无覆盖**（`Run.Original` 字段存在，无用例、无手动条目） |
+| **V09** | 回归结果能定位原故障 | 已自动化 `regression.test.ts` 的 `describeRunLinkage` 四态（`self` / `linkable` / `unreadable` / `missing`），含「`self` 与 `missing` 不得相等」断言；浏览器跳转 **需手动** `specs/006` L-1 ～ L-3、L-5 |
 | V09 | 定位输入场景 | 已自动化 `TestSimulatorRegressionScenarioContracts`（`Run.Scenario`） |
-| V09 | 定位模块 | **无覆盖**（`Run.Module` 字段存在，无断言） |
+| V09 | 定位模块 | 已自动化 `regression.test.ts`「marks empty scenario, module and build as missing」「passes present locators through unchanged」；浏览器 **需手动** `specs/006` L-1、L-4 |
 | V09 | 定位代码版本 | 已自动化 `TestSimulatorRegressionDeterministicTimeAndIdentifiers`（`Run.Build`） |
-| V09 | 未运行/失败不会被当通过 | 部分已自动化 `Evaluate()` + `TestSimulatorRegressionScenarioContracts`；「未运行」态仅有面板文案 `text007`，**无覆盖** |
+| V09 | 未运行/失败不会被当通过 | 已自动化 `regression.test.ts` 的四态真值表六行 + 不变量用例「遍历 7 × 5 组输入，断言除 `passed` 行外无一返回 `passed`」；浏览器 **需手动** `specs/006` V-1 ～ V-5。**2026-09-14 更新**：此前「未运行」态只有面板文案，现由 `describeRegressionVerdict` 覆盖 |
 | **V10** | 偏好不受临时恢复影响 | **无覆盖** |
 | V10 | 查看日志不触发模型重跑 | 已自动化 `TestTransportNonTestDenied`（非测试环境拒绝）；查询路径只读，**无显式用例** |
 | V10 | 真实重跑需重新校验 | **无覆盖**（真实执行器保持禁用，此条尚不可验证） |
 | V10 | 不重放人类动作 | 已自动化 `TestSimulationCannotAuthorizeOrReplayHumanActions` |
 | **V11** | 日志 sink 失败可见 | 已自动化 `Metrics.SinkErrors` + `TestPostgresFullScenariosExportAndHealth`；浏览器 **需手动** V11-1 |
-| V11 | 存储满可见 | **需手动** V11-2、V11-3。**磁盘满模拟无覆盖**（见 DIAG-03） |
+| V11 | 存储满可见 | 已自动化 `store_diskfull_test.go`：`TestTechnicalSinkOnFullStorageStaysBoundedVisibleAndNonFatal`（技术日志有界、可见、不致命）、`TestAuditOnFullStorageRejectsTheWriteInsteadOfCounting`（审计按事务拒绝而非计数）；浏览器 **需手动** V11-2、V11-3。**2026-09-14 更新**：此前记「磁盘满模拟无覆盖」，已由 #32 闭合 |
 | V11 | 心跳过期可见 | 已自动化 `TestPostgresFullScenariosExportAndHealth`；浏览器 **需手动** V11-4 |
 | V11 | 有界 | 已自动化 `TestLogRegressionBufferCapacities`、`TestLogRegressionConcurrentAppendAndEvents`；浏览器 **需手动** V11-8、V11-9 |
 | V11 | 普通技术日志失败不拖垮业务 | 已自动化 `TestContentDiagnosticWritesCoordinateWithWorkspaceDelete/technical_is_dropped_after_delete_commits`；浏览器 **需手动** V11-10 |
@@ -304,12 +304,12 @@
 | DIAG-06 | 8 | 3 | 0 | 11 |
 | DIAG-07 | 10 | 2 | 0 | 12 |
 | DIAG-08 | 13 | 1 | 1 | 15 |
-| DIAG-09 | 2 | 8 | 3 | 13 |
+| DIAG-09 | 3 | 7 | 3 | 13 |
 | DIAG-10 | 9 | 2 | 0 | 11 |
 | DIAG-11 | 9 | 0 | 0 | 9 |
 | DIAG-12 | 9 | 3 | 1 | 13 |
-| DIAG-13 | 3 | 4 | 3 | 10 |
-| **合计** | **109** | **28** | **8** | **145** |
+| DIAG-13 | 5 | 2 | 3 | 10 |
+| **合计** | **112** | **25** | **8** | **145** |
 
 ### 4.2 D13-V01～V12 状态
 
@@ -317,24 +317,26 @@
 |---|---|---|
 | D13-V01 | **部分** | 服务端状态机全部已自动化；浏览器概览区分为手动，未执行 |
 | D13-V02 | **部分** | 审计一致性已自动化；「跳到技术追踪 / 对象版本」两条子句无覆盖 |
-| D13-V03 | **部分** | 队列 + WebSocket 已自动化；**HTTP 一段无覆盖** |
+| D13-V03 | **部分** | 四条子句全部已自动化（HTTP 入口、队列、WS、attempt / 去重 / 迟到）；缺口 UI 与浏览器连续性仍为手动。**2026-09-14**：HTTP 一段由 #30 闭合 |
 | D13-V04 | **部分** | 六类错误区分已自动化；界面呈现与下一动作无覆盖 |
 | D13-V05 | **部分** | 服务端与 core 状态机已自动化；浏览器 15 条全部待用户验证 |
 | D13-V06 | **部分** | 前两条子句已自动化；「不新建自动媒体快照」无显式负例 |
 | D13-V07 | **部分** | 三条子句均已自动化；但「全部列举故障」与 `docs/13` §7 的对表**未做** |
 | D13-V08 | **部分** | 字段级脱敏与跨账号拒绝已自动化；成品包预览/负例 11 条待用户验证 |
-| D13-V09 | **未满足** | 「定位原故障」「定位模块」「未运行不当通过」三条无覆盖 |
+| D13-V09 | **部分** | 五条子句全部由 `regression.test.ts` 的纯函数覆盖（定位原故障 / 场景 / 模块 / 代码版本 / 未运行不当通过）；**浏览器侧仍全部手动**（`specs/006` V-1 ～ V-6、L-1 ～ L-5，11 条待用户验证）。**2026-09-14**：由「未满足」改为「部分」，因 #37 补齐了三条此前无覆盖的子句 |
 | D13-V10 | **未满足** | 四条子句中三条无覆盖；真实重跑因执行器禁用尚不可验证 |
-| D13-V11 | **部分** | 服务端有界性与事务拒绝已自动化；浏览器 11 条待用户验证；磁盘满模拟无覆盖 |
+| D13-V11 | **部分** | 服务端有界性、事务拒绝与磁盘满均已自动化；浏览器 11 条待用户验证。**2026-09-14**：磁盘满由 #32 闭合 |
 | D13-V12 | **部分** | 第一、三条子句已由接入合同与 `check:diagnostics-contract` 覆盖；**第二条子句（真实 Codex 及远程阶段实测）在执行器禁用期间不可能通过**，因此本条不得记为整体满足 |
 
-**无一条 D13-V 达到「完全满足」。** 12 条中 10 条为「部分」，2 条为「未满足」。
+**无一条 D13-V 达到「完全满足」。** 12 条中 **11 条为「部分」，1 条为「未满足」**（V10）。
+
+所有「部分」都卡在同一处：**浏览器侧全部是手动条目且一条未执行**。服务端与纯函数层的自动覆盖已相当完整，但按 constitution 原则 II，界面行为只能由用户确认——这是 DG-01 出口的结构性约束，不是可以靠再写测试消除的缺口。
 
 ### 4.3 结论
 
 **DG-01 当前不满足，缺口如下：**
 
-1. **D13-V01～V11 未用完整模拟场景验证**——37 条浏览器手动条目（`manual-ui-todo.md` V05/V08/V11）全部处于「待用户验证」，且该清单只覆盖 V05/V08/V11 三条，V01～V04、V06、V07、V09、V10 没有对应的手动清单。
+1. **D13-V01～V11 未用完整模拟场景验证**——浏览器手动条目现有 **57 条**，全部处于「待用户验证」，一条未执行：`specs/002-diag-package-stream-recovery/manual-ui-todo.md` 37 条（V05 / V08 / V11）、`specs/006-diag-trace-waterfall-regression/manual-ui-todo.md` 20 条（瀑布 W-1 ～ W-9、四态 V-1 ～ V-6、关联 L-1 ～ L-5）。两份清单合计覆盖 V05 / V08 / V09 / V11 四条；**V01 ～ V04、V06、V07、V10 仍没有对应的手动清单**。
 2. **D13-V12 的公共接入合同已交付，但 V12 仍不整体满足**——接入合同与 PR 层检查已落地（三条子句中第一、三条有覆盖），但第二条子句「真实 Codex 及远程阶段分别追加实测」在执行器禁用期间**不可能通过**。合同的职责是让这件事**可见**（第 4 节固定记为「未执行」），不是让它通过。
 3. **8 个条目完全无证据**，逐条列出（全部是浏览器手动矩阵尚未执行）。下表保留已闭合行的历史，删除线即表示不再计入：
 
@@ -377,14 +379,36 @@
    >
    > **本次交付不改动任何生产代码**：新增两个脚本文件与一份合同文档，改动 `package.json`、PR 模板、CI 工作流各一处，本文件回写。`server/` 与 `packages/` 下无一行改动，无新增迁移。
 
-4. **28 个条目「代码存在但无测试」**——其中 DIAG-09（8 项）与 DIAG-13（4 项）集中在浏览器面板层。按 constitution 原则 II 这些不补 UI 单测，只能由用户手动验收，因此 **DG-01 的出口天然依赖一份尚不存在的完整浏览器验收报告**。
+4. **25 个条目「代码存在但无测试」**（上一版 28，#37 转化了 3 项）——其中 DIAG-09（7 项）与 DIAG-13（2 项）集中在浏览器面板层。按 constitution 原则 II 这些不补 UI 单测，只能由用户手动验收，因此 **DG-01 的出口天然依赖一份尚不存在的完整浏览器验收报告**。
 5. **两项对表未做，需主任务在文档仓库完成**：
    - `simulator.go` 的 16 个场景是否等于 `docs/13` §7 的完整列举（本次只读了 §9，未读 §7）；
    - 迁移 `468`～`473` 是否满足「无 FK、索引全部 `CONCURRENTLY`」（仓库现有迁移测试不检查这两项）。
 
-## 5. 本文件的证据是怎么来的
+## 5. 剩余实现缺口（下一份 spec 的输入）
 
-全部命令在 `app-main` `58b5e1a23` 上实际执行，Linux 容器 + 本地 PostgreSQL 16.13（`initdb` 新建，端口 15433，非开发库）。
+本节只列**实现缺口**：D13-V 中仍无自动覆盖、且**不是**「浏览器手动条目未执行」也**不是**「政策阻断」的子句。每条给出为什么算缺口与代码位置。
+
+排除两类，因为它们不是写代码能消除的：
+
+- **手动未执行**——57 条浏览器条目按原则 II 只能由用户确认，再写多少测试也不会让它们变成已验证。
+- **政策阻断**——V10「真实重跑需重新校验」与 V12「真实 Codex 及远程阶段实测」要求真实执行器，而 constitution 原则 IX 保持其禁用。这两条在政策改变前**不可能**通过，不属于可规划的缺口。
+
+| # | D13-V 子句 | 为什么算缺口 | 代码位置 |
+|---|---|---|---|
+| G1 | **V02** 同一操作日志可跳到技术追踪 | 面板有 `text006 = 查看追踪` 与 `describeDiagnosticError` 带出的 `traceId`，但从一条审计事件跳到对应技术追踪的**路径本身没有派生逻辑**：没有「给定 audit event → 该 trace 的技术日志查询」的纯函数，也没有手动条目。是 V02 两条无覆盖子句之一 | `packages/views/content/diagnostics/index.tsx`（`text006`）；`packages/core/content/diagnostics/contract.ts` `describeDiagnosticError` |
+| G2 | **V02** 可跳到对象版本 | `Event.object_version` 已解析并显示，但**没有任何从事件跳到该对象版本的路径**——既无导航、无查询、无测试。字段存在不等于能跳 | `packages/core/content/diagnostics/contract.ts`（`objectVersion`）；`server/internal/content/diagnostics/contract.go` `Event.Version` |
+| G3 | **V04** 提供有效下一动作（界面呈现） | `next_action` 在契约层已测（`contract.test.ts`），面板也显示 `text075 = · 下一动作`，但**「这个动作对这类错误是否有效」无任何判定**：没有「错误码 → 可执行动作」的映射函数，也没有手动条目验证它。目前 `next_action` 是后端给什么显示什么 | `packages/core/content/diagnostics/contract.ts`（`nextAction`）；`server/internal/content/diagnostics/contract.go` `Event.Next` |
+| G4 | **V06** 不新建自动媒体快照 | `Snapshot` 结构上无二进制字段，所以这条**在当前形状下成立**——但这是结构巧合，不是被断言的性质。一旦有人给 `Snapshot` 加一个媒体字段，没有任何测试会失败。需要一条显式负例把它钉住 | `server/internal/content/diagnostics/contract.go` `Snapshot`；`snapshot_regression_test.go`（现有四条用例均不覆盖此性质） |
+| G5 | **V10** 偏好不受临时恢复影响 | `Snapshot.saved_preference` 字段存在并在面板显示（`text008`），但**全仓没有任何测试引用它**——「临时恢复不回写偏好」这一性质无断言。V10 四条子句中唯一可在当前政策下关闭的一条 | `server/internal/content/diagnostics/contract.go` `Snapshot.SavedPreference`；`packages/core/content/diagnostics/contract.ts`（`savedPreference`） |
+| G6 | **V02 / V09** 跨层关联的端到端断言 | 单层已充分：`describeRunLinkage` 断言四项定位、`TestPostgresAuditRollbackIsolationAndRetention` 断言审计一致。但**没有一条测试从一个真实运行出发，走完「审计事件 → trace → 运行 → 原故障运行」整条链**。每一环可靠不等于链条连通 | 跨 `server/internal/content/diagnostics/store.go` 与 `packages/core/content/diagnostics/regression.ts` |
+
+**优先级建议**（供主任务排序，非决定）：G5 与 G4 是**纯函数可关闭**的，成本最低；G1 / G2 需要先定义跳转语义，属于产品决定而非补测试；G3 需要先定义「有效下一动作」的判定标准，否则测不了；G6 依赖 G1 / G2 先有路径。
+
+**这一节不构成验收结论。** 它只说明：即使 57 条手动条目全部通过，上表六项仍然没有自动覆盖，DG-01 的证据链在这些位置仍是空的。
+
+## 6. 本文件的证据是怎么来的
+
+本节按更新批次分块，每块注明当时的 `app-main` 提交。下表是**初版**（`app-main` `58b5e1a23`）的命令，Linux 容器 + 本地 PostgreSQL 16.13（`initdb` 新建，端口 15433，非开发库）；后续批次沿用同一套环境。
 
 | 命令 | 退出码 | 结果 |
 |---|---:|---|
@@ -405,10 +429,22 @@
 
 **变异验证**（SC-004，7 处，每处改完即还原）：删掉 E1 / E2 / E3 任一条判定、删掉 `expires` 必填校验、删掉到期比较、把未落地模块的沉默改成报错、把 `NewID` 加进 E2 认可列表——七次均有用例变红（分别为 5 / 5 / 3 / 2 / 2 / 12 / 1 条）。「写完看绿」不算验证。
 
+**2026-09-14 更新（四）本次刷新的命令**（在 `app-main` `30ecd87d0` 上实际执行，同一套本地 PostgreSQL 16.13 / 端口 15433）：
+
+| 命令 | 退出码 | 结果 |
+|---|---:|---|
+| `pnpm check:content-boundaries` | 0 | 13 自测用例 PASS；`3534 files; 12 registered modules` |
+| `pnpm check:diagnostics-contract` | 0 | 26 自测用例 PASS；`checked 1 landed module; skipped 11 not yet landed` |
+| `go test ./internal/content/diagnostics ./internal/middleware -count=1 -race -v` | 0 | diagnostics **37 PASS / 0 SKIP**（已设 `LORETIDE_DIAG_TEST_DATABASE_URL`，四个 Postgres 集成用例真实执行）；middleware **60 PASS / 17 SKIP**——跳过的 17 条是 Redis 限速与 PAT/daemon 认证用例，需要本地未起的 Redis，**与 trace 无关**，6 条 trace 用例（`TestTracePropagationAtTheBoundary` 等）全部 PASS。#32 的 `TestTechnicalSinkOnFullStorageStaysBoundedVisibleAndNonFatal`、`TestAuditOnFullStorageRejectsTheWriteInsteadOfCounting` 与 7 个 `TestOutbox*`、`TestModelOutputSamplesNeverSurviveSanitize` 等脱敏用例均按用例名逐条确认执行 |
+| `go test ./internal/handler -count=1 -run 'TestContentDiagnostic\|TestDeleteWorkspace_PurgesContentDiagnostics' -v` | 0 | **14 PASS / 0 SKIP**，含 `TestContentDiagnosticTraceRunsThroughQueueAndDaemon`、`TestContentDiagnosticBoundaryReportsTheTraceItRanUnder`、`TestContentDiagnosticExportCarriesNoRequestSecrets`；已按 `-v` 的用例名逐条核对，未依赖包级退出码（见本节末尾的陷阱说明） |
+| `pnpm --filter @multica/core exec vitest run content/diagnostics/{contract,stream-state,trace-waterfall,regression}.test.ts` | 0 | 4 文件 56 用例全部通过（**按文件逐个指定**，不用 `content/diagnostics/` 目录通配——通配会把原则 II 排除的 `queries.test.tsx` 一并跑掉），含 #37 新增的 `trace-waterfall.test.ts`（20）与 `regression.test.ts`（18） |
+
+本次刷新只改本文件，未改任何生产代码、测试或脚本。§4.1 的 13 行计数由脚本按第 2 节各表的「类型」列重新统计，未手工累加；结果 **112 / 25 / 8（共 145）**，与上一版相比自动化 +3、无测试 −3，合计不变——这三项来自 #37 把 DIAG-09 一行与 DIAG-13 两行从「代码存在但无测试」转为「自动测试已通过」。
+
 **未执行**：
 
 - `packages/core/content/diagnostics/queries.test.tsx` 与 `apps/web/platform/content-diagnostics.test.ts`——UI 单测，按 constitution 原则 II 与 `loretide-content.yml` 的显式排除，CI 不跑，本次也不跑。
 - 全量 `pnpm test` / `make test` / Playwright——本任务为纯文档，不做全量验证。
-- `manual-ui-todo.md` 的 37 条浏览器条目——需真实 Windows 实例与用户操作。
+- 两份 `manual-ui-todo.md` 合计 **57** 条浏览器条目（`specs/002` 37 条、`specs/006` 20 条）——需真实 Windows 实例与用户操作。
 
 **一处需要注意的陷阱**：`server/internal/handler/handler_test.go` 的 `TestMain` 在数据库连不上时执行 `os.Exit(0)`，即**整个 handler 测试包会以退出码 0 "通过"而实际一个用例都没跑**。本文件引用的 handler 证据均已通过 `-v` 输出逐条确认用例真实执行，未依赖包级退出码。任何后续复核请同样使用 `-v` 核对用例名，不要只看退出码。
