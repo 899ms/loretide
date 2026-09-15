@@ -704,7 +704,11 @@
     "deleting": "삭제하는 중...",
     "toast_delete_failed": "워크스페이스를 삭제하지 못했습니다",
     "confirm_cancel": "취소",
-    "confirm_action": "확인"
+    "confirm_action": "확인",
+    "timezone_label": "시간대",
+    "timezone_default_badge": "기본값",
+    "timezone_invalid": "유효한 시간대가 아닙니다",
+    "timezone_hint": "시각은 UTC로 저장되며 이 시간대로 표시됩니다."
   },
   "delete_workspace_dialog": {
     "title": "워크스페이스 삭제",

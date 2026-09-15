@@ -706,7 +706,11 @@
     "deleting": "Deleting...",
     "toast_delete_failed": "Failed to delete workspace",
     "confirm_cancel": "Cancel",
-    "confirm_action": "Confirm"
+    "confirm_action": "Confirm",
+    "timezone_label": "Time zone",
+    "timezone_default_badge": "Default",
+    "timezone_invalid": "Not a valid time zone",
+    "timezone_hint": "Timestamps are stored in UTC and shown in this zone."
   },
   "delete_workspace_dialog": {
     "title": "Delete workspace",

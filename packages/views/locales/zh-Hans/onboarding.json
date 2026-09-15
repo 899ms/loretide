@@ -197,7 +197,9 @@
     "creation_disabled_logout": "退出登录",
     "creation_disabled_eyebrow_resume": "你的工作区",
     "creation_disabled_headline_resume": "继续使用 {{name}}。",
-    "creation_disabled_lede_resume": "该实例已禁用创建工作区，继续进入你已有的工作区即可。"
+    "creation_disabled_lede_resume": "该实例已禁用创建工作区，继续进入你已有的工作区即可。",
+    "timezone_label": "时区",
+    "timezone_hint": "用于该工作区的排期与报表。之后可在设置中修改。"
   },
   "step_runtime": {
     "scanning_headline": "正在连接这台电脑...",

@@ -197,7 +197,9 @@
     "creation_disabled_logout": "Log out",
     "creation_disabled_eyebrow_resume": "Your workspace",
     "creation_disabled_headline_resume": "Continue with {{name}}.",
-    "creation_disabled_lede_resume": "Workspace creation is disabled on this instance, so you'll continue into your existing workspace."
+    "creation_disabled_lede_resume": "Workspace creation is disabled on this instance, so you'll continue into your existing workspace.",
+    "timezone_label": "Time zone",
+    "timezone_hint": "Used for scheduling and reports in this workspace. You can change it later in settings."
   },
   "step_runtime": {
     "scanning_headline": "Connecting this computer…",

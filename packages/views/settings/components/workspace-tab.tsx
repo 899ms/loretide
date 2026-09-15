@@ -45,6 +45,21 @@ import {
   SettingsTab,
   type SettingsSaveStatus,
 } from "./settings-layout";
+import {
+  DEFAULT_TIMEZONE,
+  getWorkspaceTimezone,
+  hasStoredTimezone,
+  supportedTimezones,
+  withWorkspaceTimezone,
+} from "@multica/core/workspace/timezone";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@multica/ui/components/ui/select";
+import { Badge } from "@multica/ui/components/ui/badge";
 import { useAutoSave } from "./use-auto-save";
 
 interface WorkspaceDetailsDraft {
@@ -320,6 +335,70 @@ export function WorkspaceTab() {
         }
       >
         <SettingsCard>
+          {/* The brand's timezone. Saved the same way every other field on this
+              page is - api.updateWorkspace plus a cache write - rather than
+              through a new mutation hook, so this file keeps one save pattern.
+              withWorkspaceTimezone merges into the existing settings because
+              the endpoint replaces settings wholesale; sending the one key
+              alone would wipe the rest. */}
+          <SettingsRow
+            label={t(($) => $.workspace.timezone_label)}
+            description={t(($) => $.workspace.timezone_hint)}
+            size="text"
+          >
+            <div className="flex items-center gap-2">
+              <Select
+                items={supportedTimezones().map((zone) => ({ value: zone, label: zone }))}
+                value={getWorkspaceTimezone(workspace)}
+                disabled={!canManageWorkspace}
+                onValueChange={(value) => {
+                  const next = value ?? DEFAULT_TIMEZONE;
+                  void (async () => {
+                    try {
+                      const updated = await api.updateWorkspace(workspace.id, {
+                        settings: withWorkspaceTimezone(workspace.settings, next),
+                      });
+                      qc.setQueryData(
+                        workspaceKeys.list(),
+                        (old: Workspace[] | undefined) =>
+                          old?.map((ws) => (ws.id === updated.id ? updated : ws)),
+                      );
+                      toast.success(t(($) => $.workspace.toast_saved), {
+                        id: "settings-auto-save",
+                      });
+                    } catch (error) {
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : t(($) => $.workspace.timezone_invalid),
+                      );
+                    }
+                  })();
+                }}
+              >
+                <SelectTrigger
+                  aria-label={t(($) => $.workspace.timezone_label)}
+                  className="w-64"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {supportedTimezones().map((zone) => (
+                    <SelectItem key={zone} value={zone}>
+                      {zone}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* "Default" means nothing was ever chosen, which is different
+                  from having chosen Asia/Shanghai (FR-002). */}
+              {!hasStoredTimezone(workspace) && (
+                <Badge variant="outline">
+                  {t(($) => $.workspace.timezone_default_badge)}
+                </Badge>
+              )}
+            </div>
+          </SettingsRow>
           <SettingsRow
             label={t(($) => $.workspace.logo_label)}
             description={t(($) => $.workspace.click_logo_hint)}

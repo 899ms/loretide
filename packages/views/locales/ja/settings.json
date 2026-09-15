@@ -704,7 +704,11 @@
     "change_logo_aria": "ワークスペースのロゴを変更",
     "click_logo_hint": "ロゴをクリックして新しい画像をアップロード",
     "toast_logo_updated": "ワークスペースのロゴを更新しました",
-    "toast_logo_failed": "ワークスペースのロゴをアップロードできませんでした"
+    "toast_logo_failed": "ワークスペースのロゴをアップロードできませんでした",
+    "timezone_label": "タイムゾーン",
+    "timezone_default_badge": "既定",
+    "timezone_invalid": "有効なタイムゾーンではありません",
+    "timezone_hint": "日時は UTC で保存され、このゾーンで表示されます。"
   },
   "delete_workspace_dialog": {
     "title": "ワークスペースを削除",

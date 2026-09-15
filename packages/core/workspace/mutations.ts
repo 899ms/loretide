@@ -18,6 +18,9 @@ export function useCreateWorkspace() {
       description?: string;
       /** Omit to let the server derive it from the slug. */
       issue_prefix?: string;
+      /** Workspace settings blob. Loretide sends the brand's timezone here at
+       *  "loretide.timezone"; omit it to take the server's default. */
+      settings?: Record<string, unknown>;
     }) => api.createWorkspace(data),
     // Seed the workspace list cache BEFORE callers navigate to /{newWs.slug}/issues.
     // The destination [workspaceSlug]/layout queries by slug from this cache;
