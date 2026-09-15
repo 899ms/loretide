@@ -21,7 +21,7 @@
 任务描述说 42 条未执行里有 **19 条**是「模拟器造不出数据形态」，但 (a)～(h) 实际点名了 **15 条**：
 
 ```text
-W-3, W-5, W-6, W-7, W-8, V-1, V-3, V-5, L-4, L-5, O-2, O-3, V11-01, V11-02, V05-15
+W-3, W-5, W-6, W-7, W-8, V-1, V-3, V-5, L-4, L-5, O-2, O-3, V11-1, V11-2, V05-15
 ```
 
 差 4 条。本规格覆盖点名的 15 条；**另 4 条是哪几条需要主任务补全**（**Q1**）。不补全的风险不是漏做，而是交付后仍有 4 条卡在同一个原因上，而没人知道是哪 4 条。
@@ -44,6 +44,21 @@ ctx = transport                  // 下一步的父 = 这一步的 child
 | **006-W-5** | 父 span 指向**本次运行之外** | `parent` 只来自本次运行内上一步的 `Child(ctx)`；`i==0` 时置空。**没有任何路径能写入一个外部 span id** |
 | **006-W-6** | **只有单个 span** 的运行 | `steps` 是固定的 9 个组件。提前中断只发生在 `stepCode != ""` 时，而全部故障点都落在 `daemon`(i=4) / `executor`(i=5) / `tool`(i=6) / `result`(i=7)。**最短的运行是 6 个事件**（`model_auth`），没有任何场景能停在第 1 步 |
 | **006-W-7 / W-8** | span 数 **> 200** | 同上，`len(steps) == 9` 是**硬上限**。今天的运行最多 9 个 span |
+
+#### 1a. `006-W-7` 还有第二道卡点，在读取一侧
+
+只把 span 造够是不够的。逐环节核实：
+
+| 环节 | 代码 | 数值 |
+|---|---|---|
+| 运行详情取事件 | `store.go` `GetRun` → `s.Query(ctx, scope, Filter{Run: id, Limit: 100})` | 100 |
+| `Query` 的上限夹取 | `store.go` `if f.Limit < 1 \|\| f.Limit > 100 { f.Limit = 50 }` | 硬上限 100 |
+| 瀑布折叠阈值 | `trace-waterfall.ts` `cap = options.cap ?? STREAM_EVENT_CAP`；`contract.ts` `STREAM_EVENT_CAP = 200` | 200 |
+| 折叠条件 | `trace-waterfall.ts` `if (order.length > cap)` | `order.length > 200` |
+| 面板传入 | `index.tsx:351` `buildTraceWaterfall(run.events, ...)`；`run = d.detail.data`（`queries.ts:18` → `runs?run_id=`） | `run.events` ≤ 100 |
+
+`100 > 200` 永远为假。**即使运行有 250 个 span，`006-W-7` 的「另有 N 条」折叠提示也出不来**，`006-W-8`（点开折叠）随之无从谈起。只做「产出 250 个 span」这一半，交付后这两条**仍然跑不了**——正是 SC-001 禁止的结果。因此 FR-005 同时覆盖读取一侧。
+
 
 ### 2. 回归判定：三种状态在正常路径上都写不进库
 
@@ -104,7 +119,7 @@ ObjectID: run.ID             // 一次运行的全部事件共享同一个 Objec
 
 | 条目 | 结论 |
 |---|---|
-| **002-V11-01**（`sink_errors > 0`）、**002-V11-02** / **002-V05-15**（`dropped > 0`） | 今天只有两条路：**跑 112 次模拟**把环填满（只能得到 `dropped`，得不到 `sink_errors`），或**让某张表不可写**——后者正是 runbook `§9` 的破坏性操作，跑完整个实例的数据作废。所以这三条实际上被绑在了 `§9` 上，而 `§9` 又要求「跑完重建实例」，于是它们与 `§6` 概览的其余条目**无法在同一轮里完成** |
+| **002-V11-1**（`sink_errors > 0`）、**002-V11-2** / **002-V05-15**（`dropped > 0`） | 今天只有两条路：**跑 112 次模拟**把环填满（只能得到 `dropped`，得不到 `sink_errors`），或**让某张表不可写**——后者正是 runbook `§9` 的破坏性操作，跑完整个实例的数据作废。所以这三条实际上被绑在了 `§9` 上，而 `§9` 又要求「跑完重建实例」，于是它们与 `§6` 概览的其余条目**无法在同一轮里完成** |
 
 ### 6. 隔离门禁今天已经存在，但只覆盖 `Simulate`
 
@@ -140,7 +155,8 @@ type Scenario struct{ ID string; Expected string }
 
 - **Q1**（覆盖范围）：任务描述说 19 条，(a)～(h) 实际点名 15 条，差 4 条。→ **暂定 A**：本特性覆盖**点名的 15 条**，并在交付记录里列出「已覆盖 15 条」与「未点名的 4 条待主任务补全」。见 FR-001。
 - **Q2**（新形态在 `Scenarios` 里怎么标注）：硬约束要求新形态出现在 `Scenarios` 里，又要求 §7 对表口径不变糊。→ **暂定 A**：给 `Scenario` 增加一个**分类字段**（业务故障 / 诊断自验），使「哪些属于 §7」成为**结构里的事实而不是文档里的约定**，并让对表可以被机器核对。代价是 `Scenarios` 是对外形状，要同步前端解析与畸形响应测试。见 FR-012、FR-013。
-- **Q3**（第 5 类的注入门禁 + 两项移出）：sink 失败与缓冲丢弃的注入点不经过 `Simulate`，没有现成的门；另有两条不该由模拟器承担。→ **暂定 A**：注入点**复用同一个判定**（`APP_ENV=development && LORETIDE_DIAGNOSTICS_TEST=1`），由服务装配处一次性决定并注入，**模块内不读环境变量**；**006-L-5 与 008-O-2 移出本特性**，理由见 FR-017、FR-018。见 FR-014 ～ FR-016。
+- **Q3**（第 5 类的注入门禁 + 两项移出）：sink 失败与缓冲丢弃的注入点不经过 `Simulate`，没有现成的门；另有两条不该由模拟器承担。→ **暂定 A**：注入点**复用同一个判定**（`APP_ENV=development && LORETIDE_DIAGNOSTICS_TEST=1`），由服务装配处一次性决定并注入，**模块内不读环境变量**；**006-L-5 与 008-O-2 移出本特性**，理由见 FR-020、FR-021。见 FR-015、FR-016。
+  - **plan 阶段的修正（research D5）**：把 sink 失败本身做成一个 shape 场景后，它走 `Simulate` 的既有门禁，**不需要装配处注入、不需要新开关、不需要新环境变量**，恢复也不需要动作。Q3 问的「不经过 `Simulate` 的注入点没有现成的门」这个问题因此消失。FR-015 / FR-016 的要求不变，只是被平凡满足。主任务若坚持原暂定值，装配注入同样可行，代价是多一个开关和一条会被忘记的人工关闭步骤。
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -164,7 +180,7 @@ type Scenario struct{ ID string; Expected string }
 
 生产路径拿不到任何一个新形态：注入不了故障，伪造不了回归结果，改不了 span 的父子关系。
 
-**Why this priority**: 与 US1 同为 P1，且**优先级更硬**。本特性做的事情本质上是「让系统能产出反常数据」，这正是 constitution 原则 VII「隔离实例之外注入被拒绝」要挡住的。一个能在生产伪造 `passed` 的开关，比 19 条跑不了的验收项危险得多。
+**Why this priority**: 与 US1 同为 P1，且**优先级更硬**。本特性做的事情本质上是「让系统能产出反常数据」，这正是隔离规则要挡住的（出处：constitution 的 Development Workflow 一节与 `docs/development/ai-collaboration.md`，加上原则 IX「真实执行器保持禁用」；任务描述记作「原则 VII」有误，原则 VII 是 UI 复用规则，见 plan.md）。一个能在生产伪造 `passed` 的开关，比 19 条跑不了的验收项危险得多。
 
 **Independent Test**: 在 `testEnabled` 为假、或环境变量不满足的条件下，逐个入口尝试构造新形态，全部被拒；并有负例测试固定这一点。
 
@@ -210,13 +226,13 @@ type Scenario struct{ ID string; Expected string }
 - **FR-002**: 系统 MUST 能产出**两个非父子且时间可见重叠**的 span（`006-W-3`）。
 - **FR-003**: 系统 MUST 能产出 `parent_span_id` 指向**本次运行之外**的 span，且该 id MUST 是合法格式（否则会被既有脱敏清空而退化为顶层节点）（`006-W-5`）。
 - **FR-004**: 系统 MUST 能产出**只含单个 span** 的运行（`006-W-6`）。
-- **FR-005**: 系统 MUST 能产出 span 数 **> 200** 且**失败步骤位于深层**的运行（`006-W-7` / `W-8`）。
+- **FR-005**: 系统 MUST 能产出 span 数 **> 200** 且**失败步骤位于深层**的运行（`006-W-7` / `W-8`）。**产出不够用**：运行详情读取路径 `GetRun` → `Store.Query(Filter{Run:id, Limit:100})` 把该次运行的事件截在 **100** 条，而瀑布的折叠阈值是 `STREAM_EVENT_CAP = 200`，`100 > 200` 永远为假。因此本条 MUST 同时让运行详情**取全该次运行的事件**（同一端点、同一响应形状，不构成新增读取路径），否则折叠提示永不出现、`006-W-7` / `W-8` 仍不可执行。见 plan.md research D2。
 - **FR-006**: 系统 MUST 能把 `regression = not_run` 的运行**写进库**，而不只是内存态（`006-V-1`）。
 - **FR-007**: 系统 MUST 能产出 `regression = failed` 的运行（`006-V-3`）。
 - **FR-008**: 系统 MUST 能产出被前端判定为**无法判定**的运行（`006-V-5`）。判定规则以 `describeRegressionVerdict` 为准，MUST NOT 为此改动该规则。
 - **FR-009**: 系统 MUST 能产出 `module` 为空的运行（`006-L-4` 中今天无法验证的那一半）。
 - **FR-010**: 系统 MUST 能产出同一对象事件数 **> 当前分页大小**的情形，使其跨页（`008-O-3`）。
-- **FR-011**: 系统 MUST 提供可注入的 sink 写入失败与缓冲丢弃，使 `sink_errors` 与 `dropped` 大于 0（`002-V11-01` / `V11-02` / `002-V05-15`），且 MUST 能**恢复**到正常状态，MUST NOT 要求为此重建实例。
+- **FR-011**: 系统 MUST 提供可注入的 sink 写入失败与缓冲丢弃，使 `sink_errors` 与 `dropped` 大于 0（`002-V11-1` / `002-V11-2` / `002-V05-15`），且 MUST 能**恢复**到正常状态，MUST NOT 要求为此重建实例。
 
 ### 分类与对表（US3）
 
@@ -228,7 +244,7 @@ type Scenario struct{ ID string; Expected string }
 
 - **FR-015**: 全部新形态 MUST 只在隔离实例语境下可达，判定沿用既有的 `testEnabled`（`APP_ENV=development && LORETIDE_DIAGNOSTICS_TEST=1`）（Q3 = A 暂定）。
 - **FR-016**: 不经过 `Simulate` 的注入点（sink 失败、缓冲丢弃）MUST 由服务装配处一次性决定并注入其可用性，**模块内 MUST NOT 读环境变量**。
-- **FR-017**: MUST 有**负例测试**证明隔离实例之外无法注入故障、无法伪造回归结果——constitution 原则 VII 的「隔离实例之外注入被拒绝」MUST 对每一类新形态各有一条断言。
+- **FR-017**: MUST 有**负例测试**证明隔离实例之外无法注入故障、无法伪造回归结果——隔离规则（constitution Development Workflow + `docs/development/ai-collaboration.md`，及原则 IX）MUST 对每一类新形态**各有一条**断言。
 - **FR-018**: 本特性 MUST NOT 放宽 `Sanitize` 的白名单、MUST NOT 改变「审计写失败即整体回滚」、MUST NOT 改变真实执行器的禁用状态。
 - **FR-019**: 本特性 MUST NOT 改动 `server/internal/daemon` 或任何上游 Multica 代码。
 
