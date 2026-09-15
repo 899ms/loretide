@@ -49,13 +49,29 @@ func(h *Handler)ContentDiagnosticClient(w http.ResponseWriter,r *http.Request){s
 // a failure: the last page carries Rotate so the client resumes without
 // reporting a disconnect. Tests shorten it.
 var diagnosticStreamWindow=25*time.Second
-func(h *Handler)ContentDiagnosticStream(w http.ResponseWriter,r *http.Request){scope,ok:=h.diagnosticScope(w,r);if !ok{return};f,err:=diagnosticFilter(r);if err!=nil{diagnosticError(w,err);return};flusher,ok:=w.(http.Flusher);if !ok{writeError(w,503,"stream unavailable");return};w.Header().Set("Content-Type","application/x-ndjson");w.Header().Set("Cache-Control","no-store");w.Header().Set("X-Accel-Buffering","no");ticker:=time.NewTicker(time.Second);defer ticker.Stop();deadline:=time.NewTimer(diagnosticStreamWindow);defer deadline.Stop();rotate:=false
+// diagnosticStreamTick is how often a batch is written, and it is also the
+// margin the rotation decision needs: the last page that still fits inside the
+// window is the one written a full tick before the boundary.
+const diagnosticStreamTick=time.Second
+func(h *Handler)ContentDiagnosticStream(w http.ResponseWriter,r *http.Request){scope,ok:=h.diagnosticScope(w,r);if !ok{return};f,err:=diagnosticFilter(r);if err!=nil{diagnosticError(w,err);return};flusher,ok:=w.(http.Flusher);if !ok{writeError(w,503,"stream unavailable");return};w.Header().Set("Content-Type","application/x-ndjson");w.Header().Set("Cache-Control","no-store");w.Header().Set("X-Accel-Buffering","no");ticker:=time.NewTicker(diagnosticStreamTick);defer ticker.Stop();end:=time.Now().Add(diagnosticStreamWindow)
  for { // Recheck membership on each batch so revocation closes an active stream.
   member,err:=h.getWorkspaceMember(r.Context(),scope.Actor,scope.Workspace);if err!=nil||!roleAllowed(member.Role,"owner","admin"){return}
-  page,err:=h.ContentDiagnostics.Store.Query(r.Context(),scope,f);if err!=nil{return};page.Rotate=rotate;b,err:=json.Marshal(page);if err!=nil{return};if _,err=fmt.Fprintf(w,"%s\n",b);err!=nil{return};flusher.Flush();f.After=page.Cursor
-  // The window closed, so this page was the planned last one.
-  if rotate{return}
-  select{case <-r.Context().Done():return;case <-deadline.C:rotate=true;case <-ticker.C:}
+  page,err:=h.ContentDiagnostics.Store.Query(r.Context(),scope,f);if err!=nil{return}
+  // Decide the handover before writing this page, not after it. Waiting for the
+  // window to expire and then opening another round puts the rotate page
+  // outside the window - two database queries past the boundary - where it
+  // races whatever closes the connection there and is lost. A real browser saw
+  // exactly that: 26 pages, none carrying rotate, the stream ending 11ms after
+  // the 25s mark, and a disconnect notice every window (002-V05-01/02).
+  // Deciding here also removes the deadline timer, and with it the coin flip
+  // when the deadline and the ticker came ready in the same instant.
+  page.Rotate=!time.Now().Add(diagnosticStreamTick).Before(end)
+  b,err:=json.Marshal(page);if err!=nil{return};if _,err=fmt.Fprintf(w,"%s\n",b);err!=nil{return};flusher.Flush();f.After=page.Cursor
+  // The planned last page has been flushed inside the window. Nothing further
+  // happens: no query, no write, no waiting for a boundary that has not
+  // arrived yet.
+  if page.Rotate{return}
+  select{case <-r.Context().Done():return;case <-ticker.C:}
  }
 }
 
