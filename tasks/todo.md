@@ -81,7 +81,7 @@
 - **预计涉及**：workspace service/handler、packages/core/workspace、packages/views/workspace 对应文件。
 
 ### LT-010 · 建立内容对象的空间授权入口
-- [ ] **状态：TODO**；依赖：LT-009；规模：M；追踪：NFR-03、AC-001、D10-V06。
+- [ ] **状态：已交付，已合并，待用户验收**（PR [899ms/loretide#69](https://github.com/899ms/loretide/pull/69) 合入 app-main，2026-09-15）；依赖：LT-009；规模：M；追踪：NFR-03、AC-001、D10-V06。已交付：`server/internal/content/workspace-core/` 授权助手（从 diagnostics 提取，类型化判定，不缓存、每次判定重读成员关系）；diagnostics 改调助手且 403/404 逐字节不变；新模块规范映射「无权与不存在同为 404」，响应用诊断错误对象、不带正文；接入合同生效（`check:diagnostics-contract` 报 2 个已落地模块）；五条负例 + 存在性不泄漏断言；变异 5/5。无界面。
 - **范围/交付**：给后续内容服务提供基于认证主体的品牌权限校验，定义无权读取/写入的统一行为。
 - **验收**：不能凭传入 workspace_id 越权；拒绝结果不泄漏对象正文；不新增数据库外键/级联。
 - **验证**：同用户不同品牌和另一身份的允许/拒绝测试，关联不存在及并发归属变化测试。
