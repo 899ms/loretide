@@ -74,7 +74,7 @@
 ## W-02：品牌、账号与授权
 
 ### LT-009 · 创建和切换品牌空间
-- [ ] **状态：READY，规格已备**（`specs/004-lt009-brand-workspace`）；依赖：LT-008、ARCH-02、**D13-V12 接入合同（已闭合，#35）**——2026-09-15 起 DG-01 的其余部分不再作为前置，见 plan.md「优先级决定」；规模：M；追踪：R-001、AC-001、D11-V01。
+- [ ] **状态：已交付，已合并，待用户验收**（PR [899ms/loretide#63](https://github.com/899ms/loretide/pull/63) 合入 app-main，2026-09-15）；依赖：LT-008、ARCH-02、D13-V12 接入合同（已闭合，#35）；规模：M；追踪：R-001、AC-001、D11-V01。已交付：工作区创建时可选时区（`settings["loretide.timezone"]`，零迁移，服务端 IANA 校验并显式拒绝 `""`/`"Local"`，缺省 `Asia/Shanghai`）、设置页显示与修改、切换后各自独立；`time/tzdata` 内嵌保证无系统 zoneinfo 的主机也能校验；`pnpm check:diagnostics-contract` 通过（本卡改的是上游 workspace，不新建 content 模块）。手动 UI 项 11 条见 app `specs/004-lt009-brand-workspace/manual-ui-todo.md`。遗留（非本卡）：`content_dispatch_outbox` 未登记进工作区删除清单（#45 遗留，已派修）。
 - **范围/交付**：复用 Workspace 完成品牌名称、时区的创建、显示与切换，内容上下文从当前品牌派生。
 - **验收**：创建 A/B 后刷新保持；切换后不显示前品牌数据；项目与品牌空间不混为同一对象。
 - **验证**：品牌创建 API 定向测试＋浏览器切换；检查缓存键/事件的空间归属。
