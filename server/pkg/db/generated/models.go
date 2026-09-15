@@ -601,6 +601,15 @@ type ContentAccount struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ContentAccountRevision struct {
+	RevisionID    string             `json:"revision_id"`
+	AccountID     string             `json:"account_id"`
+	WorkspaceID   string             `json:"workspace_id"`
+	Revision      int64              `json:"revision"`
+	PersonaPrompt string             `json:"persona_prompt"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContentDiagnosticRun struct {
 	RunID       string             `json:"run_id"`
 	WorkspaceID string             `json:"workspace_id"`
