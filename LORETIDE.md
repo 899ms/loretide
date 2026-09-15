@@ -12,6 +12,8 @@ The baseline contains diagnostics, module-boundary checks and local environment 
 
 **Scope, phase one (decided 2026-09-15): the web app only.** Windows-specific work is parked and is not scheduled: no new native Windows runtime features (`scripts/local-windows.ps1` stays as it is, used only as the local environment for running the app), and no triage of upstream Multica test failures that are specific to Windows. Upstream daemon failures caused by the execution gate are already isolated by [#42](https://github.com/899ms/loretide/pull/42) — an `-overlay` control run showed none of them is a real regression — and need no further work. In scope: `packages/`, `apps/web/` and `server/internal/content/`, plus their diagnostics acceptance. See `tasks/plan.md` on the main branch for the record.
 
+**Upstream code during the SOP phase (2026-09-15):** not off-limits, but changed only when an SOP requirement needs it — minimal, in its own `upstream:` commit, called out in a dedicated PR section (workflow step 13). Style or modernization is never a reason.
+
 **UI during the SOP phase (2026-09-15):** no UI/UX polish. Inherit Multica's design system and tokens wholesale and only wire features onto existing compositions — see [design rules](docs/development/design/README.md), "SOP phase rule".
 
 Local operator instructions: [native Windows](docs/development/native-windows.md). The current launcher depends on private, pre-provisioned runtime configuration; a fresh clone is not yet a one-command runnable environment. A separate bootstrap task must close that gap using synthetic data and new local secrets.

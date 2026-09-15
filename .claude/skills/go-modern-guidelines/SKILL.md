@@ -9,7 +9,7 @@ Source of truth: `FEATURES.md` in this directory (JetBrains, Apache-2.0, pinned 
 
 ## Scope — read this before applying anything
 
-1. **Applies only to Loretide-owned Go**: files under `server/internal/content/**`, and handler/route files a Loretide PR creates. It does **not** apply to upstream Multica code (`server/internal/daemon/**`, `server/pkg/**`, existing handlers, anything not created by a Loretide spec). Constitution principle VIII: scope is the claimed task.
+1. **Applies only to Loretide-owned Go**: files under `server/internal/content/**`, and handler/route files a Loretide PR creates. It does **not** apply to upstream Multica code (`server/internal/daemon/**`, `server/pkg/**`, existing handlers, anything not created by a Loretide spec). Upstream code may be changed when an SOP requirement needs it (see `docs/development/spec-kit-workflow.md` step 13), but **these guidelines are never the reason**: in an upstream file, match the upstream pattern even in the lines you touch. Constitution principle VIII: scope is the claimed task.
 2. **Only the lines you are writing or changing.** Do not "modernize" neighbouring code, and never open a file just to apply a guideline. The upstream SKILL's advice to follow a guideline "even when nearby code uses an older pattern" is **overridden** here: in an upstream file, match the upstream pattern.
 3. **Target version comes from `server/go.mod`** (currently `go 1.26.x`). Ignore guidelines marked for a newer Go.
 4. **Permanently excluded regardless of Go version**, because they conflict with upstream technology choices and would create a second stack:
