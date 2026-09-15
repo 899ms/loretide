@@ -45,6 +45,11 @@ import {
   SettingsTab,
   type SettingsSaveStatus,
 } from "./settings-layout";
+import { Switch } from "@multica/ui/components/ui/switch";
+import {
+  isAutoPrecheckEnabled,
+  withAutoPrecheck,
+} from "@multica/core/workspace/auto-precheck";
 import {
   DEFAULT_TIMEZONE,
   getWorkspaceTimezone,
@@ -397,6 +402,57 @@ export function WorkspaceTab() {
                   {t(($) => $.workspace.timezone_default_badge)}
                 </Badge>
               )}
+            </div>
+          </SettingsRow>
+          {/* The brand's automatic precheck (LT-015). Configuration only: this
+              switch records what the brand asked for; running the precheck at
+              submission time is EP-06. One switch per brand, and deliberately
+              no per-account control anywhere - the first version of the SOP
+              says every account uses the brand-wide setting. Saved the same
+              way every other field on this page is, and merged through
+              withAutoPrecheck because the endpoint replaces settings wholesale. */}
+          <SettingsRow
+            label={t(($) => $.workspace.auto_precheck_label)}
+            description={t(($) => $.workspace.auto_precheck_hint)}
+            size="text"
+          >
+            <div className="flex items-center gap-2">
+              {/* Shown only when the switch is off: saying "this does not skip
+                  human review" while it is on is noise, and the moment it
+                  matters is the moment someone turns it off. */}
+              {!isAutoPrecheckEnabled(workspace) && (
+                <span className="text-caption text-muted-foreground">
+                  {t(($) => $.workspace.auto_precheck_still_reviewed)}
+                </span>
+              )}
+              <Switch
+                checked={isAutoPrecheckEnabled(workspace)}
+                disabled={!canManageWorkspace}
+                aria-label={t(($) => $.workspace.auto_precheck_label)}
+                onCheckedChange={(checked) => {
+                  void (async () => {
+                    try {
+                      const updated = await api.updateWorkspace(workspace.id, {
+                        settings: withAutoPrecheck(workspace.settings, checked),
+                      });
+                      qc.setQueryData(
+                        workspaceKeys.list(),
+                        (old: Workspace[] | undefined) =>
+                          old?.map((ws) => (ws.id === updated.id ? updated : ws)),
+                      );
+                      toast.success(t(($) => $.workspace.toast_saved), {
+                        id: "settings-auto-save",
+                      });
+                    } catch (error) {
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : t(($) => $.workspace.toast_save_failed),
+                      );
+                    }
+                  })();
+                }}
+              />
             </div>
           </SettingsRow>
           <SettingsRow

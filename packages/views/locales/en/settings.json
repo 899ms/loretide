@@ -708,6 +708,9 @@
     "confirm_cancel": "Cancel",
     "confirm_action": "Confirm",
     "timezone_label": "Time zone",
+    "auto_precheck_hint": "Run the automatic precheck when content is submitted for review. Applies to every account in this brand.",
+    "auto_precheck_label": "Automatic precheck",
+    "auto_precheck_still_reviewed": "Switching this off does not skip human review.",
     "timezone_default_badge": "Default",
     "timezone_invalid": "Not a valid time zone",
     "timezone_hint": "Timestamps are stored in UTC and shown in this zone."
