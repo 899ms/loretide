@@ -706,6 +706,9 @@
     "toast_logo_updated": "ワークスペースのロゴを更新しました",
     "toast_logo_failed": "ワークスペースのロゴをアップロードできませんでした",
     "timezone_label": "タイムゾーン",
+    "auto_precheck_hint": "コンテンツの審査申請時に自動事前チェックを実行します。このブランドの全アカウントに適用されます。",
+    "auto_precheck_label": "自動事前チェック",
+    "auto_precheck_still_reviewed": "オフにしても人による審査は省略されません。",
     "timezone_default_badge": "既定",
     "timezone_invalid": "有効なタイムゾーンではありません",
     "timezone_hint": "日時は UTC で保存され、このゾーンで表示されます。"

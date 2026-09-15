@@ -119,6 +119,8 @@ func (h *Handler) workspaceToResponse(w db.Workspace) WorkspaceResponse {
 	// Every response carries a timezone, so no client has to decide what an
 	// absent one means (FR-002). The stored row is untouched.
 	settings = timezoneFilled(settings)
+	// Same for the brand's automatic-precheck switch (specs/019 FR-002/FR-003).
+	settings = autoPrecheckFilled(settings)
 	var repos any
 	if w.Repos != nil {
 		json.Unmarshal(w.Repos, &repos)
@@ -269,6 +271,64 @@ func timezoneFilled(settings any) any {
 	return filled
 }
 
+// workspaceAutoPrecheckKey is where the brand's automatic-precheck switch lives
+// inside the settings JSONB, alongside the timezone. Same "loretide." prefix,
+// same reason. Mirrored by packages/core/workspace/auto-precheck.ts.
+//
+// This is configuration only: nothing here runs a precheck or decides when one
+// is due. It records what the brand has asked for.
+const workspaceAutoPrecheckKey = "loretide.auto_precheck"
+
+// defaultWorkspaceAutoPrecheck is what a workspace reads as when it has no
+// stored value - including every workspace created before this feature existed.
+// On by default: a brand that never chose has not opted out.
+const defaultWorkspaceAutoPrecheck = true
+
+// validateAutoPrecheckSetting rejects a settings blob whose precheck key is not
+// a boolean. Settings without the key are fine: an update that renames the
+// brand is not a statement about its precheck settings.
+//
+// Storing "false" as a string, or 0, would leave every reader guessing what it
+// meant, and the two ends would guess differently.
+func validateAutoPrecheckSetting(settings any) error {
+	m, ok := settings.(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, present := m[workspaceAutoPrecheckKey]
+	if !present {
+		return nil
+	}
+	if _, ok := raw.(bool); !ok {
+		return fmt.Errorf("auto precheck must be a boolean")
+	}
+	return nil
+}
+
+// autoPrecheckFilled returns settings with the precheck key present, filling
+// the default when it is absent or not a boolean. Applied on the way OUT only,
+// like timezoneFilled: reading a workspace must not write to it.
+//
+// The stored value is returned as-is whenever it is a boolean - including
+// false. Deciding that from the value's truthiness would report a brand that
+// switched the precheck off as one that never chose, and the default would then
+// turn it back on.
+func autoPrecheckFilled(settings any) any {
+	m, ok := settings.(map[string]any)
+	if !ok {
+		return map[string]any{workspaceAutoPrecheckKey: defaultWorkspaceAutoPrecheck}
+	}
+	if _, isBool := m[workspaceAutoPrecheckKey].(bool); isBool {
+		return m
+	}
+	filled := make(map[string]any, len(m)+1)
+	for k, v := range m {
+		filled[k] = v
+	}
+	filled[workspaceAutoPrecheckKey] = defaultWorkspaceAutoPrecheck
+	return filled
+}
+
 func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	userID, ok := requireUserID(w, r)
 	if !ok {
@@ -322,6 +382,10 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := validateTimezoneSetting(req.Settings); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := validateAutoPrecheckSetting(req.Settings); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -494,6 +558,10 @@ func (h *Handler) UpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Settings != nil {
 		if err := validateTimezoneSetting(req.Settings); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := validateAutoPrecheckSetting(req.Settings); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
