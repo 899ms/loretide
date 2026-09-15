@@ -1036,7 +1036,16 @@ function DiagnosticsContent({ wsId, copy, download }: Props) {
                 )}
               </SettingsSection>
             )}
-            {tab === 3 && !runId && trace && (
+            {/* The single-trace view, for whichever way the reader arrived.
+                This used to require !runId, but onTrace always sets a run id,
+                so arriving through "view trace" - the documented path - skipped
+                this section entirely and the object/version card was reachable
+                only by reloading and typing a trace id by hand (008-J-1). The
+                condition is now just "a trace is selected": the waterfall above
+                still renders from the run, and these read the same already
+                fetched events, which the query filters by trace_id. No new
+                data path. */}
+            {tab === 3 && trace && (
               <SettingsSection>
                 <p>{trace}</p>
                 <ObjectVersions events={d.events.data?.events ?? []} />
