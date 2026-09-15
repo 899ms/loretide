@@ -61,6 +61,7 @@ apps/web/test-results/
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/speckit-*/
+!.claude/skills/go-modern-guidelines/
 .tool-versions
 
 # feature tracking

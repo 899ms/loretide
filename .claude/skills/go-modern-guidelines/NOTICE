@@ -1,0 +1,3 @@
+Modern Go Guidelines — Copyright JetBrains s.r.o. Licensed under the Apache License, Version 2.0 (see LICENSE).
+Vendored from https://github.com/JetBrains/go-modern-guidelines at commit 155dc7ca10da5e1f6c841503086957b1b37f5815 (plugin version 1.1.1), file FEATURES.md, unmodified.
+The SKILL.md in this directory is Loretide's own wrapper; it deliberately does not use the upstream CLI wrapper (which downloads a binary on first use).
