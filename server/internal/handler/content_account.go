@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
@@ -148,7 +149,19 @@ func (h *Handler) accountWriteError(w http.ResponseWriter, err error) {
 	}
 }
 
-func accountIDFromURL(r *http.Request) string { return workspaceIDFromURL(r, "id") }
+// accountIDFromURL reads the account id from the path, and only from the path.
+//
+// It used to borrow workspaceIDFromURL, which prefers the workspace id in the
+// middleware context and falls back to the URL parameter. Behind the real
+// router that context is always set, so every endpoint here received the
+// WORKSPACE id as its account id and answered 404 for accounts that existed.
+// Handler tests never saw it: called directly, the context is empty and the
+// fallback returns the right value, so the tests exercised the one path
+// production never takes.
+//
+// The workspace is decided separately by accountScope; this is a path segment,
+// and nothing else may supply it.
+func accountIDFromURL(r *http.Request) string { return chi.URLParam(r, "id") }
 
 // contentAccountStore adapts the generated queries to the module's interface.
 // The module cannot import the generated package - the content boundary checker
