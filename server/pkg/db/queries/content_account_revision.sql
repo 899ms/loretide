@@ -10,26 +10,26 @@
 -- The unique index on (account_id, revision) is what makes a concurrent pair of
 -- writers land as two revisions instead of one: the loser gets 23505 and retries.
 INSERT INTO content_account_revision
-    (revision_id, account_id, workspace_id, revision, persona_prompt)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING revision_id, account_id, workspace_id, revision, persona_prompt, created_at;
+    (revision_id, account_id, workspace_id, revision, persona_prompt, profile)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING revision_id, account_id, workspace_id, revision, persona_prompt, profile, created_at;
 
 -- name: GetContentAccountRevision :one
-SELECT revision_id, account_id, workspace_id, revision, persona_prompt, created_at
+SELECT revision_id, account_id, workspace_id, revision, persona_prompt, profile, created_at
 FROM content_account_revision
 WHERE revision_id = $1 AND workspace_id = $2;
 
 -- name: GetCurrentContentAccountRevision :one
 -- The current revision is simply the highest one. No pointer column exists to
 -- disagree with this.
-SELECT revision_id, account_id, workspace_id, revision, persona_prompt, created_at
+SELECT revision_id, account_id, workspace_id, revision, persona_prompt, profile, created_at
 FROM content_account_revision
 WHERE account_id = $1 AND workspace_id = $2
 ORDER BY revision DESC
 LIMIT 1;
 
 -- name: ListContentAccountRevisions :many
-SELECT revision_id, account_id, workspace_id, revision, persona_prompt, created_at
+SELECT revision_id, account_id, workspace_id, revision, persona_prompt, profile, created_at
 FROM content_account_revision
 WHERE account_id = $1 AND workspace_id = $2
 ORDER BY revision ASC;

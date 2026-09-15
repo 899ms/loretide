@@ -24,7 +24,11 @@ type Revision struct {
 	WorkspaceID   string `json:"workspace_id"`
 	Revision      int64  `json:"revision"`
 	PersonaPrompt string `json:"persona_prompt"`
-	CreatedAt     string `json:"created_at"`
+	// Profile is the rest of the expression configuration (SOP 3.1). It rides
+	// the same revision as the prompt, so one confirmation is one snapshot and
+	// a run pins one revision_id.
+	Profile   ExpressionProfile `json:"profile"`
+	CreatedAt string            `json:"created_at"`
 }
 
 // MaxPersonaPromptRunes bounds one prompt. Counted in runes, not bytes: a
@@ -127,6 +131,13 @@ func (s *Service) SetPersonaPrompt(ctx context.Context, workspaceID, actor, acco
 	if err := ValidatePersonaPrompt(prompt); err != nil {
 		return Revision{}, err
 	}
+	// The profile comes along unchanged. Writing a revision with an empty one
+	// would silently discard a profile the creator had just confirmed, and it
+	// would look like nothing happened until they reopened the page.
+	carried, err := s.carriedProfile(ctx, workspaceID, accountID)
+	if err != nil {
+		return Revision{}, err
+	}
 	for attempt := 0; attempt < maxRevisionAttempts; attempt++ {
 		next, err := s.RevisionStore.NextRevision(ctx, workspaceID, accountID)
 		if err != nil {
@@ -138,6 +149,7 @@ func (s *Service) SetPersonaPrompt(ctx context.Context, workspaceID, actor, acco
 			WorkspaceID:   workspaceID,
 			Revision:      next,
 			PersonaPrompt: prompt,
+			Profile:       carried,
 		})
 		if err == nil {
 			s.auditRevision(ctx, workspaceID, actor, accountID, written.Revision)
@@ -149,6 +161,64 @@ func (s *Service) SetPersonaPrompt(ctx context.Context, workspaceID, actor, acco
 		// Someone else claimed this number. Read the new maximum and try again.
 	}
 	return Revision{}, ErrRevisionConflict
+}
+
+// SetProfile records a new revision carrying the confirmed expression profile.
+//
+// The persona prompt comes along unchanged, for the same reason the profile
+// does when the prompt is what changed: a revision is the whole configuration,
+// and a write that only knows about half of it would drop the other half.
+//
+// The profile is validated before anything is read and normalised before it is
+// written: an unusable shape is refused outright, and a blank field marked
+// confirmed is lowered to pending rather than recording a decision the creator
+// did not make.
+func (s *Service) SetProfile(ctx context.Context, workspaceID, actor, accountID string, profile ExpressionProfile) (Revision, error) {
+	if err := ValidateProfile(profile); err != nil {
+		return Revision{}, err
+	}
+	normalized := NormalizeProfile(profile)
+
+	carried := ""
+	if current, err := s.CurrentPersonaRevision(ctx, workspaceID, accountID); err == nil {
+		carried = current.PersonaPrompt
+	}
+
+	for attempt := 0; attempt < maxRevisionAttempts; attempt++ {
+		next, err := s.RevisionStore.NextRevision(ctx, workspaceID, accountID)
+		if err != nil {
+			return Revision{}, err
+		}
+		written, err := s.RevisionStore.InsertRevision(ctx, Revision{
+			RevisionID:    s.newID(),
+			AccountID:     accountID,
+			WorkspaceID:   workspaceID,
+			Revision:      next,
+			PersonaPrompt: carried,
+			Profile:       normalized,
+		})
+		if err == nil {
+			s.auditRevision(ctx, workspaceID, actor, accountID, written.Revision)
+			return written, nil
+		}
+		if !errors.Is(err, ErrRevisionTaken) {
+			return Revision{}, err
+		}
+	}
+	return Revision{}, ErrRevisionConflict
+}
+
+// carriedProfile is the profile the next revision inherits. An account with no
+// revision yet inherits an empty one, which is the same thing as every field
+// pending.
+func (s *Service) carriedProfile(ctx context.Context, workspaceID, accountID string) (ExpressionProfile, error) {
+	current, err := s.CurrentPersonaRevision(ctx, workspaceID, accountID)
+	if err != nil {
+		// No revision yet is not a failure: the first prompt is written against
+		// an empty profile.
+		return ExpressionProfile{}, nil
+	}
+	return current.Profile, nil
 }
 
 // auditRevision records who confirmed which account's configuration, and which

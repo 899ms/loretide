@@ -121,10 +121,17 @@ func (h *Handler) personaWriteError(w http.ResponseWriter, err error) {
 // Append-only: it offers an insert and reads, and nothing that mutates a row.
 type contentRevisionStore struct{ q *db.Queries }
 
-func revisionFromRow(revisionID, accountID, workspaceID string, revision int64, prompt, created string) ipprofile.Revision {
+func revisionFromRow(revisionID, accountID, workspaceID string, revision int64, prompt string, rawProfile []byte, created string) ipprofile.Revision {
+	// A revision written before migration 482 has an empty profile document.
+	// It reads back as every field pending, which is exactly right: nobody
+	// filled those fields in, so nothing about them is confirmed.
+	profile := ipprofile.ExpressionProfile{}
+	if len(rawProfile) > 0 {
+		_ = json.Unmarshal(rawProfile, &profile)
+	}
 	return ipprofile.Revision{
 		RevisionID: revisionID, AccountID: accountID, WorkspaceID: workspaceID,
-		Revision: revision, PersonaPrompt: prompt, CreatedAt: created,
+		Revision: revision, PersonaPrompt: prompt, Profile: profile, CreatedAt: created,
 	}
 }
 
@@ -136,10 +143,14 @@ func (s contentRevisionStore) NextRevision(ctx context.Context, workspaceID, acc
 }
 
 func (s contentRevisionStore) InsertRevision(ctx context.Context, revision ipprofile.Revision) (ipprofile.Revision, error) {
+	profile, err := json.Marshal(revision.Profile)
+	if err != nil {
+		return ipprofile.Revision{}, err
+	}
 	row, err := s.q.InsertContentAccountRevision(ctx, db.InsertContentAccountRevisionParams{
 		RevisionID: revision.RevisionID, AccountID: revision.AccountID,
 		WorkspaceID: revision.WorkspaceID, Revision: revision.Revision,
-		PersonaPrompt: revision.PersonaPrompt,
+		PersonaPrompt: revision.PersonaPrompt, Profile: profile,
 	})
 	if err != nil {
 		// Somebody else claimed this revision number. Retryable, and the module
@@ -150,7 +161,7 @@ func (s contentRevisionStore) InsertRevision(ctx context.Context, revision ippro
 		return ipprofile.Revision{}, err
 	}
 	return revisionFromRow(row.RevisionID, row.AccountID, row.WorkspaceID, row.Revision,
-		row.PersonaPrompt, timestampToString(row.CreatedAt)), nil
+		row.PersonaPrompt, row.Profile, timestampToString(row.CreatedAt)), nil
 }
 
 func (s contentRevisionStore) GetRevision(ctx context.Context, workspaceID, revisionID string) (ipprofile.Revision, error) {
@@ -161,7 +172,7 @@ func (s contentRevisionStore) GetRevision(ctx context.Context, workspaceID, revi
 		return ipprofile.Revision{}, accountStorageError(err)
 	}
 	return revisionFromRow(row.RevisionID, row.AccountID, row.WorkspaceID, row.Revision,
-		row.PersonaPrompt, timestampToString(row.CreatedAt)), nil
+		row.PersonaPrompt, row.Profile, timestampToString(row.CreatedAt)), nil
 }
 
 func (s contentRevisionStore) CurrentRevision(ctx context.Context, workspaceID, accountID string) (ipprofile.Revision, error) {
@@ -172,7 +183,7 @@ func (s contentRevisionStore) CurrentRevision(ctx context.Context, workspaceID, 
 		return ipprofile.Revision{}, accountStorageError(err)
 	}
 	return revisionFromRow(row.RevisionID, row.AccountID, row.WorkspaceID, row.Revision,
-		row.PersonaPrompt, timestampToString(row.CreatedAt)), nil
+		row.PersonaPrompt, row.Profile, timestampToString(row.CreatedAt)), nil
 }
 
 func (s contentRevisionStore) ListRevisions(ctx context.Context, workspaceID, accountID string) ([]ipprofile.Revision, error) {
@@ -185,7 +196,8 @@ func (s contentRevisionStore) ListRevisions(ctx context.Context, workspaceID, ac
 	revisions := make([]ipprofile.Revision, 0, len(rows))
 	for _, row := range rows {
 		revisions = append(revisions, revisionFromRow(row.RevisionID, row.AccountID,
-			row.WorkspaceID, row.Revision, row.PersonaPrompt, timestampToString(row.CreatedAt)))
+			row.WorkspaceID, row.Revision, row.PersonaPrompt, row.Profile,
+			timestampToString(row.CreatedAt)))
 	}
 	return revisions, nil
 }
