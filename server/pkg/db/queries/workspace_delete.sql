@@ -339,6 +339,12 @@ deleted_content_technical_logs AS (
 deleted_content_accounts AS (
     DELETE FROM content_account WHERE workspace_id = $1::text
 ),
+-- Account configuration revisions go with their accounts. Registered in the
+-- deletion manifest test alongside this; doing only one of the two leaves
+-- either orphaned rows or a drifting manifest.
+deleted_content_account_revisions AS (
+    DELETE FROM content_account_revision WHERE workspace_id = $1::text
+),
 deleted_channel_outbound_cards AS (
     DELETE FROM channel_outbound_card_message
     WHERE chat_session_id IN (SELECT id FROM ws_sessions)
