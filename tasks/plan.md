@@ -10,6 +10,16 @@
 
 先做独立开发环境，再让浏览器实际完成品牌/账号设置和主动选择本地素材；之后实现创作、审核、经营闭环与真实 Agent。任何模拟任务都明确标记，不能作为真实模型路径通过的证据。
 
+## 范围决定（2026-09-15，用户确认）
+
+**第一阶段只做 web app。** 与 Windows 平台相关的部分全部搁置，不再排期：
+
+- **不再开发**：原生 Windows 运行时与实例生命周期脚本的新功能（LT-008 已交付的 `scripts/local-windows.ps1` 保持现状，只作为跑 app 的本机环境使用，不再扩展）。
+- **不再分诊**：上游 Multica 代码在 Windows 上的测试失败（2026-09-15 实测 98 条，根因为 PATH 上存在真实 `codex-cli`、Windows 路径进 JSON 被转义、创建 symlink 需 `SeCreateSymbolicLink` 特权、`HOME` 未隔离）。这些是上游代码的平台差异，不属于 Loretide 的交付面。
+- **同样搁置**：上游 daemon 的 108 条执行闸门相关失败——已由 [#42](https://github.com/899ms/loretide/pull/42) 用构建约束与 `policytest.SkipIfExecutionGated` 隔离，`-overlay` 对照实验证明其中 0 条真实回归，不需要后续处理。
+
+保留在范围内的是 `packages/`、`apps/web/`、`server/internal/content/` 这条 web app 链路，以及它的诊断验收。
+
 ## 当前证据与目录约定
 
 文档仓库为 899ms/loretide，实际工作目录 F:/GJ/内容创作工作台。研究 checkout 固定为 Multica `3551e72e76d2c276e550b668303646d1280fb1e2`，本轮只读。
