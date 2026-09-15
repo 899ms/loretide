@@ -9,6 +9,10 @@ All new and changed Web pages must fully reuse Multica's existing components, pa
 - If an existing composition cannot cover a requirement, document the concrete gap and closest upstream component; do not silently create a replacement design system or layout.
 - Verify against the native page in the browser under the same theme, zoom and font preferences. Type checking alone is not visual acceptance.
 
+## SOP phase rule (confirmed by the user on 2026-09-15)
+
+While the SOP is being made operable (LT-009 onwards), **spend no time on UI/UX polish**. Every screen inherits Multica's design system and design tokens wholesale: `packages/ui` components, the `--text-*` type scale, semantic color tokens, spacing and radii. The only UI work permitted is wiring a feature onto an existing composition. Do not add controls, do not adjust styling, do not introduce a second visual language. A PR's "UI impact" section should list which existing components were reused and nothing more. Visual refinement, if ever needed, is a separate task after the SOP runs end to end. This is the phase-one reading of constitution principle VII; the rules above still apply in full.
+
 The full Chinese policy is `docs/design/README.md` in the parent Loretide documentation repository. That repository and this application checkout are separate Git repositories. Record implementation evidence and remaining gaps in the documentation repository's `records/`.
 
 Confirmed by the user on 2026-09-13. The current diagnostics page requires remediation; this policy does not certify that remediation is complete.
