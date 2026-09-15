@@ -25,6 +25,20 @@ Multica 上游已有完整的 Workspace：
 
 因此 LT-009 的实际增量是：**时区属性**（存储、创建时设置、显示与修改）、**切换隔离的验证**（不是新建机制）、**术语落地**。不是重做 Workspace。
 
+## 规格修正（2026-09-15 实施期）
+
+规格写于 `3ecfaaec5`，实施在 `7a779d6`。T001 逐项重核 Current State，**三处与事实不符**，按 `docs/development/spec-kit-workflow.md` 第 8 步在本实现 PR 内修正：
+
+| # | 规格原文 | 事实 | 处置 |
+|---|---|---|---|
+| 1 | US3 的 Independent Test：「用户 U2（非 A 成员）GET A 的详情 → 403/404」 | **`GetWorkspace` 处理器本身不做任何成员校验**，直接调用它会返回 200 与完整对象。授权在**路由中间件** `RequireWorkspaceMemberFromURL`（`cmd/server/router.go:1602`）。按规格原文写的测试会「证明」一个并不存在的漏洞 | 测试改为**挂载真实中间件**再验；本节记录该误导性描述 |
+| 2 | plan 的 Source Code：`mutations.ts` 新增 `useUpdateWorkspace()`，设置页经它保存 | `workspace-tab.tsx` 现有的保存方式是**直接 `api.updateWorkspace` + 内联 `setQueryData`**（名称/描述、issue 前缀、头像三处皆然）。只为时区引入一个新钩子，会让同一个文件里出现两种保存模式 | **沿用该文件既有模式**；不新增 `useUpdateWorkspace`（CLAUDE.md「优先既有模式而非并行抽象」＋本任务「最小侵入」约束） |
+| 3 | contracts 与 tasks 暗示 `CreateWorkspace` 可直接带 settings 落库 | `CreateWorkspaceParams` 是 **sqlc 生成**的，没有 settings 字段；要在建表语句里加就得改 SQL 并重跑 `make sqlc` | 改为**在同一事务内**先 `CreateWorkspace` 再 `UpdateWorkspace` 写 settings——原子性不变，且不动生成代码 |
+
+**另一处事实修正（非规格错误，但规格未预见）**：时区合法性不能只问 `time.LoadLocation`。实测该函数**接受 `""`（静默当作 UTC）与 `"Local"`（服务端自己的时区）**，两者都不是品牌的时区；且 `""` 会让服务端认为「已设置」而客户端读作「未设置」。同时 `Intl.DateTimeFormat` **接受 `"+08:00"` 而 Go 拒绝**。因此两端都显式排除 `""`、`"Local"` 与偏移写法，使前后端对「什么可存」的判断完全一致——这三点各有用例钉住。
+
+---
+
 ## Clarifications
 
 ### Session 2026-09-14

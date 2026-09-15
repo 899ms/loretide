@@ -14,6 +14,18 @@ import {
 } from "@multica/ui/components/ui/field";
 import { cn } from "@multica/ui/lib/utils";
 import { useCreateWorkspace } from "@multica/core/workspace/mutations";
+import {
+  DEFAULT_TIMEZONE,
+  TIMEZONE_SETTINGS_KEY,
+  supportedTimezones,
+} from "@multica/core/workspace/timezone";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@multica/ui/components/ui/select";
 import type { Workspace } from "@multica/core/types";
 import { isImeComposing } from "@multica/core/utils";
 import { matchLocale } from "@multica/core/i18n";
@@ -139,6 +151,10 @@ export function StepWorkspace({
   // default would never go looking.
   const [prefix, setPrefix] = useState("");
   const prefixTouched = useRef(false);
+  // The brand's timezone. Pre-selected rather than left blank: a workspace
+  // always has one, and the server applies the same default when the field is
+  // omitted, so the form and the created workspace agree either way (FR-002).
+  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
 
   const slugValidationError =
     slug.length > 0 && !WORKSPACE_SLUG_REGEX.test(slug)
@@ -208,6 +224,7 @@ export function StepWorkspace({
         // created workspace agree either way — but submitting it explicitly
         // is what makes an edited prefix stick.
         issue_prefix: effectivePrefix,
+        settings: { [TIMEZONE_SETTINGS_KEY]: timezone },
       },
       {
         onSuccess: onCreated,
@@ -383,6 +400,33 @@ export function StepWorkspace({
           ) : (
             t(($) => $.step_workspace.issue_prefix_pending)
           )}
+        </FieldDescription>
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="ws-timezone">
+          {t(($) => $.step_workspace.timezone_label)}
+        </FieldLabel>
+        <Select
+          items={supportedTimezones().map((zone) => ({ value: zone, label: zone }))}
+          value={timezone}
+          onValueChange={(v) => setTimezone(v ?? DEFAULT_TIMEZONE)}
+        >
+          <SelectTrigger
+            id="ws-timezone"
+            aria-label={t(($) => $.step_workspace.timezone_label)}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {supportedTimezones().map((zone) => (
+              <SelectItem key={zone} value={zone}>
+                {zone}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldDescription>
+          {t(($) => $.step_workspace.timezone_hint)}
         </FieldDescription>
       </Field>
     </FieldGroup>

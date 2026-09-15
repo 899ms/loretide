@@ -704,7 +704,11 @@
     "deleting": "删除中...",
     "toast_delete_failed": "删除工作区失败",
     "confirm_cancel": "取消",
-    "confirm_action": "确认"
+    "confirm_action": "确认",
+    "timezone_label": "时区",
+    "timezone_default_badge": "默认",
+    "timezone_invalid": "不是有效的时区",
+    "timezone_hint": "时间一律以 UTC 存储，按此时区显示。"
   },
   "delete_workspace_dialog": {
     "title": "删除工作区",

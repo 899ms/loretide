@@ -12,6 +12,10 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	// Embeds the IANA zone table in the binary so workspace timezone
+	// validation resolves the same names on a host with no system zoneinfo
+	// - notably Windows development machines (specs/004 research D2).
+	_ "time/tzdata"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/multica-ai/multica/server/internal/analytics"

@@ -116,6 +116,9 @@ func (h *Handler) workspaceToResponse(w db.Workspace) WorkspaceResponse {
 	if settings == nil {
 		settings = map[string]any{}
 	}
+	// Every response carries a timezone, so no client has to decide what an
+	// absent one means (FR-002). The stored row is untouched.
+	settings = timezoneFilled(settings)
 	var repos any
 	if w.Repos != nil {
 		json.Unmarshal(w.Repos, &repos)
@@ -197,6 +200,73 @@ type CreateWorkspaceRequest struct {
 	Description *string `json:"description"`
 	Context     *string `json:"context"`
 	IssuePrefix *string `json:"issue_prefix"`
+	// Settings is the workspace settings blob. Loretide uses it to carry the
+	// brand's timezone at "loretide.timezone" (specs/004); every other key is
+	// passed through untouched.
+	Settings any `json:"settings"`
+}
+
+// workspaceTimezoneKey is where the brand's timezone lives inside the settings
+// JSONB. The "loretide." prefix keeps it clear of any upstream key called
+// "timezone" (spec FR-007). Mirrored by packages/core/workspace/timezone.ts.
+const workspaceTimezoneKey = "loretide.timezone"
+
+// defaultWorkspaceTimezone is what a workspace reads as when it has no stored
+// value - including every workspace created before this feature existed.
+const defaultWorkspaceTimezone = "Asia/Shanghai"
+
+// validateTimezoneSetting rejects a settings blob whose timezone key is not a
+// usable IANA zone. Settings without the key are fine: the timezone is optional
+// at creation and unrelated updates must not be forced to carry it.
+//
+// time.LoadLocation alone is not the test. It accepts "" (silently meaning UTC)
+// and "Local" (the SERVER's zone, which is not a property of the brand), so
+// both are refused explicitly. A value that passed here but not on the client,
+// or the reverse, would let the picker offer something the API rejects; the
+// client applies the same two exclusions.
+func validateTimezoneSetting(settings any) error {
+	m, ok := settings.(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, present := m[workspaceTimezoneKey]
+	if !present {
+		return nil
+	}
+	name, ok := raw.(string)
+	if !ok {
+		return fmt.Errorf("timezone must be a string")
+	}
+	if name == "" || name == "Local" {
+		return fmt.Errorf("invalid timezone")
+	}
+	if _, err := time.LoadLocation(name); err != nil {
+		return fmt.Errorf("invalid timezone")
+	}
+	return nil
+}
+
+// timezoneFilled returns settings with the timezone key present, filling the
+// default when it is absent or unusable. It is applied on the way OUT only:
+// reading a workspace must not write to it, so the stored row keeps whatever it
+// had and only the response is complete (contracts/workspace-timezone.md).
+func timezoneFilled(settings any) any {
+	m, ok := settings.(map[string]any)
+	if !ok {
+		return map[string]any{workspaceTimezoneKey: defaultWorkspaceTimezone}
+	}
+	name, isString := m[workspaceTimezoneKey].(string)
+	if isString && name != "" && name != "Local" {
+		if _, err := time.LoadLocation(name); err == nil {
+			return m
+		}
+	}
+	filled := make(map[string]any, len(m)+1)
+	for k, v := range m {
+		filled[k] = v
+	}
+	filled[workspaceTimezoneKey] = defaultWorkspaceTimezone
+	return filled
 }
 
 func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
@@ -251,6 +321,11 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		issuePrefix = defaultIssuePrefixFromSlug(req.Slug)
 	}
 
+	if err := validateTimezoneSetting(req.Settings); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	tx, err := h.TxStarter.Begin(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create workspace")
@@ -273,6 +348,23 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		}
 		writeError(w, http.StatusInternalServerError, "failed to create workspace: "+err.Error())
 		return
+	}
+
+	// CreateWorkspaceParams is sqlc-generated and has no settings column, so the
+	// settings are written by the update inside this same transaction rather
+	// than by changing the generated query. Same transaction, so a workspace is
+	// never visible without the settings it was created with.
+	if req.Settings != nil {
+		blob, err := json.Marshal(req.Settings)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid settings")
+			return
+		}
+		ws, err = qtx.UpdateWorkspace(r.Context(), db.UpdateWorkspaceParams{ID: ws.ID, Settings: blob})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to store workspace settings: "+err.Error())
+			return
+		}
 	}
 
 	_, err = qtx.CreateMember(r.Context(), db.CreateMemberParams{
@@ -401,6 +493,10 @@ func (h *Handler) UpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 		params.Context = pgtype.Text{String: *req.Context, Valid: true}
 	}
 	if req.Settings != nil {
+		if err := validateTimezoneSetting(req.Settings); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		s, _ := json.Marshal(req.Settings)
 		params.Settings = s
 	}
