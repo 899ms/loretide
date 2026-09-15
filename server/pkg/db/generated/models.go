@@ -591,12 +591,39 @@ type ContactSalesInquiry struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentAccount struct {
+	AccountID   string             `json:"account_id"`
+	WorkspaceID string             `json:"workspace_id"`
+	Platform    string             `json:"platform"`
+	DisplayName string             `json:"display_name"`
+	Settings    []byte             `json:"settings"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ContentDiagnosticRun struct {
 	RunID       string             `json:"run_id"`
 	WorkspaceID string             `json:"workspace_id"`
 	AccountID   string             `json:"account_id"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	Payload     []byte             `json:"payload"`
+}
+
+type ContentDispatchOutbox struct {
+	Sequence       pgtype.Int8        `json:"sequence"`
+	ItemID         string             `json:"item_id"`
+	Kind           string             `json:"kind"`
+	Payload        []byte             `json:"payload"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	WorkspaceID    string             `json:"workspace_id"`
+	AttemptCount   int32              `json:"attempt_count"`
+	NextAttemptAt  pgtype.Timestamptz `json:"next_attempt_at"`
+	ClaimedUntil   pgtype.Timestamptz `json:"claimed_until"`
+	DeliveredAt    pgtype.Timestamptz `json:"delivered_at"`
+	DeadLetteredAt pgtype.Timestamptz `json:"dead_lettered_at"`
+	LastError      pgtype.Text        `json:"last_error"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ContentOperationAudit struct {

@@ -312,6 +312,9 @@ deleted_content_operation_audit AS (
 deleted_content_technical_logs AS (
     DELETE FROM content_technical_log WHERE workspace_id = $1::text
 ),
+deleted_content_accounts AS (
+    DELETE FROM content_account WHERE workspace_id = $1::text
+),
 deleted_channel_outbound_cards AS (
     DELETE FROM channel_outbound_card_message
     WHERE chat_session_id IN (SELECT id FROM ws_sessions)
@@ -501,6 +504,9 @@ WHERE channel_media_pending_object.workspace_id = $1
 // an owner deletes the whole workspace; ordinary technical-log retention never
 // touches content_operation_audit. These tables store workspace ids as text, so
 // cast the handler UUID parameter at this boundary.
+// Brand content accounts go with the workspace. Registered in the deletion
+// manifest test alongside this, because only doing one of the two leaves
+// either orphaned rows (manifest only) or a drifting manifest (delete only).
 // Same no-FK chore as chat_draft_restore above. Matched on workspace_id rather
 // than the session set because that column exists precisely so this statement
 // does not have to join through chat_session, which it deletes in this same CTE.
