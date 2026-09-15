@@ -42,6 +42,16 @@ type Decision struct {
 	Reason    Reason
 	Actor     string
 	Workspace string
+	// Err is why the membership lookup could not answer, when that is what
+	// happened. It exists ONLY so a caller can log the cause: the decision and
+	// the reason are identical whether the lookup failed or genuinely found no
+	// membership, and they must stay that way, or an error becomes a way to
+	// probe for workspaces. Nothing may branch on this field.
+	//
+	// It was added because a local instance answered 404 with nothing in the
+	// log to say the database had no tables, and finding that out took several
+	// rounds of guessing.
+	Err error
 }
 
 // Membership reads the caller's role in a workspace. Primitive types only, so
@@ -95,7 +105,9 @@ func Authorize(
 			// A lookup error lands here too. Treating "we could not tell" as a
 			// refusal is the safe direction, and it keeps the response identical
 			// to a genuine non-member, so an error cannot be used to probe.
+			// The cause is carried on the decision for logging only.
 			decision.Reason = ReasonNotMember
+			decision.Err = err
 		case !roleAllowed(role, allowedRoles...):
 			decision.Reason = ReasonRole
 		default:

@@ -3,10 +3,15 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/multica-ai/multica/server/internal/logger"
 
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
 	ipprofile "github.com/multica-ai/multica/server/internal/content/ip-profile"
@@ -26,6 +31,8 @@ func (h *Handler) accountScope(w http.ResponseWriter, r *http.Request) (string, 
 	decision := workspacecore.Authorize(r.Context(), h.diagnosticMembership(),
 		h.diagnosticRefusalRecorder(), actor, workspace, "owner", "admin", "member")
 	if !decision.Allowed {
+		// Only when the lookup itself failed; a genuine non-member logs nothing.
+		logAccountFailure(r, "authorize account request", decision.Err)
 		h.writeAccountRefusal(w, r, decision.Reason)
 		return "", "", false
 	}
@@ -51,6 +58,24 @@ func (h *Handler) accountInputError(w http.ResponseWriter, err error) {
 		"component": event.Component, "retryable": event.Retryable,
 		"next_action": event.Next,
 	})
+}
+
+// logAccountFailure records why an account request could not be served.
+//
+// The response deliberately says nothing beyond its status, so this is the only
+// place the cause survives. Not-found is Debug because it is ordinary; anything
+// else is Warn, because it means the database could not answer and somebody
+// should know. The error text goes to the log and never to the client.
+func logAccountFailure(r *http.Request, operation string, err error) {
+	if err == nil {
+		return
+	}
+	attrs := append(logger.RequestAttrs(r), "operation", operation, "error", err)
+	if errors.Is(err, ipprofile.ErrNotFound) {
+		slog.Debug("content account request found nothing", attrs...)
+		return
+	}
+	slog.Warn("content account request failed", attrs...)
 }
 
 func (h *Handler) contentAccountService() *ipprofile.Service {
@@ -79,6 +104,7 @@ func (h *Handler) CreateContentAccount(w http.ResponseWriter, r *http.Request) {
 	account, err := h.contentAccountService().Create(r.Context(), workspace, actor,
 		body.Platform, body.DisplayName, body.Settings)
 	if err != nil {
+		logAccountFailure(r, "create account", err)
 		h.accountWriteError(w, err)
 		return
 	}
@@ -93,6 +119,7 @@ func (h *Handler) GetContentAccount(w http.ResponseWriter, r *http.Request) {
 	account, err := h.contentAccountService().Get(r.Context(), workspace, accountIDFromURL(r))
 	if err != nil {
 		// Not found and belongs-to-another-brand are the same answer by design.
+		logAccountFailure(r, "get account", err)
 		h.writeAccountRefusal(w, r, workspacecore.ReasonNotMember)
 		return
 	}
@@ -106,6 +133,7 @@ func (h *Handler) ListContentAccounts(w http.ResponseWriter, r *http.Request) {
 	}
 	accounts, err := h.contentAccountService().List(r.Context(), workspace)
 	if err != nil {
+		logAccountFailure(r, "list accounts", err)
 		writeError(w, http.StatusServiceUnavailable, "accounts unavailable")
 		return
 	}
@@ -131,6 +159,7 @@ func (h *Handler) UpdateContentAccount(w http.ResponseWriter, r *http.Request) {
 			Platform: body.Platform, DisplayName: body.DisplayName, Settings: body.Settings,
 		})
 	if err != nil {
+		logAccountFailure(r, "update account", err)
 		h.accountWriteError(w, err)
 		return
 	}
@@ -166,6 +195,19 @@ func (h *Handler) accountWriteError(w http.ResponseWriter, err error) {
 // The workspace is decided separately by accountScope; this is a path segment,
 // and nothing else may supply it.
 func accountIDFromURL(r *http.Request) string { return chi.URLParam(r, "id") }
+
+// accountStorageError keeps "no such row" apart from "the database could not
+// answer". Both still reach the caller as the same 404 - telling them apart in
+// a RESPONSE would let someone probe for account ids - but only one of them is
+// worth an operator's attention, and flattening everything to ErrNotFound threw
+// that cause away before anything could log it. A missing local migration
+// surfaced as a bare 404 with nothing in the log to explain it.
+func accountStorageError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ipprofile.ErrNotFound
+	}
+	return err
+}
 
 // contentAccountStore adapts the generated queries to the module's interface.
 // The module cannot import the generated package - the content boundary checker
@@ -205,7 +247,7 @@ func (s contentAccountStore) GetAccount(ctx context.Context, workspaceID, accoun
 		AccountID: accountID, WorkspaceID: workspaceID,
 	})
 	if err != nil {
-		return ipprofile.Account{}, ipprofile.ErrNotFound
+		return ipprofile.Account{}, accountStorageError(err)
 	}
 	return accountFromRow(row.AccountID, row.WorkspaceID, row.Platform, row.DisplayName,
 		row.Settings, timestampToString(row.CreatedAt), timestampToString(row.UpdatedAt)), nil
@@ -241,7 +283,7 @@ func (s contentAccountStore) UpdateAccount(ctx context.Context, workspaceID, acc
 	}
 	row, err := s.q.UpdateContentAccount(ctx, params)
 	if err != nil {
-		return ipprofile.Account{}, ipprofile.ErrNotFound
+		return ipprofile.Account{}, accountStorageError(err)
 	}
 	return accountFromRow(row.AccountID, row.WorkspaceID, row.Platform, row.DisplayName,
 		row.Settings, timestampToString(row.CreatedAt), timestampToString(row.UpdatedAt)), nil

@@ -26,6 +26,7 @@ func (h *Handler) SetAccountPersonaPrompt(w http.ResponseWriter, r *http.Request
 	accountID := accountIDFromURL(r)
 	if _, err := h.contentAccountService().Get(r.Context(), workspace, accountID); err != nil {
 		// Unknown account and another brand's account are the same answer.
+		logAccountFailure(r, "set persona prompt: load account", err)
 		h.writeAccountRefusal(w, r, workspacecore.ReasonNotMember)
 		return
 	}
@@ -39,6 +40,7 @@ func (h *Handler) SetAccountPersonaPrompt(w http.ResponseWriter, r *http.Request
 	revision, err := h.contentAccountService().SetPersonaPrompt(
 		r.Context(), workspace, actor, accountID, body.PersonaPrompt)
 	if err != nil {
+		logAccountFailure(r, "set persona prompt", err)
 		h.personaWriteError(w, err)
 		return
 	}
@@ -55,6 +57,7 @@ func (h *Handler) GetAccountPersonaPrompt(w http.ResponseWriter, r *http.Request
 	revision, err := h.contentAccountService().CurrentPersonaRevision(
 		r.Context(), workspace, accountIDFromURL(r))
 	if err != nil {
+		logAccountFailure(r, "get current persona revision", err)
 		h.writeAccountRefusal(w, r, workspacecore.ReasonNotMember)
 		return
 	}
@@ -70,6 +73,7 @@ func (h *Handler) GetAccountPersonaRevision(w http.ResponseWriter, r *http.Reque
 	revision, err := h.contentAccountService().PersonaRevision(
 		r.Context(), workspace, accountIDFromURL(r), chi.URLParam(r, "revisionId"))
 	if err != nil {
+		logAccountFailure(r, "get persona revision", err)
 		h.writeAccountRefusal(w, r, workspacecore.ReasonNotMember)
 		return
 	}
@@ -84,6 +88,7 @@ func (h *Handler) ListAccountPersonaRevisions(w http.ResponseWriter, r *http.Req
 	revisions, err := h.contentAccountService().ListPersonaRevisions(
 		r.Context(), workspace, accountIDFromURL(r))
 	if err != nil {
+		logAccountFailure(r, "list persona revisions", err)
 		writeError(w, http.StatusServiceUnavailable, "revisions unavailable")
 		return
 	}
@@ -153,7 +158,7 @@ func (s contentRevisionStore) GetRevision(ctx context.Context, workspaceID, revi
 		RevisionID: revisionID, WorkspaceID: workspaceID,
 	})
 	if err != nil {
-		return ipprofile.Revision{}, ipprofile.ErrNotFound
+		return ipprofile.Revision{}, accountStorageError(err)
 	}
 	return revisionFromRow(row.RevisionID, row.AccountID, row.WorkspaceID, row.Revision,
 		row.PersonaPrompt, timestampToString(row.CreatedAt)), nil
@@ -164,7 +169,7 @@ func (s contentRevisionStore) CurrentRevision(ctx context.Context, workspaceID, 
 		AccountID: accountID, WorkspaceID: workspaceID,
 	})
 	if err != nil {
-		return ipprofile.Revision{}, ipprofile.ErrNotFound
+		return ipprofile.Revision{}, accountStorageError(err)
 	}
 	return revisionFromRow(row.RevisionID, row.AccountID, row.WorkspaceID, row.Revision,
 		row.PersonaPrompt, timestampToString(row.CreatedAt)), nil

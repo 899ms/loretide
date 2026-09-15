@@ -10,6 +10,7 @@ import (
  "time"
 
  "github.com/go-chi/chi/v5"
+ "github.com/jackc/pgx/v5"
  "github.com/multica-ai/multica/server/internal/content/diagnostics"
  workspacecore "github.com/multica-ai/multica/server/internal/content/workspace-core"
  "github.com/multica-ai/multica/server/internal/middleware"
@@ -108,7 +109,13 @@ func(h *Handler)diagnosticMembership()workspacecore.Membership{
   // Not found and malformed input both mean "no usable membership". Telling
   // them apart here would surface the difference in the response, which is
   // exactly what the refusal exists to hide.
-  if err!=nil{return "",false,nil}
+  //
+  // A storage failure is different in one respect only: it is returned so the
+  // caller can LOG it. workspace-core treats a non-nil error exactly as it
+  // treats found=false, so the decision, the reason and the response are
+  // unchanged - see Decision.Err. Returning nil here threw away the reason a
+  // local instance answered 404 with an empty database.
+  if err!=nil{if errors.Is(err,pgx.ErrNoRows){return "",false,nil};return "",false,err}
   return member.Role,true,nil
  })
 }

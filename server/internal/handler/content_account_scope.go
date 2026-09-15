@@ -31,6 +31,7 @@ func (h *Handler) SetAccountScope(w http.ResponseWriter, r *http.Request) {
 	account, err := h.contentAccountService().SetScope(
 		r.Context(), workspace, actor, accountIDFromURL(r), body.Scope)
 	if err != nil {
+		logAccountFailure(r, "set material scope", err)
 		h.scopeWriteError(w, err)
 		return
 	}
