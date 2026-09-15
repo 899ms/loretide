@@ -94,6 +94,7 @@
   "adapters": [
     "server/internal/handler/content_diagnostics.go",
     "server/internal/handler/content_diagnostics_workspace_guard.go",
+    "server/internal/handler/content_account.go",
     "server/internal/handler/handler.go",
     "server/cmd/server/router.go",
     "apps/web/app/[workspaceSlug]/(dashboard)/diagnostics/page.tsx"
