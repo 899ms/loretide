@@ -51,9 +51,13 @@ type Patch struct {
 // the decision is made, which is the whole point of LT-010.
 type Service struct {
 	Store Store
-	Audit Auditor
-	Build string
-	NewID func() string
+	// RevisionStore is the append-only persona revision history (LT-012). Its
+	// own interface because it has no update and no delete; folding it into
+	// Store would suggest otherwise.
+	RevisionStore RevisionStore
+	Audit         Auditor
+	Build         string
+	NewID         func() string
 }
 
 func (s *Service) newID() string {

@@ -54,9 +54,10 @@ func (h *Handler) accountInputError(w http.ResponseWriter, err error) {
 
 func (h *Handler) contentAccountService() *ipprofile.Service {
 	return &ipprofile.Service{
-		Store: contentAccountStore{q: h.Queries},
-		Audit: contentAccountAuditor{h: h},
-		Build: "loretide",
+		Store:         contentAccountStore{q: h.Queries},
+		RevisionStore: contentRevisionStore{q: h.Queries},
+		Audit:         contentAccountAuditor{h: h},
+		Build:         "loretide",
 	}
 }
 

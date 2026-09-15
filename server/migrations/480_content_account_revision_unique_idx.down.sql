@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_account_revision_account_revision_idx;
