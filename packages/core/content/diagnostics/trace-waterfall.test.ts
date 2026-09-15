@@ -343,3 +343,76 @@ describe("buildTraceWaterfall on a clock-skewed run", () => {
     expect(skewed!.durationMs).toBe(20);
   });
 });
+
+// Feature 012 (specs/012-diag-simulator-shapes): the shape_deep scenario exists
+// so 006-W-7 and 006-W-8 have a run to look at. It mirrors the server plan in
+// server/internal/content/diagnostics/shapes.go: a four-deep spine carrying the
+// failure, then leaves under the second node to clear the cap.
+describe("a run built like shape_deep", () => {
+  const SPAN_COUNT = 250;
+
+  function deepRun(): DiagnosticEvent[] {
+    const events: DiagnosticEvent[] = [
+      span({spanId: "s0", parentSpanId: "", occurredAt: at(0), durationMs: 3000}),
+      span({spanId: "s1", parentSpanId: "s0", occurredAt: at(10), durationMs: 2900}),
+      span({spanId: "s2", parentSpanId: "s1", occurredAt: at(20), durationMs: 2800}),
+      span({spanId: "s3", parentSpanId: "s2", occurredAt: at(30), durationMs: 2700, errorCode: "TIMEOUT"}),
+    ];
+    for (let i = events.length; i < SPAN_COUNT; i++) {
+      events.push(span({spanId: `leaf-${i}`, parentSpanId: "s1", occurredAt: at(100 + i * 10), durationMs: 5}));
+    }
+    return events;
+  }
+
+  it("collapses past the default cap and keeps the failing span with every ancestor", () => {
+    const result = buildTraceWaterfall(deepRun());
+    expect(result.totalSpans).toBe(SPAN_COUNT);
+    expect(SPAN_COUNT).toBeGreaterThan(STREAM_EVENT_CAP);
+    expect(result.collapsed).toBe(true);
+    expect(result.rows.some(r => r.kind === "collapsed")).toBe(true);
+    // 006-W-7 is about exactly this: the step that failed, and the chain above
+    // it, stay on screen while everything else folds away.
+    for (const id of ["s0", "s1", "s2", "s3"]) {
+      expect(rowOf(result, id)).toBeDefined();
+    }
+    expect(rowOf(result, "s3")?.depth).toBe(3);
+  });
+
+  it("expands with no dangling fragment when the cap is lifted", () => {
+    const events = deepRun();
+    const result = buildTraceWaterfall(events, {cap: events.length});
+    expect(result.collapsed).toBe(false);
+    expect(result.rows.every(r => r.kind === "span")).toBe(true);
+    expect(result.rows).toHaveLength(SPAN_COUNT);
+    // Every row except the root must name a parent that is itself on screen,
+    // which is what "no dangling fragment" means once the tree is expanded.
+    const shown = new Set(result.rows.map(r => r.spanId));
+    for (const row of result.rows) {
+      if (row.parentSpanId === "") continue;
+      expect(shown.has(row.parentSpanId)).toBe(true);
+    }
+  });
+
+  it("reports no anomaly: the depth is the point, not a defect", () => {
+    expect(buildTraceWaterfall(deepRun(), {cap: SPAN_COUNT}).anomalies).toBe(0);
+  });
+});
+
+// The shape_orphan scenario, same file: a legal parent id that is not in the
+// run. FR-001 already covers the derivation; this pins the shape the simulator
+// now produces for 006-W-5, where a blanked parent and an orphan differ on
+// screen by one label.
+describe("a run built like shape_orphan", () => {
+  it("marks the dangling span as an orphan rather than a plain root", () => {
+    const result = buildTraceWaterfall([
+      span({spanId: "s0", parentSpanId: "", occurredAt: at(0), durationMs: 50}),
+      span({spanId: "s1", parentSpanId: "s0", occurredAt: at(50), durationMs: 50}),
+      span({spanId: "s2", parentSpanId: "00000000dead0000", occurredAt: at(100), durationMs: 50}),
+    ]);
+    const orphan = rowOf(result, "s2");
+    expect(orphan?.anomaly).toBe("orphan");
+    expect(orphan?.depth).toBe(0);
+    expect(result.anomalies).toBe(1);
+  });
+});
+

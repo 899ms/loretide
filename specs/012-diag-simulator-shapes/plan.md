@@ -83,13 +83,19 @@ server/
     ├── shapes.go                  # 新增：shape 场景表与各自的事件构造
     ├── service.go                 # Run 里按场景决定是否 Evaluate / 是否让 sink 失败
     ├── store.go                   # GetRun 取全该次运行的事件；Technical 增加失败开关
+    ├── shapes.go                  # 新增：shape 表与各形态的事件构造
     ├── shapes_test.go             # 新增：逐形态的正例
-    ├── shapes_isolation_test.go   # 新增：逐形态的负例（隔离之外不可达）
-    └── simulator_test.go          # 既有：业务故障类仍等于原 16 项
+    ├── shapes_store_test.go       # 新增：只有落库才成立的形态（需 DB）
+    ├── shapes_isolation_test.go   # 新增：逐形态的负例 + 白名单未被放宽
+    ├── scenario_kind_test.go      # 新增：INV-1 ～ INV-4
+    ├── simulator_test.go          # 既有：整表断言收窄到 Kind == "fault"
+    ├── span_timing_test.go        # 既有：同上（见下方「实施期修正」）
+    └── store_integration_test.go  # 既有：同上
 
 packages/core/content/diagnostics/
 ├── contract.ts                    # overviewSchema 的 scenarios 增加可缺省 kind
-└── contract.test.ts               # 畸形响应测试（缺 kind / kind 非字符串）
+├── contract.test.ts               # 畸形响应测试（缺 kind / kind 非字符串）
+└── trace-waterfall.test.ts        # shape_deep / shape_orphan 的折叠与孤儿断言
 
 docs/development/
 ├── manual-ui-runbook.md           # 相关条目备注改为可执行的造数步骤
@@ -107,6 +113,33 @@ specs/008-diag-linkage-and-invariants/manual-ui-todo.md   # 三份备注回写
 ### 与 `specs/011` 的次序
 
 两者都动 `simulator.go`。**本 PR 只产出规格**；实施排在 011 合入之后，并以合入后的 `simulator.go` 为基线重新核实 spec 的 Current State 第 1 节。若 011 改变了步进循环的结构，research D1 的分流点需要跟着重定。
+
+## 实施期修正（在实现 PR 内同步，spec-kit-workflow 第 8 步）
+
+| # | 规格怎么说 | 实际怎么做 | 为什么 |
+|---|---|---|---|
+| 1 | Current State §1 列了两条理由排除 `006-W-3`，其中一条是「区间首尾相接、永不重叠」 | 收窄为一条 | 011 之后 `clock_skew` 会把一步的开始挪到父 span 之前，「永不重叠」不再普遍成立。**结论不变**（链式拓扑让每一对都是祖先／后代），理由少一条。详见 spec.md 该表下方的引注 |
+| 2 | data-model §5 说 `Store.Technical` **增加失败开关参数** | `Technical(ctx, e)` **签名不变**，新增 `TechnicalFailingSink(ctx, e)`，二者共用私有的 `technical(ctx, e, failSink)` | `Technical` 有第三个调用方 `server/internal/handler/content_diagnostics.go`，它**不在本特性的改动清单里**。改签名就要改它。加一个方法既不碰 handler，也保持了 `CommitRun(..., failAudit)` 那套「故障由场景 id 携带着穿过既有的门」的写法 |
+| 3 | data-model §2 的 shape 结构里有 `Module string` 与 `EmptyModule bool` 两个字段 | 只保留 `EmptyModule bool` | `Module` 从未被用到。留一个写不到的字段，下一个人会以为它有语义 |
+| 4 | tasks T019 要求在 `regression.test.ts` **新增**一条断言 | **未新增** | 该文件已有 `{regression:"passed", status:"running"}` → `undecidable` 的用例，正是 `shape_undecidable` 产出的组合。按 010 定下的口径只引用不重复写 |
+| 5 | plan 的 Source Code 清单只列了 `simulator_test.go` 一个既有测试文件 | 另改了 `span_timing_test.go` 与 `store_integration_test.go` | 见下 |
+
+### 关于第 5 条：三处整表断言与新场景的碰撞
+
+把九个形态加进 `Scenarios` 之后，**五处遍历整张表的既有断言里有三处变红**，而且都是应该变红的：
+
+| 测试 | 为什么红 | 怎么改 |
+|---|---|---|
+| `TestEverySimulatedFaultAndDeterministicTime` | 断言每个场景 `Evaluate` 之后为 `passed`，而 `shape_regression_failed` 存在的意义就是得到 `failed` | 收窄到 `Kind == "fault"`。**测试名本来就叫 EverySimulatedFault** |
+| `TestSimulatedStepsAreContiguousInTime` | 断言相邻步骤首尾相接，而 `shape_concurrent` 故意重叠、`shape_deep` 是树 | 收窄到 `Kind == "fault"`（它已有一个 `clock_skew` 的例外） |
+| `TestPostgresFullScenariosExportAndHealth` | 断言每个场景 `Regression == "passed"` | **不整体跳过**：导出与落库对九个形态照跑（那是真覆盖），只把 `passed` 那一句收窄到 `Kind == "fault"` |
+
+另外两处**不需要动，这本身是结论**：
+
+- `TestOnlyClockSkewProducesOutOfOrderTime` 对九个形态照跑并通过——即「只有 `clock_skew` 能让子 span 早于父 span」这条保证**扩展到了新形态**，不是被绕开。
+- `TestNextActionIsTotalOverEveryScenarioCode` 对九个形态照跑并通过。
+
+这正是 Q2 决定把分类做成结构字段而不是文档约定的用处：三处收窄各是一行 `Kind != "fault"`，而不是三份会过期的 id 硬编码清单。
 
 ## Complexity Tracking
 

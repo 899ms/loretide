@@ -40,12 +40,13 @@ type shape struct {
     SkipEvaluate bool     // true → Service.Run 不调 Evaluate
     FailSink     bool     // true → Service.Run 让该次运行的技术日志写入失败
     Status       string   // 非空则覆盖 Run.Status
-    Module       string   // 非空则覆盖 Run.Module；显式空值由 EmptyModule 表达
     EmptyModule  bool     // true → Run.Module = ""
 }
 ```
 
 **为什么 `EmptyModule` 是独立布尔而不是让 `Module: ""` 表示空**：零值歧义。`Module: ""` 在 Go 里既是「不覆盖」也是「覆盖为空」，而 `006-L-4` 要的恰恰是后者。用一个布尔把两种意思分开，比在注释里解释一个零值可靠。
+
+**实施期修正**：本表初稿另有一个 `Module string` 字段用于「非空则覆盖」。实现中它从未被写入过，已删除——留一个写不到的字段，下一个人会以为它有语义。
 
 **为什么这张表不进 `Run`**：`Run` 整体序列化给面板。加字段 = 又一次对外形状变更 = 又一轮 zod 同步与畸形响应测试。查表在模块内部，对外不可见。
 
@@ -92,7 +93,7 @@ type shape struct {
 | `Store.GetRun` | 用既有 `Filter.After` 游标内部翻页，直到该运行事件取尽或达 500 条天花板 | 端点、响应形状、`Run` 结构 |
 | `Store.Query` | — | **100 的上限夹取原样保留**。它同时服务对外的 `/events` 与 `/stream` |
 | `handler.diagnosticFilter` | — | **`f.Limit > 100 → ErrConflict` 原样保留**。对外分页边界不放宽 |
-| `Store.Technical` | 增加失败开关参数，唯一 `true` 来源是 `Service.Run` 的 shape 分支 | 成功路径、`Sanitize`、计数器语义 |
+| `Store.Technical` | **签名不变**；新增 `TechnicalFailingSink`，二者共用私有的 `technical(ctx, e, failSink)`。唯一走失败分支的是 `Service.Run` 的 shape 分支 | 成功路径、`Sanitize`、计数器语义、**`server/internal/handler/content_diagnostics.go`**（`Technical` 的第三个调用方，不在本特性改动清单内——这正是不改签名的原因） |
 | `packages/core/.../contract.ts` | `overviewSchema` 的 `scenarios` 增加**可缺省**的 `kind` | 其余字段、`transform` 的输出键名 |
 
 **没有新增端点，没有新增查询参数，没有新增前端请求。**

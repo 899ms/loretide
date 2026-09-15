@@ -2,8 +2,12 @@ package diagnostics
 
 import("context";"encoding/json";"fmt";"math/rand/v2";"time";"go.opentelemetry.io/otel/trace")
 
-type Scenario struct{ID string `json:"id"`;Expected string `json:"expected_code"`}
-var Scenarios=[]Scenario{{"normal",""},{"slow",""},{"timeout","TIMEOUT"},{"cancel","CANCELLED"},{"reconnect","NETWORK_UNAVAILABLE"},{"duplicate","DUPLICATE"},{"late","LATE_RESULT"},{"file_missing","FILE_MISSING"},{"file_changed","FILE_CHANGED"},{"denied","AUTHORIZATION_DENIED"},{"database","DATABASE_UNAVAILABLE"},{"model_auth","MODEL_AUTH"},{"model_quota","MODEL_QUOTA"},{"schema","OUTPUT_SCHEMA"},{"search","SEARCH_FAILED"},{"clock_skew","CLOCK_SKEW"}}
+// Kind classifies a scenario: "fault" is a business failure drawn from docs/13
+// section 7, "shape" is a diagnostics self-check data shape that normal
+// operation never produces. Read the field; never parse the id prefix.
+// contracts/scenario-kind.md (specs/012).
+type Scenario struct{ID string `json:"id"`;Expected string `json:"expected_code"`;Kind string `json:"kind"`}
+var Scenarios=[]Scenario{{"normal","","fault"},{"slow","","fault"},{"timeout","TIMEOUT","fault"},{"cancel","CANCELLED","fault"},{"reconnect","NETWORK_UNAVAILABLE","fault"},{"duplicate","DUPLICATE","fault"},{"late","LATE_RESULT","fault"},{"file_missing","FILE_MISSING","fault"},{"file_changed","FILE_CHANGED","fault"},{"denied","AUTHORIZATION_DENIED","fault"},{"database","DATABASE_UNAVAILABLE","fault"},{"model_auth","MODEL_AUTH","fault"},{"model_quota","MODEL_QUOTA","fault"},{"schema","OUTPUT_SCHEMA","fault"},{"search","SEARCH_FAILED","fault"},{"clock_skew","CLOCK_SKEW","fault"},{"shape_concurrent","","shape"},{"shape_orphan","","shape"},{"shape_single_span","","shape"},{"shape_deep","TIMEOUT","shape"},{"shape_not_run","","shape"},{"shape_regression_failed","TIMEOUT","shape"},{"shape_undecidable","","shape"},{"shape_no_module","","shape"},{"shape_sink_failure","","shape"}}
 type Receiver struct{seen map[int]bool;last int;Cancelled bool}
 func(r *Receiver)Receive(seq int)string{if r.Cancelled{return "LATE_RESULT"};if r.seen==nil{r.seen=map[int]bool{}};if r.seen[seq]{return "DUPLICATE"};if seq<=r.last{return "LATE_RESULT"};r.seen[seq]=true;r.last=seq;return ""}
 // Simulate only constructs test-owned data. The caller persists it atomically.
@@ -11,6 +15,9 @@ func(r *Receiver)Receive(seq int)string{if r.Cancelled{return "LATE_RESULT"};if 
 func Simulate(ctx context.Context,scope Scope,account,scenario string,seed int64,build string,testEnabled bool)(Run,error){
  if !testEnabled || !scope.Allows(scope.Workspace,account){return Run{},ErrDenied}
  expected:="";found:=false;for _,s:=range Scenarios{if s.ID==scenario{expected=s.Expected;found=true}};if !found{return Run{},ErrConflict}
+ // Self-check data shapes branch out here, above the step loop. Everything
+ // below this line is the business fault path and is unchanged by specs/012.
+ if sh,ok:=shapeByID(scenario);ok{return simulateShape(ctx,scope,account,sh,expected,seed,build)}
  snapshot:=Snapshot{ConfigVersion:"fixture-v1",PersonaRef:"fixture:persona",SOPVersion:"fixture-v1",SkillVersion:"fixture-v1",RuleVersion:"fixture-v1",Executor:"simulator",ExecutorVersion:"1",Scope:"all",Preference:"all",Required:[]string{"fixture-a"},Excluded:[]string{},Grants:[]string{"fixture-a"},Hashes:map[string]string{"fixture-a":"sha256:fixture-v1"},Temperature:0,Budget:0,Timeout:30000}
  now:=time.Date(2026,1,1,0,0,0,0,time.UTC);run:=Run{ID:NewID(),Workspace:scope.Workspace,Account:account,Actor:scope.Actor,Scenario:scenario,Seed:seed,Created:time.Now().UTC(),Snapshot:CloneSnapshot(snapshot),Events:[]Event{},Gaps:[]string{},Status:"completed",Expected:expected,Regression:"not_run",Module:"diagnostics",Build:safeToken(build),Test:true}
  rng:=rand.New(rand.NewPCG(uint64(seed),42));operation:=NewID();ctx,_=Child(ctx)
