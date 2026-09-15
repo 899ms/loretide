@@ -141,7 +141,11 @@ func (h *Handler) UpdateContentAccount(w http.ResponseWriter, r *http.Request) {
 // "you cannot have this" (404, indistinguishable from not existing).
 func (h *Handler) accountWriteError(w http.ResponseWriter, err error) {
 	switch err {
-	case ipprofile.ErrPlatform, ipprofile.ErrDisplayName:
+	// ErrScope reaches here from create and update, which accept a settings
+	// blob: an unusable scope in it is a malformed input, not a missing
+	// account. Without this case it fell into the default below and answered
+	// 404, which says "no such account" about a request that named a real one.
+	case ipprofile.ErrPlatform, ipprofile.ErrDisplayName, ipprofile.ErrScope:
 		h.accountInputError(w, err)
 	default:
 		writeJSON(w, workspacecore.RefusalStatus(workspacecore.ReasonNotMember),

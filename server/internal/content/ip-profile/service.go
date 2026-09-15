@@ -81,6 +81,9 @@ func (s *Service) Create(ctx context.Context, workspaceID, actor, platform, disp
 	if settings == nil {
 		settings = map[string]any{}
 	}
+	if err := validateScopeSetting(settings); err != nil {
+		return Account{}, err
+	}
 	account, err := s.Store.CreateAccount(ctx, Account{
 		AccountID:   s.newID(),
 		WorkspaceID: workspaceID,
@@ -95,12 +98,27 @@ func (s *Service) Create(ctx context.Context, workspaceID, actor, platform, disp
 	return account, nil
 }
 
+// Get fills the scope preference on the way out. The stored row is left alone:
+// an account that never chose still has no scope key after this call, and only
+// the response is complete (LT-014, contracts/account-scope.md).
 func (s *Service) Get(ctx context.Context, workspaceID, accountID string) (Account, error) {
-	return s.Store.GetAccount(ctx, workspaceID, accountID)
+	account, err := s.Store.GetAccount(ctx, workspaceID, accountID)
+	if err != nil {
+		return Account{}, err
+	}
+	account.Settings = scopeFilled(account.Settings)
+	return account, nil
 }
 
 func (s *Service) List(ctx context.Context, workspaceID string) ([]Account, error) {
-	return s.Store.ListAccounts(ctx, workspaceID)
+	accounts, err := s.Store.ListAccounts(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range accounts {
+		accounts[i].Settings = scopeFilled(accounts[i].Settings)
+	}
+	return accounts, nil
 }
 
 // Update validates only the fields that were sent. A patch that omits the
@@ -116,11 +134,49 @@ func (s *Service) Update(ctx context.Context, workspaceID, actor, accountID stri
 			return Account{}, err
 		}
 	}
+	if patch.Settings != nil {
+		// The dedicated scope endpoint is not the only way into this key. With
+		// only that path checked, a PATCH could store a value every reader
+		// refuses, and the endpoint's validation would be decoration.
+		if err := validateScopeSetting(patch.Settings); err != nil {
+			return Account{}, err
+		}
+	}
 	account, err := s.Store.UpdateAccount(ctx, workspaceID, accountID, patch)
 	if err != nil {
 		return Account{}, err
 	}
 	s.audit(ctx, workspaceID, actor, accountID, "update")
+	account.Settings = scopeFilled(account.Settings)
+	return account, nil
+}
+
+// SetScope records the account's material scope preference.
+//
+// Read-modify-write rather than a partial patch: the update query replaces the
+// settings blob wholesale, so sending this key alone would delete every other
+// setting the account has. Doing the merge here means no caller - and no future
+// caller - has to know that.
+//
+// An unrecognised value is refused before anything is read, so a rejected edit
+// leaves storage exactly as it was.
+func (s *Service) SetScope(ctx context.Context, workspaceID, actor, accountID, scope string) (Account, error) {
+	if err := ValidateScope(scope); err != nil {
+		return Account{}, err
+	}
+	current, err := s.Store.GetAccount(ctx, workspaceID, accountID)
+	if err != nil {
+		return Account{}, err
+	}
+	merged := withScope(current.Settings, scope)
+	account, err := s.Store.UpdateAccount(ctx, workspaceID, accountID, Patch{Settings: merged})
+	if err != nil {
+		return Account{}, err
+	}
+	// Audited even when the value did not change: "who confirmed this choice,
+	// and when" is itself the thing an operator goes looking for later.
+	s.audit(ctx, workspaceID, actor, accountID, "update")
+	account.Settings = scopeFilled(account.Settings)
 	return account, nil
 }
 
