@@ -30,6 +30,7 @@ func TestDeleteWorkspace_PurgesContentDiagnosticsAtomically(t *testing.T) {
 			_, _ = testPool.Exec(context.Background(), `DELETE FROM content_technical_log WHERE workspace_id = $1`, id)
 			_, _ = testPool.Exec(context.Background(), `DELETE FROM content_operation_audit WHERE workspace_id = $1`, id)
 			_, _ = testPool.Exec(context.Background(), `DELETE FROM content_diagnostic_run WHERE workspace_id = $1`, id)
+			_, _ = testPool.Exec(context.Background(), `DELETE FROM content_dispatch_outbox WHERE workspace_id = $1`, id)
 			_, _ = testPool.Exec(context.Background(), `DELETE FROM workspace WHERE id = $1`, id)
 		}
 	})
@@ -49,6 +50,13 @@ func TestDeleteWorkspace_PurgesContentDiagnosticsAtomically(t *testing.T) {
 			if _, err := testPool.Exec(ctx, `INSERT INTO `+entry.table+` (`+entry.key+`, workspace_id, payload) VALUES ($1, $2, '{}'::jsonb)`, entry.id, id); err != nil {
 				t.Fatalf("seed %s for %s: %v", entry.table, id, err)
 			}
+		}
+		// The durable dispatch outbox does not fit the loop above: its payload
+		// is bytea and kind is NOT NULL without a default. Seeded undelivered,
+		// which is the state that has to go with the workspace - once the
+		// workspace is gone there is no receiver left to hand the item to.
+		if _, err := testPool.Exec(ctx, `INSERT INTO content_dispatch_outbox (item_id, kind, payload, workspace_id) VALUES ($1, 'diagnostic_run', '\x7b7d'::bytea, $2)`, "outbox-"+id, id); err != nil {
+			t.Fatalf("seed content_dispatch_outbox for %s: %v", id, err)
 		}
 	}
 
@@ -73,7 +81,7 @@ func TestDeleteWorkspace_PurgesContentDiagnosticsAtomically(t *testing.T) {
 	request := newRequest(http.MethodDelete, "/api/workspaces/"+targetID, nil)
 	request = withURLParam(request, "id", targetID)
 	testutil.Call(t, testHandler.DeleteWorkspace, request).Want(http.StatusInternalServerError)
-	for _, table := range []string{"content_diagnostic_run", "content_operation_audit", "content_technical_log"} {
+	for _, table := range []string{"content_diagnostic_run", "content_operation_audit", "content_technical_log", "content_dispatch_outbox"} {
 		var count int
 		if err := testPool.QueryRow(ctx, `SELECT count(*) FROM `+table+` WHERE workspace_id = $1`, targetID).Scan(&count); err != nil || count != 1 {
 			t.Fatalf("rollback %s count=%d err=%v, want 1", table, count, err)
@@ -96,7 +104,7 @@ func TestDeleteWorkspace_PurgesContentDiagnosticsAtomically(t *testing.T) {
 	request = newRequest(http.MethodDelete, "/api/workspaces/"+targetID, nil)
 	request = withURLParam(request, "id", targetID)
 	testutil.Call(t, testHandler.DeleteWorkspace, request).Want(http.StatusNoContent)
-	for _, table := range []string{"content_diagnostic_run", "content_operation_audit", "content_technical_log"} {
+	for _, table := range []string{"content_diagnostic_run", "content_operation_audit", "content_technical_log", "content_dispatch_outbox"} {
 		for workspaceID, want := range map[string]int{targetID: 0, neighbourID: 1} {
 			var count int
 			if err := testPool.QueryRow(ctx, `SELECT count(*) FROM `+table+` WHERE workspace_id = $1`, workspaceID).Scan(&count); err != nil || count != want {

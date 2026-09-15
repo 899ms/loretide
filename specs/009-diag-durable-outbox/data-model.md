@@ -25,6 +25,18 @@
 
 **无 `FOREIGN KEY`、无 `REFERENCES`、无 `ON DELETE` / `ON UPDATE` 级联**（constitution 原则 V、FR-022）。`workspace_id` 与工作区表的关系由应用代码负责，与模块既有三张表的做法一致。
 
+### 实施期修正：工作区删除时随之清除
+
+本文件原先只说 `workspace_id` 「用于排障与按工作区清理」，**没有说清工作区被删除时这张表怎么办**。缺的不是一句话，而是一条判定：`server/internal/handler` 的 `TestWorkspaceDeletionManifestCoversPublicSchema` 要求 `public` 下每张表在删除清单里有显式归属，这张表落地后该测试在 `app-main` 上一直报 `unclassified=[content_dispatch_outbox]`。
+
+**主任务 2026-09-15 裁决：随工作区一起清除，不保留。** 表带 `workspace_id`、归 diagnostics 模块所有，而工作区一旦删除，未派发项**已经没有接收方**——留着它们不是「待派发」，是永远派不出去的残留。处理方式与 `content_diagnostic_run` / `content_operation_audit` / `content_technical_log` 完全一致：
+
+- 删除清单登记为 `workspaceDelete`；
+- 工作区删除事务里加一条 `DELETE FROM content_dispatch_outbox WHERE workspace_id = $1::text`，与上述三张表同一个 CTE 链、同一个事务；
+- **仍然不加外键、不加级联**——行由应用代码删除，原则 V 不变。
+
+因此该表与那三张表共享同一条原子性保证：工作区删除失败回滚时，未派发项**原样留在表里**，不会出现「工作区还在、队列已空」的中间态。
+
 ### 实施期修正：`DispatchItem` 增加 `Workspace` 字段
 
 本文件原先列了 `workspace_id` 列，但 `DispatchItem` 只有 `ID` / `Kind` / `Payload` / `IdempotencyKey` 四个字段，**没有任何东西可以填它**。两条出路：给 `DispatchItem` 加一个字段，或从表里删掉这一列。删列是对本文件更大的偏离，因此选前者：
