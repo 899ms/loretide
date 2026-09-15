@@ -49,6 +49,7 @@ var contentAccountRoutes = []struct {
 	{http.MethodPost, "/api/content-accounts/{id}/persona", "/api/content-accounts/acct-1/persona"},
 	{http.MethodGet, "/api/content-accounts/{id}/persona/revisions", "/api/content-accounts/acct-1/persona/revisions"},
 	{http.MethodGet, "/api/content-accounts/{id}/persona/{revisionId}", "/api/content-accounts/acct-1/persona/rev-1"},
+	{http.MethodPut, "/api/content-accounts/{id}/scope", "/api/content-accounts/acct-1/scope"},
 }
 
 func TestContentAccountEndpointsAreMounted(t *testing.T) {

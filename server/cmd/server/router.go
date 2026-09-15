@@ -1919,6 +1919,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					// a revision id.
 					r.Get("/persona/revisions", h.ListAccountPersonaRevisions)
 					r.Get("/persona/{revisionId}", h.GetAccountPersonaRevision)
+					// Its own endpoint rather than a field on PATCH: PATCH
+					// replaces the settings blob wholesale, so this merges
+					// server-side instead (LT-014).
+					r.Put("/scope", h.SetAccountScope)
 				})
 			})
 			r.Get("/api/assignee-frequency", h.GetAssigneeFrequency)

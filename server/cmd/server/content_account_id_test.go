@@ -164,3 +164,89 @@ func TestPersonaEndpointsUseTheIdFromTheURLBehindTheRealRouter(t *testing.T) {
 		t.Errorf("GET persona revisions = %d, want 200", list.StatusCode)
 	}
 }
+
+// The scope endpoint is held to the same standard as the persona ones, and for
+// the same reason: it reads the account id out of the path through the very
+// helper that used to return the workspace id instead. A route-existence case
+// would not catch a repeat - it proves the URL is mounted, not that the id
+// survives the middleware - so this one goes through the real router with an
+// account id that is deliberately not the workspace id, and reads the row back
+// afterwards rather than trusting the status code.
+func TestScopeEndpointUsesTheIdFromTheURLBehindTheRealRouter(t *testing.T) {
+	if testServer == nil {
+		t.Skip("database not available")
+	}
+	accountID := createAccountThroughTheAPI(t,
+		fmt.Sprintf("URL id scope %d", time.Now().UnixNano()))
+
+	write := accountAPIRequest(t, http.MethodPut,
+		"/api/content-accounts/"+accountID+"/scope", `{"scope":"local"}`)
+	defer write.Body.Close()
+	if write.StatusCode != http.StatusOK {
+		t.Fatalf("PUT scope = %d, want 200", write.StatusCode)
+	}
+
+	var stored string
+	if err := testPool.QueryRow(context.Background(),
+		`SELECT settings->>'loretide.scope' FROM content_account WHERE account_id = $1`, accountID).
+		Scan(&stored); err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if stored != "local" {
+		t.Errorf("stored scope = %q, want \"local\" — the row the URL named is not the row that was written", stored)
+	}
+
+	// And the account reads back through the same path, default filled in the
+	// response rather than in the row.
+	read := accountAPIRequest(t, http.MethodGet, "/api/content-accounts/"+accountID, "")
+	defer read.Body.Close()
+	if read.StatusCode != http.StatusOK {
+		t.Fatalf("GET account = %d, want 200", read.StatusCode)
+	}
+	var account struct {
+		AccountID string         `json:"account_id"`
+		Settings  map[string]any `json:"settings"`
+	}
+	if err := json.NewDecoder(read.Body).Decode(&account); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if account.AccountID != accountID {
+		t.Errorf("GET returned account %q", account.AccountID)
+	}
+	if account.Settings["loretide.scope"] != "local" {
+		t.Errorf("response scope = %v", account.Settings["loretide.scope"])
+	}
+}
+
+// A fresh account behind the real router reads as the default, and the row
+// still holds nothing. The equivalent handler-level case cannot see a
+// middleware mistake; this one can.
+func TestAFreshAccountReadsAsAllBehindTheRealRouter(t *testing.T) {
+	if testServer == nil {
+		t.Skip("database not available")
+	}
+	accountID := createAccountThroughTheAPI(t,
+		fmt.Sprintf("URL id default scope %d", time.Now().UnixNano()))
+
+	read := accountAPIRequest(t, http.MethodGet, "/api/content-accounts/"+accountID, "")
+	defer read.Body.Close()
+	var account struct {
+		Settings map[string]any `json:"settings"`
+	}
+	if err := json.NewDecoder(read.Body).Decode(&account); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if account.Settings["loretide.scope"] != "all" {
+		t.Errorf("a fresh account reads as %v, want \"all\"", account.Settings["loretide.scope"])
+	}
+
+	var stored *string
+	if err := testPool.QueryRow(context.Background(),
+		`SELECT settings->>'loretide.scope' FROM content_account WHERE account_id = $1`, accountID).
+		Scan(&stored); err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if stored != nil {
+		t.Errorf("reading the account wrote %q into the row", *stored)
+	}
+}
