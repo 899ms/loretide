@@ -9,7 +9,7 @@
 //   FR-012 route / status / headers_present / upstream_trace default when the
 //          server has not sent them yet, and a malformed event still falls back
 import {describe,it,expect} from "vitest";
-import {pageSchema,parseDiagnostic,runSchema,mergeEvents,streamQuery,parseContentDispositionFilename,STREAM_EVENT_CAP,type DiagnosticEvent} from "./contract";
+import {pageSchema,parseDiagnostic,runSchema,overviewSchema,mergeEvents,streamQuery,parseContentDispositionFilename,STREAM_EVENT_CAP,type DiagnosticEvent} from "./contract";
 function event(id:string,sequence:number):DiagnosticEvent{return {eventId:id,sequence,occurredAt:"",receivedAt:"",actorKind:"system",actorId:"",workspaceId:"ws-1",accountId:"",objectType:"diagnostics",objectId:"",objectVersion:"",action:"query",outcome:"success",errorCode:"",operationId:"",traceId:"",spanId:"",parentSpanId:"",runId:"",attempt:1,step:"",component:"api",severity:"info",durationMs:0,safeMessage:"",retryable:false,nextAction:"",build:"test",isTest:true,route:"",status:0,headersPresent:[],upstreamTrace:""}}
 // The wire event a current server sends. Feature 005 adds four optional fields
 // on top of it; an older server omits them entirely.
@@ -72,5 +72,29 @@ describe("diagnostic API contracts",()=>{
   expect(capped).toHaveLength(STREAM_EVENT_CAP);
   expect(capped[0]?.sequence).toBe(5);
   expect(capped.at(-1)?.sequence).toBe(STREAM_EVENT_CAP+4);
+ });
+ // Feature 012 (specs/012-diag-simulator-shapes), FR-013 / SC-010.
+ // Scenario gained a "kind" field. contracts/scenario-kind.md C-1/C-2: an
+ // installed desktop build talks to older backends, and parseWithFallback
+ // failing as a whole would take the components and metrics down with it -
+ // so a missing or malformed kind must never sink the overview.
+ const wireOverview={components:[{name:"api",status:"healthy",last_seen:"2026-01-01T00:00:00Z",version:"test",reason:""}],metrics:{sample_count:1,errors:0,p50_ms:1,p95_ms:null,retries:0,cancelled:0,dropped:0,sink_errors:0,queue_wait_ms:0},scenarios:[{id:"normal",expected_code:""}],instance:"native-development",build:"test",simulation_enabled:true,retention_days:7,capacity:10000};
+ it("reads the scenario kind a current server sends",()=>{
+  const parsed=parseDiagnostic({...wireOverview,scenarios:[{id:"normal",expected_code:"",kind:"fault"},{id:"shape_orphan",expected_code:"",kind:"shape"}]},overviewSchema);
+  expect(parsed.scenarios.map(s=>s.kind)).toEqual(["fault","shape"]);
+ });
+ it("defaults the scenario kind to fault when an older server omits it",()=>{
+  const parsed=parseDiagnostic(wireOverview,overviewSchema);
+  expect(parsed.scenarios[0]?.kind).toBe("fault");
+  // The rest of the overview has to survive intact: that is the whole reason
+  // the field is optional rather than required.
+  expect(parsed.components).toHaveLength(1);
+  expect(parsed.metrics.sampleCount).toBe(1);
+ });
+ it("does not sink the overview when one scenario kind is malformed",()=>{
+  const parsed=parseDiagnostic({...wireOverview,scenarios:[{id:"normal",expected_code:"",kind:42}]},overviewSchema);
+  expect(parsed.scenarios[0]?.kind).toBe("fault");
+  expect(parsed.components).toHaveLength(1);
+  expect(parsed.metrics.sinkErrors).toBe(0);
  });
 });

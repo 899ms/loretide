@@ -140,7 +140,14 @@ func TestPostgresFullScenariosExportAndHealth(t *testing.T) {
 	scope := Scope{Workspace: "w", Actor: "u"}
 	for _, scenario := range Scenarios {
 		r, err := service.Run(ctx, scope, "", scenario.ID, 42, "")
-		if err != nil || r.Regression != "passed" {
+		if err != nil {
+			t.Fatalf("%s: %+v %v", scenario.ID, r, err)
+		}
+		// Every scenario, shapes included, has to commit and export. Only a
+		// business fault is required to come out "passed": the self-check
+		// shapes of specs/012 exist to put not_run, failed and undecidable
+		// verdicts on screen, so they are checked in shapes_test.go instead.
+		if scenario.Kind == "fault" && r.Regression != "passed" {
 			t.Fatalf("%s: %+v %v", scenario.ID, r, err)
 		}
 		bundle, err := service.Export(ctx, scope, r.ID, true)

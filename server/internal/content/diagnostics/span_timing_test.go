@@ -38,6 +38,14 @@ func TestSimulatedStepsAreContiguousInTime(t *testing.T) {
 		if scenario.ID == "clock_skew" {
 			continue // the one scenario whose purpose is out-of-order time
 		}
+		if scenario.Kind != "fault" {
+			// Self-check data shapes (specs/012) are branching trees, not the
+			// linear step pipeline this invariant describes: shape_concurrent
+			// overlaps two siblings on purpose and shape_deep nests. They stay
+			// inside TestOnlyClockSkewProducesOutOfOrderTime below, which is
+			// the guarantee that does apply to them.
+			continue
+		}
 		t.Run(scenario.ID, func(t *testing.T) {
 			run := simulateForTiming(t, scenario.ID)
 			if len(run.Events) < 2 {

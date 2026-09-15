@@ -22,7 +22,16 @@ func(s *Service)Run(ctx context.Context,scope Scope,account,scenario string,seed
  run,err:=Simulate(ctx,scope,account,scenario,seed,s.Build,s.Enabled);if err!=nil{return run,err};run.Original=original
  if priorOperation!=""{for i:=range run.Events{run.Events[i].Operation=priorOperation;run.Events[i].Attempt+=priorAttempt}}
  if scenario=="database"{err=s.Store.CommitRun(ctx,scope,run,true);if err==nil{return run,ErrConflict};run.Actual="DATABASE_UNAVAILABLE";run.Status="failed";e:=run.Events[len(run.Events)-1];e.Code=run.Actual;e.Outcome="failed";e.Severity="error";run.Events[len(run.Events)-1]=Sanitize(e)}
- Evaluate(&run);if err=s.Store.CommitRun(ctx,scope,run,false);err!=nil{return run,err};for _,e:=range run.Events{s.Store.Technical(ctx,e)};if err=s.Store.PruneTechnical(ctx);err!=nil{s.Store.Log.Errors.Add(1)};return run,nil
+ // A self-check shape may ask to be left unevaluated, so that "not_run"
+ // reaches the database instead of living for one statement in memory
+ // (specs/012, 006-V-1), or to have its sink writes fail, which is what
+ // moves sink_errors and dropped. Both are carried by the scenario id and
+ // so are already behind Simulate's isolation gate.
+ sh,isShape:=shapeByID(run.Scenario)
+ if !isShape||!sh.SkipEvaluate{Evaluate(&run)}
+ if err=s.Store.CommitRun(ctx,scope,run,false);err!=nil{return run,err}
+ for _,e:=range run.Events{if isShape&&sh.FailSink{s.Store.TechnicalFailingSink(ctx,e)}else{s.Store.Technical(ctx,e)}}
+ if err=s.Store.PruneTechnical(ctx);err!=nil{s.Store.Log.Errors.Add(1)};return run,nil
 }
 type Export struct{Manifest []string `json:"manifest"`;Run Run `json:"run"`;Audit Page `json:"audit"`;Technical Page `json:"technical"`;Redacted bool `json:"redacted"`;Limits []string `json:"limits"`}
 func(s *Service)Export(ctx context.Context,scope Scope,id string,download bool)(Export,error){

@@ -33,6 +33,14 @@ type Store struct {
 // accessor; the Store keeps ownership of the pool's lifetime.
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
+// runEventPageSize is one page of a run's events; it stays inside Store.Query's
+// own clamp. runEventCeiling bounds how many pages GetRun will walk, so a run
+// detail response is large but never unbounded.
+const (
+	runEventPageSize = 100
+	runEventCeiling  = 500
+)
+
 func NewStore(pool *pgxpool.Pool, guard WorkspaceWriteGuard) *Store {
 	return &Store{pool: pool, guard: guard, Log: NewLogBuffer(1000), MaxLogs: 10000, Retention: 7 * 24 * time.Hour}
 }
@@ -174,12 +182,27 @@ func (s *Store) Audit(ctx context.Context, scope Scope, e Event) error {
 	}
 	return s.withWorkspaceWrite(ctx, e.Workspace, func(tx pgx.Tx) error { return s.appendAudit(ctx, tx, e) })
 }
-func (s *Store) Technical(ctx context.Context, e Event) {
+func (s *Store) Technical(ctx context.Context, e Event) { s.technical(ctx, e, false) }
+
+// TechnicalFailingSink takes the same event down the same path but makes the
+// sink write fail, which is what raises sink_errors and dropped. It follows the
+// pattern CommitRun already uses for failAudit: the fault is carried by a
+// scenario id through Simulate's isolation gate, so there is no second switch
+// to reach it by and nothing to remember to turn off. Its only caller is
+// Service.Run, and only for a shape scenario that declares FailSink.
+func (s *Store) TechnicalFailingSink(ctx context.Context, e Event) { s.technical(ctx, e, true) }
+
+func (s *Store) technical(ctx context.Context, e Event, failSink bool) {
 	e = Sanitize(e)
 	payload, _ := json.Marshal(e)
 	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
 	err := s.withWorkspaceWrite(ctx, e.Workspace, func(tx pgx.Tx) error {
+		if failSink {
+			if _, err := tx.Exec(ctx, "SELECT 1 / 0"); err != nil {
+				return ErrUnavailable
+			}
+		}
 		_, err := tx.Exec(ctx, "INSERT INTO content_technical_log(event_id,workspace_id,account_id,payload) VALUES($1,$2,$3,$4) ON CONFLICT(event_id) DO NOTHING", e.ID, e.Workspace, e.Account, payload)
 		if err != nil {
 			return ErrUnavailable
@@ -300,11 +323,31 @@ func (s *Store) GetRun(ctx context.Context, scope Scope, id string) (Run, error)
 	if !scope.Allows(r.Workspace, r.Account) {
 		return Run{}, ErrDenied
 	}
-	p, err := s.Query(ctx, scope, Filter{Run: id, Limit: 100})
-	if err != nil {
-		return r, err
+	// One run can have more events than a single page holds: a self-check shape
+	// deliberately runs past the waterfall's collapse threshold of 200
+	// (specs/012, 006-W-7), and Query clamps Limit at 100. Page with the cursor
+	// Query already returns rather than widening that clamp - it is also the
+	// boundary of the public /events and /stream endpoints, and nothing about
+	// this endpoint or its response shape changes here.
+	r.Events = []Event{}
+	after := int64(0)
+	for {
+		p, err := s.Query(ctx, scope, Filter{Run: id, After: after, Limit: runEventPageSize})
+		if err != nil {
+			return r, err
+		}
+		r.Events = append(r.Events, p.Events...)
+		// The ceiling is what keeps an unbounded run from becoming an unbounded
+		// response. A truncated read is better than an open one, and 500 leaves
+		// the 250-span shape two times over.
+		if !p.More || len(p.Events) == 0 || len(r.Events) >= runEventCeiling {
+			break
+		}
+		after = p.Cursor
 	}
-	r.Events = p.Events
+	if len(r.Events) > runEventCeiling {
+		r.Events = r.Events[:runEventCeiling]
+	}
 	if len(r.Events) == 0 {
 		r.Gaps = append(r.Gaps, "TECHNICAL_LOG_EXPIRED_OR_UNAVAILABLE")
 	}
