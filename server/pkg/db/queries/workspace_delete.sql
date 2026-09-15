@@ -333,6 +333,12 @@ deleted_content_operation_audit AS (
 deleted_content_technical_logs AS (
     DELETE FROM content_technical_log WHERE workspace_id = $1::text
 ),
+-- Brand content accounts go with the workspace. Registered in the deletion
+-- manifest test alongside this, because only doing one of the two leaves
+-- either orphaned rows (manifest only) or a drifting manifest (delete only).
+deleted_content_accounts AS (
+    DELETE FROM content_account WHERE workspace_id = $1::text
+),
 deleted_channel_outbound_cards AS (
     DELETE FROM channel_outbound_card_message
     WHERE chat_session_id IN (SELECT id FROM ws_sessions)
