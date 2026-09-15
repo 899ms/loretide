@@ -119,6 +119,7 @@ These are hard requirements for every new or modified database design and produc
 
 - TypeScript strict mode is enabled; keep types explicit.
 - Go follows standard conventions: `gofmt`, `go vet`, checked errors.
+- Loretide-owned Go (`server/internal/content/**` and handlers a Loretide PR creates) also follows the vendored Modern Go Guidelines skill in `.claude/skills/go-modern-guidelines/` — scoped to lines you are writing, never applied to upstream Multica code; `json_v2` and `stdlib_uuid` are excluded.
 - Code comments must be English.
 - Prefer existing patterns/components over new parallel abstractions.
 - Avoid broad refactors unless required by the task.
