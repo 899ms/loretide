@@ -1,10 +1,16 @@
 // Package workspacecore answers one question for content modules: may this
 // subject act inside this workspace?
 //
-// It deliberately does NOT answer whether a given object belongs to that
-// workspace. The caller owns its own tables and has to check that itself. The
-// distinction matters: a caller that assumes otherwise will read "allowed" and
-// return an object that belongs to a different brand.
+// It deliberately does NOT look objects up. The caller owns its own tables and
+// reads them itself. The distinction matters: a caller that assumes otherwise
+// will read "allowed" from Authorize and return an object that belongs to a
+// different brand.
+//
+// Deciding OVER ownership, once the caller has supplied it, is this package's
+// work too — see grant.go, where a ResourceRef arrives the way a Membership
+// arrives here, and CanRead answers whether a subject may read it. The line is
+// between reading someone else's storage and judging the facts they hand over,
+// not between brands and objects.
 //
 // The rules here were not invented for this package. They already ran inside
 // the diagnostics handler, serving one module; this is that sequence extracted
