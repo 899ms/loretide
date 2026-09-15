@@ -249,5 +249,40 @@
     "text116": "对象与版本",
     "text117": "未记录版本",
     "text118": "仅统计本页出现过的版本"
+  },
+  "contentAccounts": {
+    "title": "账号",
+    "description": "本品牌下的发布账号，以及每个账号写作时使用的人设提示词。",
+    "listTitle": "账号",
+    "empty": "还没有账号。先创建一个，再设置它的平台与人设提示词。",
+    "createTitle": "新建账号",
+    "platform": "平台",
+    "platformPlaceholder": "选择平台",
+    "displayName": "显示名",
+    "displayNamePlaceholder": "用来区分这个账号",
+    "create": "创建账号",
+    "profileTitle": "账号",
+    "personaTitle": "人设提示词",
+    "personaDescription": "这个账号写作时的口吻。留空也可以——留空表示待补充。",
+    "personaPlaceholder": "描述口吻、面向的读者、要避开什么",
+    "save": "保存",
+    "saving": "保存中",
+    "saved": "已保存",
+    "failed": "保存失败",
+    "conflict": "有人同时改了这个账号，再保存一次即可",
+    "nextAction": "下一步：{{action}}",
+    "revision": "第 {{number}} 版",
+    "noRevision": "还没有保存过版本",
+    "loadFailed": "账号列表加载失败",
+    "platforms": {
+      "xiaohongshu": "小红书",
+      "douyin": "抖音",
+      "wechat_mp": "微信公众号",
+      "bilibili": "哔哩哔哩",
+      "zhihu": "知乎",
+      "weibo": "微博",
+      "kuaishou": "快手",
+      "shipinhao": "视频号"
+    }
   }
 }

@@ -1900,6 +1900,27 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Post("/export", h.ContentDiagnosticExport)
 				r.Post("/client", h.ContentDiagnosticClient)
 			})
+			// Brand content accounts and their persona prompt revisions.
+			// Wiring only: #71 and #73 delivered these handlers with their own
+			// tests but never mounted them, so nothing reached them until the
+			// account settings page needed a URL. Inside this group so that
+			// RequireWorkspaceMember refuses an outsider before the handler's
+			// own workspacecore check becomes the only line of defense.
+			r.Route("/api/content-accounts", func(r chi.Router) {
+				r.Use(h.DiagnosticTrace)
+				r.Get("/", h.ListContentAccounts)
+				r.Post("/", h.CreateContentAccount)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", h.GetContentAccount)
+					r.Patch("/", h.UpdateContentAccount)
+					r.Get("/persona", h.GetAccountPersonaPrompt)
+					r.Post("/persona", h.SetAccountPersonaPrompt)
+					// Static before parameter: "revisions" must not be read as
+					// a revision id.
+					r.Get("/persona/revisions", h.ListAccountPersonaRevisions)
+					r.Get("/persona/{revisionId}", h.GetAccountPersonaRevision)
+				})
+			})
 			r.Get("/api/assignee-frequency", h.GetAssigneeFrequency)
 
 			// Issues

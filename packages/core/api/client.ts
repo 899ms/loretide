@@ -667,6 +667,30 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-diagnostics/${endpoint}${query ? `?${query}` : ""}`, body === undefined ? undefined : {method: "POST", body: JSON.stringify(body)});
   }
 
+  // Brand content accounts and their persona prompt revisions. Returns raw
+  // JSON: the schema lives with the feature in content/ip-profile, so the
+  // client stays a transport and the contract stays next to the code that
+  // depends on it.
+  async listContentAccounts(): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-accounts");
+  }
+
+  async createContentAccount(body: {platform: string; display_name: string}): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-accounts", {method: "POST", body: JSON.stringify(body)});
+  }
+
+  async updateContentAccount(accountId: string, body: {platform?: string; display_name?: string}): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-accounts/${encodeURIComponent(accountId)}`, {method: "PATCH", body: JSON.stringify(body)});
+  }
+
+  async getContentAccountPersona(accountId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-accounts/${encodeURIComponent(accountId)}/persona`);
+  }
+
+  async setContentAccountPersona(accountId: string, personaPrompt: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-accounts/${encodeURIComponent(accountId)}/persona`, {method: "POST", body: JSON.stringify({persona_prompt: personaPrompt})});
+  }
+
   async contentDiagnosticStream(query: string, signal: AbortSignal): Promise<Response> {
     return this.fetchRaw(`/api/content-diagnostics/stream?${query}`, {signal});
   }
