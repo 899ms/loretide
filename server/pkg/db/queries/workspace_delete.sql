@@ -345,6 +345,14 @@ deleted_content_accounts AS (
 deleted_content_account_revisions AS (
     DELETE FROM content_account_revision WHERE workspace_id = $1::text
 ),
+-- The durable dispatch outbox holds items that have not been handed over yet.
+-- Once the workspace is gone there is no receiver for them, so they go with it
+-- rather than being kept as undeliverable work. Same text workspace_id as the
+-- three tables above, and the same no-FK rule: the row is removed here, not by
+-- a cascade.
+deleted_content_dispatch_outbox AS (
+    DELETE FROM content_dispatch_outbox WHERE workspace_id = $1::text
+),
 deleted_channel_outbound_cards AS (
     DELETE FROM channel_outbound_card_message
     WHERE chat_session_id IN (SELECT id FROM ws_sessions)

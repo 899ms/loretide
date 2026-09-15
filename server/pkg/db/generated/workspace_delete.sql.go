@@ -318,6 +318,9 @@ deleted_content_accounts AS (
 deleted_content_account_revisions AS (
     DELETE FROM content_account_revision WHERE workspace_id = $1::text
 ),
+deleted_content_dispatch_outbox AS (
+    DELETE FROM content_dispatch_outbox WHERE workspace_id = $1::text
+),
 deleted_channel_outbound_cards AS (
     DELETE FROM channel_outbound_card_message
     WHERE chat_session_id IN (SELECT id FROM ws_sessions)
@@ -513,6 +516,11 @@ WHERE channel_media_pending_object.workspace_id = $1
 // Account configuration revisions go with their accounts. Registered in the
 // deletion manifest test alongside this; doing only one of the two leaves
 // either orphaned rows or a drifting manifest.
+// The durable dispatch outbox holds items that have not been handed over yet.
+// Once the workspace is gone there is no receiver for them, so they go with it
+// rather than being kept as undeliverable work. Same text workspace_id as the
+// three tables above, and the same no-FK rule: the row is removed here, not by
+// a cascade.
 // Same no-FK chore as chat_draft_restore above. Matched on workspace_id rather
 // than the session set because that column exists precisely so this statement
 // does not have to join through chat_session, which it deletes in this same CTE.
