@@ -74,6 +74,18 @@ To stop using this environment, run `stop`; do not delete either database. Revie
 
 ## Update log
 
+## Migrations are not applied by the launcher
+
+`start` does not run database migrations and the API does not migrate on boot. After pulling changes that add files under `server/migrations/`, apply them by hand before starting or restarting the API, or the new endpoints answer 503 (`accounts unavailable`) with no cause in the log:
+
+```powershell
+cd server
+$env:DATABASE_URL = "postgres://loretide_local_admin:<password from data\windows\pgpassword>@127.0.0.1:15332/loretide_dev?sslmode=disable"
+go run ./cmd/migrate up
+```
+
+Check with `select version from schema_migrations order by 1 desc limit 1;` against the highest number in `server/migrations/`. Observed on 2026-09-15: the development database sat at `473` while the tree had `481`; migrations 474-481 had never been applied locally, so the durable outbox and the account tables did not exist until `migrate up` was run. Making `start` detect pending migrations is Windows-launcher work and is parked with the rest of the Windows scope.
+
 | Date | Change | Verification evidence |
 |---|---|---|
 | 2026-09-14 | `status` now reports state / pid / ownership / build / health per component and supports `-Json`; `start` checks private configuration, `api.exe` and port ownership before launching and clears stale pid files; `stop` waits for processes to exit and reports each, without killing. Documented the one-instance-per-machine limit. | `pwsh -File scripts/local-windows.test.ps1` - 61 checks, exit 0, run on Linux pwsh 7.4.6 with the Windows calls stubbed. The real Windows end-to-end run (quickstart.md) was NOT executed by the change author and is recorded as not run. |
