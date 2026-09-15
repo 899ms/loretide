@@ -1,6 +1,7 @@
 package handler
 
 import (
+ "context"
  "encoding/json"
  "errors"
  "fmt"
@@ -10,6 +11,7 @@ import (
 
  "github.com/go-chi/chi/v5"
  "github.com/multica-ai/multica/server/internal/content/diagnostics"
+ workspacecore "github.com/multica-ai/multica/server/internal/content/workspace-core"
  "github.com/multica-ai/multica/server/internal/middleware"
  "go.opentelemetry.io/otel/trace"
 )
@@ -19,7 +21,16 @@ func(h *Handler)diagnosticScope(w http.ResponseWriter,r *http.Request)(diagnosti
  if isMachineCredentialActor(r){diagnosticError(w,diagnostics.ErrDenied);return diagnostics.Scope{},false}
  workspace:=h.resolveWorkspaceID(r)
  actor,ok:=requireUserID(w,r);if !ok{return diagnostics.Scope{},false}
- member,err:=h.getWorkspaceMember(r.Context(),actor,workspace);if err!=nil{writeJSON(w,404,map[string]any{"error":"workspace not found","code":"AUTHORIZATION_DENIED","trace_id":trace.SpanContextFromContext(r.Context()).TraceID().String(),"next_action":"check_authorization"});return diagnostics.Scope{},false};if !roleAllowed(member.Role,"owner","admin"){diagnosticError(w,diagnostics.ErrDenied);return diagnostics.Scope{},false}
+ // The decision now comes from content/workspace-core so the next content
+ // module does not reimplement it. The MAPPING stays here and stays exactly as
+ // it shipped: non-member 404, insufficient role 403. Both were verified by
+ // 002-V05-11; folding them into one would be a regression wearing consistency
+ // as a disguise. New modules use workspacecore.RefusalStatus instead.
+ decision:=workspacecore.Authorize(r.Context(),h.diagnosticMembership(),h.diagnosticRefusalRecorder(),actor,workspace,"owner","admin")
+ if !decision.Allowed{
+  if decision.Reason==workspacecore.ReasonRole{diagnosticError(w,diagnostics.ErrDenied);return diagnostics.Scope{},false}
+  writeJSON(w,404,map[string]any{"error":"workspace not found","code":"AUTHORIZATION_DENIED","trace_id":trace.SpanContextFromContext(r.Context()).TraceID().String(),"next_action":"check_authorization"});return diagnostics.Scope{},false
+ }
  // Real account permissions are connected when the account domain ships.
  // Until then only workspace-owned diagnostic fixtures are accepted.
  scope:=diagnostics.Scope{Workspace:workspace,Actor:actor,Accounts:[]string{}}
@@ -69,3 +80,28 @@ func(h *Handler)DiagnosticTrace(next http.Handler)http.Handler{return http.Handl
  route,status,present:=diagnostics.RequestIdentity(r.Method,pattern,wrapped.status,r.Header)
  h.ContentDiagnostics.Store.Technical(ctx,diagnostics.Event{Route:route,Status:status,HeadersPresent:present,ID:diagnostics.NewID(),Workspace:ws,Actor:actor,ActorKind:"human",ObjectType:"diagnostics",Action:"execute",Outcome:outcome,Code:code,Operation:diagnostics.NewID(),Trace:sc.TraceID().String(),Span:sc.SpanID().String(),Parent:parent,Occurred:start.UTC(),Received:time.Now().UTC(),Component:"api",Severity:"info",Duration:time.Since(start).Milliseconds(),Build:h.ContentDiagnostics.Build,Upstream:middleware.UpstreamTraceFromContext(ctx)})
 })}
+
+// diagnosticMembership adapts this package's membership lookup to the shape
+// content/workspace-core expects, so that package depends on neither the
+// generated db types nor this one.
+type diagnosticMembershipFunc func(ctx context.Context,actor,workspace string)(string,bool,error)
+func(f diagnosticMembershipFunc)RoleFor(ctx context.Context,actor,workspace string)(string,bool,error){return f(ctx,actor,workspace)}
+func(h *Handler)diagnosticMembership()workspacecore.Membership{
+ return diagnosticMembershipFunc(func(ctx context.Context,actor,workspace string)(string,bool,error){
+  member,err:=h.getWorkspaceMember(ctx,actor,workspace)
+  // Not found and malformed input both mean "no usable membership". Telling
+  // them apart here would surface the difference in the response, which is
+  // exactly what the refusal exists to hide.
+  if err!=nil{return "",false,nil}
+  return member.Role,true,nil
+ })
+}
+// diagnosticRefusalRecorder sends refusals to the technical log; nil when the
+// service is not wired, which Authorize tolerates.
+type diagnosticRecorderFunc func(ctx context.Context,event diagnostics.Event)
+func(f diagnosticRecorderFunc)Technical(ctx context.Context,event diagnostics.Event){f(ctx,event)}
+func(h *Handler)diagnosticRefusalRecorder()workspacecore.Recorder{
+ if h.ContentDiagnostics==nil||h.ContentDiagnostics.Store==nil{return nil}
+ store:=h.ContentDiagnostics.Store
+ return diagnosticRecorderFunc(func(ctx context.Context,event diagnostics.Event){store.Technical(ctx,event)})
+}
