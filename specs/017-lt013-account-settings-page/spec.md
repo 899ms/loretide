@@ -47,11 +47,17 @@
 
 ### Session 2026-09-15
 
-三个问题已按推荐值暂定实施，**不阻塞**，主任务可随时改判（见文末「待澄清问题」）：
+三个问题已由主任务**裁决为 A**（2026-09-15）。裁决同时追加了三条要求，记在这里以免只活在对话里：
 
 - **Q1 路由挂载** → 暂定 **A**：本 PR 在 `server/cmd/server/router.go` 既有的「工作区成员」分组内挂载这八个端点，**纯接线，不改任何 handler 逻辑**，并加一条路由存在性用例。
 - **Q2 平台枚举来源** → 暂定 **A**：在 `packages/core/content/ip-profile/platforms.ts` 放一份常量，并用一条 **node 环境测试读 `account.go` 比对**，值不一致就红。零后端改动，沿用仓库已有的「测试读源文件比对，而不是第二次手抄」手法（`ip-profile` 自己就是这么守着迁移 CHECK 的）。
-- **Q3 页面落位** → 暂定 **A**：独立工作区路由 `apps/web/app/[workspaceSlug]/(dashboard)/accounts/page.tsx`，照诊断页的五行写法，视觉上复用 `SettingsContent` 等设置组合。
+- **Q3 页面落位** → **A**：独立工作区路由 `apps/web/app/[workspaceSlug]/(dashboard)/accounts/page.tsx`，照诊断页的五行写法，视觉上复用 `SettingsContent` / `SettingsCard` / `SettingsRow` / `SettingsSaveState`，对照 `workspace-tab.tsx`。
+
+**裁决追加的三条**：
+
+1. **路由用例必须覆盖八条端点**，并断言未登录与非成员**经中间件**被拒——`#71` / `#73` 都没有任何用例发现端点没挂载，这一条补的就是那个盲点。PR 正文单列说明「此前端点未挂载」。
+2. **不抄 `PLUGINS_V1_FLAG` 门控。** 设置页多个标签页带这个门控，照搬组合时极易连门控一起抄走。
+3. **本 PR 不加侧栏入口**；`manual-ui-todo.md` 里留一条「侧栏是否需要入口」由主任务定。
 
 ---
 
@@ -148,7 +154,9 @@
 - **FR-018**：页面 MUST NOT 提供修改或删除历史版本的入口（版本只插不改不删）。
 - **FR-019**：新增文案 MUST 在 `en` / `zh-Hans` / `ja` / `ko` 四种语言齐全，`parity.test.ts` 通过。
 - **FR-020**：UI MUST 只使用 `packages/ui` 与 `packages/views` 既有组件；MUST NOT 新增控件、调整样式或引入第二套视觉语言。
-- **FR-021**（Q1 暂定 A）：八个既有 handler MUST 挂载到工作区成员分组下的 `/api/content-accounts`；此挂载 MUST NOT 改动任何 handler 的内部逻辑。
+- **FR-021**（Q1-A）：八个既有 handler MUST 挂载到工作区成员分组下的 `/api/content-accounts`；此挂载 MUST NOT 改动任何 handler 的内部逻辑。
+- **FR-021a**：路由用例 MUST 逐条覆盖八个端点存在，并 MUST 断言未登录与非成员**经中间件**被拒。
+- **FR-023**：本 PR MUST NOT 新增侧栏入口；是否加入口由主任务在 `manual-ui-todo.md` 的对应条目上裁定。
 - **FR-022**：UI 行为验收 MUST 落在 `manual-ui-todo.md`，MUST NOT 写 UI 单测或自动点击（constitution 原则 II）。
 
 ### Key Entities
@@ -202,7 +210,7 @@
 
 ---
 
-## 待澄清问题（已按推荐值暂定，不阻塞）
+## 澄清问题与裁决（三项均裁决为 A）
 
 ### Q1 八个 handler 没挂路由——在本 PR 挂，还是另开一卡？
 
