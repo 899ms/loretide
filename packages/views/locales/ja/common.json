@@ -249,5 +249,40 @@
     "text116": "オブジェクトとバージョン",
     "text117": "バージョン未記録",
     "text118": "このページに表示された分のみ集計"
+  },
+  "contentAccounts": {
+    "title": "アカウント",
+    "description": "このブランドの投稿アカウントと、それぞれのペルソナプロンプト。",
+    "listTitle": "アカウント",
+    "empty": "アカウントがありません。作成してプラットフォームとペルソナプロンプトを設定してください。",
+    "createTitle": "新規アカウント",
+    "platform": "プラットフォーム",
+    "platformPlaceholder": "プラットフォームを選択",
+    "displayName": "表示名",
+    "displayNamePlaceholder": "このアカウントを見分けるための名前",
+    "create": "アカウントを作成",
+    "profileTitle": "アカウント",
+    "personaTitle": "ペルソナプロンプト",
+    "personaDescription": "このアカウントの書き方。空のままでも構いません——未入力のまま保留されます。",
+    "personaPlaceholder": "口調、読者、避けたいことを書いてください",
+    "save": "保存",
+    "saving": "保存中",
+    "saved": "保存しました",
+    "failed": "保存できませんでした",
+    "conflict": "同時に別の保存がありました。もう一度保存してください",
+    "nextAction": "次の操作：{{action}}",
+    "revision": "バージョン {{number}}",
+    "noRevision": "保存されたバージョンはありません",
+    "loadFailed": "アカウントを読み込めませんでした",
+    "platforms": {
+      "xiaohongshu": "小紅書",
+      "douyin": "Douyin",
+      "wechat_mp": "WeChat 公式アカウント",
+      "bilibili": "ビリビリ",
+      "zhihu": "知乎",
+      "weibo": "Weibo",
+      "kuaishou": "Kuaishou",
+      "shipinhao": "チャンネルズ"
+    }
   }
 }

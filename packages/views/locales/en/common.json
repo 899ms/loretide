@@ -249,5 +249,40 @@
     "text116": "Object and versions",
     "text117": "No version recorded",
     "text118": "Versions seen on this page only"
+  },
+  "contentAccounts": {
+    "title": "Accounts",
+    "description": "Publishing accounts for this brand, and the persona prompt each one writes with.",
+    "listTitle": "Accounts",
+    "empty": "No accounts yet. Create one to set its platform and persona prompt.",
+    "createTitle": "New account",
+    "platform": "Platform",
+    "platformPlaceholder": "Choose a platform",
+    "displayName": "Display name",
+    "displayNamePlaceholder": "How you tell this account apart",
+    "create": "Create account",
+    "profileTitle": "Account",
+    "personaTitle": "Persona prompt",
+    "personaDescription": "What this account writes like. Leaving it empty is fine — it stays pending until you fill it in.",
+    "personaPlaceholder": "Describe the voice, the audience, what to avoid",
+    "save": "Save",
+    "saving": "Saving",
+    "saved": "Saved",
+    "failed": "Could not save",
+    "conflict": "Someone else saved this account at the same time — save once more",
+    "nextAction": "Next: {{action}}",
+    "revision": "Version {{number}}",
+    "noRevision": "No version saved yet",
+    "loadFailed": "Could not load accounts",
+    "platforms": {
+      "xiaohongshu": "Xiaohongshu",
+      "douyin": "Douyin",
+      "wechat_mp": "WeChat Official Account",
+      "bilibili": "Bilibili",
+      "zhihu": "Zhihu",
+      "weibo": "Weibo",
+      "kuaishou": "Kuaishou",
+      "shipinhao": "Channels"
+    }
   }
 }

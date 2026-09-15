@@ -249,5 +249,40 @@
     "text116": "객체 및 버전",
     "text117": "버전 기록 없음",
     "text118": "이 페이지에 나타난 버전만 집계"
+  },
+  "contentAccounts": {
+    "title": "계정",
+    "description": "이 브랜드의 게시 계정과 각 계정의 페르소나 프롬프트입니다.",
+    "listTitle": "계정",
+    "empty": "계정이 없습니다. 계정을 만들고 플랫폼과 페르소나 프롬프트를 설정하세요.",
+    "createTitle": "새 계정",
+    "platform": "플랫폼",
+    "platformPlaceholder": "플랫폼 선택",
+    "displayName": "표시 이름",
+    "displayNamePlaceholder": "이 계정을 구분할 이름",
+    "create": "계정 만들기",
+    "profileTitle": "계정",
+    "personaTitle": "페르소나 프롬프트",
+    "personaDescription": "이 계정이 글을 쓰는 방식입니다. 비워 두어도 됩니다 — 미입력 상태로 남습니다.",
+    "personaPlaceholder": "어조, 독자, 피할 내용을 적어 주세요",
+    "save": "저장",
+    "saving": "저장 중",
+    "saved": "저장됨",
+    "failed": "저장하지 못했습니다",
+    "conflict": "다른 사람이 동시에 저장했습니다 — 한 번 더 저장하세요",
+    "nextAction": "다음 작업: {{action}}",
+    "revision": "버전 {{number}}",
+    "noRevision": "저장된 버전이 없습니다",
+    "loadFailed": "계정을 불러오지 못했습니다",
+    "platforms": {
+      "xiaohongshu": "샤오훙수",
+      "douyin": "더우인",
+      "wechat_mp": "위챗 공식 계정",
+      "bilibili": "빌리빌리",
+      "zhihu": "즈후",
+      "weibo": "웨이보",
+      "kuaishou": "콰이쇼우",
+      "shipinhao": "채널스"
+    }
   }
 }
