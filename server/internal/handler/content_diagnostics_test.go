@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -120,21 +122,38 @@ func streamLines(t *testing.T, h Handler, ws, query string) []diagnostics.Page {
 	return pages
 }
 
+// The window here is several ticker periods, because that is the shape
+// production runs: 25 seconds against a one-second ticker. An earlier version
+// of this test used 50ms, which expires the deadline before the ticker has
+// ticked once - a path production never takes. It was green throughout the
+// window-boundary defect that 002-V05-01 and 002-V05-02 later found in a real
+// browser, and its greenness is why that defect was believed closed.
 func TestContentDiagnosticStreamClosesPlannedWindowWithRotate(t *testing.T) {
 	h, ws := newDiagnosticWorkspace(t)
 	seedTechnicalEvent(t, h, ws, "info", "TIMEOUT")
 	restore := diagnosticStreamWindow
-	diagnosticStreamWindow = 50 * time.Millisecond
+	diagnosticStreamWindow = 3 * time.Second
 	t.Cleanup(func() { diagnosticStreamWindow = restore })
 
+	start := time.Now()
 	pages := streamLines(t, h, ws, "after=0")
+	elapsed := time.Since(start)
+
 	if len(pages) < 2 {
 		t.Fatalf("planned window wrote %d pages, want a first page and a closing page", len(pages))
 	}
-	for i, page := range pages[:len(pages)-1] {
-		if page.Rotate {
-			t.Fatalf("page %d is marked rotate before the window closed", i)
+	rotates := 0
+	for i, page := range pages {
+		if !page.Rotate {
+			continue
 		}
+		rotates++
+		if i != len(pages)-1 {
+			t.Errorf("page %d of %d is marked rotate but is not the last page", i, len(pages))
+		}
+	}
+	if rotates != 1 {
+		t.Errorf("stream carried %d rotate pages, want exactly 1", rotates)
 	}
 	last := pages[len(pages)-1]
 	if !last.Rotate {
@@ -142,6 +161,74 @@ func TestContentDiagnosticStreamClosesPlannedWindowWithRotate(t *testing.T) {
 	}
 	if last.Cursor < pages[0].Cursor {
 		t.Fatalf("closing cursor %d went backwards from %d", last.Cursor, pages[0].Cursor)
+	}
+	// The assertion this test exists for. A rotate page written after the
+	// window has already closed is what the browser never receives: the
+	// connection is gone by the time it is flushed, the client reads EOF and
+	// reports a disconnect. Marking the last page correctly is not enough - it
+	// has to arrive while the connection is still open.
+	if elapsed >= diagnosticStreamWindow {
+		t.Errorf("stream ended after %v, at or past the %v window boundary. The rotate page is "+
+			"written outside the window and races whatever closes the connection there; "+
+			"002-V05-02 observed exactly this as 26 lines, zero of them carrying rotate.",
+			elapsed.Round(time.Millisecond), diagnosticStreamWindow)
+	}
+}
+
+// rotationLastPageFixture is the one artefact the Go and TypeScript halves of
+// this assertion share. Go cannot call the client state machine and TypeScript
+// cannot call the handler, so without a common file each side would assert
+// against an object it wrote itself - which is the mistake that let a 50ms
+// window vouch for a path production never takes.
+const rotationLastPageFixture = "../../../specs/013-diag-stream-rotation/contracts/rotation-last-page.json"
+
+// End-to-end half one (FR-007): a full window's last page, on the wire, is
+// byte-for-byte what the client is tested against. Cursor is the one value that
+// legitimately varies per run, so it is normalised; everything the client keys
+// off - field names, omitempty behaviour, and rotate being present and true -
+// is compared as raw bytes.
+func TestContentDiagnosticStreamLastPageMatchesTheSharedFixture(t *testing.T) {
+	h, ws := newDiagnosticWorkspace(t)
+	seedTechnicalEvent(t, h, ws, "info", "TIMEOUT")
+	restore := diagnosticStreamWindow
+	diagnosticStreamWindow = 3 * time.Second
+	t.Cleanup(func() { diagnosticStreamWindow = restore })
+
+	pages := streamLines(t, h, ws, "after=0")
+	last := pages[len(pages)-1]
+	last.Cursor = 0
+	got, err := json.Marshal(last)
+	if err != nil {
+		t.Fatalf("marshal last page: %v", err)
+	}
+	raw, err := os.ReadFile(rotationLastPageFixture)
+	if err != nil {
+		t.Fatalf("read shared fixture: %v", err)
+	}
+	want := bytes.TrimSpace(raw)
+	if !bytes.Equal(got, want) {
+		t.Fatalf("the last page on the wire no longer matches the fixture the client is tested "+
+			"against.\n got: %s\nwant: %s\nUpdate %s and re-run the stream-state test that reads it.",
+			got, want, rotationLastPageFixture)
+	}
+}
+
+// A window shorter than one ticker period cannot hold a second page, so the
+// first page is already the last one. One page carrying rotate is correct here,
+// not a degenerate case to be waved through.
+func TestContentDiagnosticStreamRotatesOnTheFirstPageWhenTheWindowIsShorterThanATick(t *testing.T) {
+	h, ws := newDiagnosticWorkspace(t)
+	seedTechnicalEvent(t, h, ws, "info", "TIMEOUT")
+	restore := diagnosticStreamWindow
+	diagnosticStreamWindow = 50 * time.Millisecond
+	t.Cleanup(func() { diagnosticStreamWindow = restore })
+
+	pages := streamLines(t, h, ws, "after=0")
+	if len(pages) != 1 {
+		t.Fatalf("wrote %d pages into a window shorter than one tick, want 1", len(pages))
+	}
+	if !pages[0].Rotate {
+		t.Error("the only page of the window is not marked rotate, so the client reports a disconnect")
 	}
 }
 

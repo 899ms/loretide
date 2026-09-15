@@ -7,7 +7,9 @@
 //   FR-004 403/404 ends in denied and asks for no further reconnect
 //   FR-007 gap is sticky until the workspace changes or the user clears it
 import {describe,it,expect} from "vitest";
+import {readFileSync} from "node:fs";
 import {computeBackoff,initialStreamState,nextStreamState,type StreamState} from "./stream-state";
+import {pageSchema,parseDiagnostic} from "./contract";
 
 function connected(over:Partial<StreamState>={}):StreamState{return {...initialStreamState,status:"connected",...over}}
 function page(cursor:number,over:{gap?:boolean;rotate?:boolean}={}){return {type:"page",cursor,gap:over.gap??false,rotate:over.rotate??false} as const}
@@ -107,3 +109,42 @@ describe("diagnostic stream state machine",()=>{
   expect(nextStreamState(paused,{type:"connect"}).state.status).toBe("paused");
  });
 });
+
+// Feature 013 (specs/013-diag-stream-rotation), FR-007. The other half of this
+// assertion lives in TestContentDiagnosticStreamLastPageMatchesTheSharedFixture:
+// it runs a full window against the real handler and compares the last page on
+// the wire to this same file. Go cannot call this state machine and vitest
+// cannot call the handler, so the fixture is the only shared truth between
+// them - and asserting against real bytes rather than an object written here is
+// the point. A 50ms window once vouched for a path production never takes;
+// two hand-written mocks would vouch for each other the same way.
+describe("the real last page of a planned window",()=>{
+ const FIXTURE="../../../../specs/013-diag-stream-rotation/contracts/rotation-last-page.json";
+ const wire=JSON.parse(readFileSync(new URL(FIXTURE,import.meta.url),"utf8")) as unknown;
+
+ it("parses as a page carrying rotate",()=>{
+  const parsed=parseDiagnostic(wire,pageSchema);
+  expect(parsed.rotate).toBe(true);
+ });
+
+ it("does not put the stream into a disconnected state",()=>{
+  const parsed=parseDiagnostic(wire,pageSchema);
+  const {state,reconnectInMs}=nextStreamState(connected({cursor:3}),
+   {type:"page",cursor:parsed.cursor,gap:parsed.gap,rotate:parsed.rotate});
+  // The user must not see a handover. "connected" is the whole requirement;
+  // "disconnected" is what 002-V05-01 observed 18 times in 448 seconds.
+  expect(state.status).toBe("connected");
+  expect(state.notice).toBe("");
+  expect(reconnectInMs).toBe(0);
+ });
+
+ it("would report a disconnect if the same page arrived without the marker",()=>{
+  // The negative that gives the positive its meaning: losing rotate is exactly
+  // what the window-boundary defect did to this page, and this is what the user
+  // saw as a result.
+  const {state,reconnectInMs}=nextStreamState(connected({cursor:3}),{type:"end"});
+  expect(state.status).toBe("disconnected");
+  expect(reconnectInMs).toBeGreaterThan(0);
+ });
+});
+
