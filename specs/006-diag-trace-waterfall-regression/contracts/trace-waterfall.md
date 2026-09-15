@@ -4,6 +4,24 @@
 
 **消费者**：`packages/views/content/diagnostics/index.tsx` 的 trace 标签页。纯函数，无 DOM 依赖，可在 node 环境测试。
 
+## `occurred_at` 的语义（2026-09-15 由 `specs/011` 钉死）
+
+> **`occurred_at` 是该事件所代表步骤的「开始」时刻。**
+> 一个步骤占据的时间区间是 **`[occurred_at, occurred_at + duration_ms)`**。
+
+本合同此前**没有写下这句话**，后果是生产者与消费者各自理解、各自自洽、合起来错：
+
+| 端 | 此前的理解 |
+|---|---|
+| `simulator.go` | 先 `now = now.Add(duration)` 再盖 `Occurred` → 写的是**结束**时刻 |
+| `trace-waterfall.ts:72` | 注释写 "earliest parseable **start**"，按 `[occurred, occurred+duration]` 画 → 读的是**开始**时刻 |
+
+于是每根条子整体右移自己的时长，相邻步骤之间长出假间隙（`006-W-2` / `006-W-9`）。**修的是生产者，不是本算法**——本算法对「开始时刻」的处理一直是对的。
+
+完整根因、修复前后对照与不变量：`specs/011-diag-panel-time-and-jump/contracts/span-timing.md`。
+
+**一条例外**：`clock_skew` 场景**故意**违反「相邻步骤首尾相接」，让某步的 `occurred_at` 早于其父 span。那正是它要模拟的故障，也是 `clockSkew` 标注唯一的真实来源。任何「全部场景时间单调」的断言都必须排除它。
+
 ## 签名
 
 ```text

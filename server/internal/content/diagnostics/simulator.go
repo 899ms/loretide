@@ -16,10 +16,11 @@ func Simulate(ctx context.Context,scope Scope,account,scenario string,seed int64
  rng:=rand.New(rand.NewPCG(uint64(seed),42));operation:=NewID();ctx,_=Child(ctx)
  receiver:=Receiver{};attempt:=1;code:="";sequence:=0
  steps:=[]string{"web","api","database","queue","daemon","executor","tool","result","database"}
+ prevStart:=now
  for i,component:=range steps{
   if err:=ctx.Err();err!=nil{code="CANCELLED"}
   child,parent:=Child(ctx);if i==0{parent=""};envelope:=Pack(child,operation,attempt,i+1);wire,_:=json.Marshal(envelope);transport,_,err:=DecodeQueuedEnvelope(context.Background(),wire);if err!=nil{return Run{},err};ctx=transport
-  duration:=int64(1+rng.IntN(20));stepCode:=""
+  duration:=int64(1+rng.IntN(20));stepCode:="";skewed:=false
   switch scenario{
   case "slow":if component=="executor"{duration=5000}
   case "timeout":if component=="executor"{deadline,cancel:=context.WithDeadline(ctx,time.Unix(0,0));if deadline.Err()!=nil{stepCode="TIMEOUT";duration=int64(snapshot.Timeout+1)};cancel()}
@@ -33,10 +34,17 @@ func Simulate(ctx context.Context,scope Scope,account,scenario string,seed int64
   case "model_quota":if component=="executor"{stepCode=ProviderCode(429)}
   case "schema":if component=="result"{var output struct{Text string `json:"text"`};if json.Unmarshal([]byte(`{"text":42}`),&output)!=nil{stepCode="OUTPUT_SCHEMA"}}
   case "search":if component=="tool"{stepCode="SEARCH_FAILED";run.Snapshot.Scope="local"}
-  case "clock_skew":if component=="daemon"{stepCode="CLOCK_SKEW";run.Gaps=append(run.Gaps,"REMOTE_CLOCK_SKEW")}
+  case "clock_skew":if component=="daemon"{stepCode="CLOCK_SKEW";run.Gaps=append(run.Gaps,"REMOTE_CLOCK_SKEW");skewed=true}
   }
-  if stepCode!=""{code=stepCode};now=now.Add(time.Duration(duration)*time.Millisecond);sequence++
-  e:=Event{ID:NewID(),Sequence:int64(sequence),Occurred:now,Received:run.Created,Workspace:scope.Workspace,Account:account,Actor:scope.Actor,ActorKind:"human",ObjectType:"simulation",ObjectID:run.ID,Version:"1",Action:"simulate",Outcome:"success",Code:stepCode,Operation:operation,Trace:trace.SpanContextFromContext(child).TraceID().String(),Span:trace.SpanContextFromContext(child).SpanID().String(),Parent:parent,Run:run.ID,Attempt:attempt,Step:fmt.Sprintf("%02d-%s",i,component),Component:component,Severity:"info",Duration:duration,Build:run.Build,Test:true}
+  if stepCode!=""{code=stepCode};sequence++
+  // occurred_at is the START of this step; the clock advances afterwards.
+  // contracts/span-timing.md (specs/011). A clock-skewed step is reported
+  // as starting before its parent - that is the fault being simulated, so
+  // it is never corrected here and never clamped downstream (006 FR-014).
+  start:=now
+  if skewed{start=prevStart.Add(-time.Duration(1+duration)*time.Millisecond)}
+  now=now.Add(time.Duration(duration)*time.Millisecond);prevStart=start
+  e:=Event{ID:NewID(),Sequence:int64(sequence),Occurred:start,Received:run.Created,Workspace:scope.Workspace,Account:account,Actor:scope.Actor,ActorKind:"human",ObjectType:"simulation",ObjectID:run.ID,Version:"1",Action:"simulate",Outcome:"success",Code:stepCode,Operation:operation,Trace:trace.SpanContextFromContext(child).TraceID().String(),Span:trace.SpanContextFromContext(child).SpanID().String(),Parent:parent,Run:run.ID,Attempt:attempt,Step:fmt.Sprintf("%02d-%s",i,component),Component:component,Severity:"info",Duration:duration,Build:run.Build,Test:true}
   if i>1{e.ActorKind="system"};if component=="executor"{e.ActorKind="agent"}
   if stepCode!=""{e.Outcome="failed";e.Severity="error"};if stepCode=="CANCELLED"{e.Outcome="cancelled"};if stepCode=="DUPLICATE"||stepCode=="LATE_RESULT"{e.Outcome="ignored"};run.Events=append(run.Events,Sanitize(e))
   if stepCode!="" && stepCode!="NETWORK_UNAVAILABLE" && stepCode!="CLOCK_SKEW" && stepCode!="DUPLICATE" {break}

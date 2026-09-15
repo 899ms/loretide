@@ -245,3 +245,101 @@ describe("buildTraceWaterfall ordering and anomaly precedence", () => {
     expect(result.anomalies).toBe(2);
   });
 });
+
+// Real-shape regression for the defect reported as 006-W-2 / 006-W-9.
+//
+// Run 93edf840's six technical events, exactly as the database holds them once
+// occurred_at means what contracts/span-timing.md (specs/011) says it means:
+// the START of the step. The chain is contiguous - each step begins where the
+// previous one ended - so the waterfall must show no gap anywhere.
+//
+// Before the fix the simulator stamped the END of each step, and this same
+// chain was drawn with 5ms and 9ms of invented waiting, with executor sitting
+// visually inside daemon.
+describe("buildTraceWaterfall on a contiguous real run", () => {
+  const CHAIN = [
+    {step: "00-web", start: 0, duration: 13},
+    {step: "01-api", start: 13, duration: 8},
+    {step: "02-database", start: 21, duration: 13},
+    {step: "03-queue", start: 34, duration: 11},
+    {step: "04-daemon", start: 45, duration: 20},
+    {step: "05-executor", start: 65, duration: 6},
+  ];
+
+  function chainEvents(): DiagnosticEvent[] {
+    return CHAIN.map((s, i) => span({
+      spanId: `s${i}`,
+      parentSpanId: i === 0 ? "" : `s${i - 1}`,
+      occurredAt: at(s.start),
+      durationMs: s.duration,
+      step: s.step,
+    }));
+  }
+
+  it("leaves no gap between adjacent steps", () => {
+    const result = buildTraceWaterfall(chainEvents(), {cap: 100});
+    const rows = result.rows.filter(r => r.kind === "span");
+    expect(rows).toHaveLength(CHAIN.length);
+    for (let i = 0; i + 1 < rows.length; i++) {
+      const end = rows[i]!.startOffsetMs + rows[i]!.durationMs;
+      expect(rows[i + 1]!.startOffsetMs, `gap between row ${i} and ${i + 1}`).toBe(end);
+    }
+  });
+
+  it("places each step at its true offset, not shifted by its own duration", () => {
+    const result = buildTraceWaterfall(chainEvents(), {cap: 100});
+    for (let i = 0; i < CHAIN.length; i++) {
+      const row = rowOf(result, `s${i}`);
+      expect(row?.startOffsetMs, CHAIN[i]!.step).toBe(CHAIN[i]!.start);
+      expect(row?.durationMs, CHAIN[i]!.step).toBe(CHAIN[i]!.duration);
+    }
+  });
+
+  // The worst part of the old rendering was not the gaps but this: executor
+  // appeared to be nested inside daemon, which changes what the reader believes
+  // about causality, not just about timing.
+  it("does not make a later sibling look nested inside the previous step", () => {
+    const result = buildTraceWaterfall(chainEvents(), {cap: 100});
+    const daemon = rowOf(result, "s4");
+    const executor = rowOf(result, "s5");
+    expect(executor!.startOffsetMs).toBeGreaterThanOrEqual(
+      daemon!.startOffsetMs + daemon!.durationMs);
+  });
+
+  it("flags no anomaly on a well-formed contiguous chain", () => {
+    const result = buildTraceWaterfall(chainEvents(), {cap: 100});
+    expect(result.anomalies).toBe(0);
+  });
+});
+
+// Real-shape regression for 006-W-4. The clock_skew scenario now moves the
+// affected step's occurred_at before its parent's, which is what makes the
+// waterfall's clockSkew rule fire and text093 appear. Before the fix the
+// scenario only set an error code, so the rule and the data never met.
+describe("buildTraceWaterfall on a clock-skewed run", () => {
+  function skewedEvents(): DiagnosticEvent[] {
+    return [
+      span({spanId: "s0", parentSpanId: "", occurredAt: at(0), durationMs: 13}),
+      span({spanId: "s1", parentSpanId: "s0", occurredAt: at(13), durationMs: 8}),
+      // The skewed step: reported as starting before its own parent.
+      span({spanId: "s2", parentSpanId: "s1", occurredAt: at(4), durationMs: 20,
+        errorCode: "", step: "02-daemon"}),
+    ];
+  }
+
+  it("reports clockSkew so the panel can say the time cannot be read here", () => {
+    const result = buildTraceWaterfall(skewedEvents(), {cap: 100});
+    expect(rowOf(result, "s2")?.anomaly).toBe("clockSkew");
+    expect(result.anomalies).toBeGreaterThan(0);
+  });
+
+  // FR-014 (specs/006): annotate, never correct. Clamping the child into the
+  // parent's interval would hide the very thing this scenario exists to show.
+  it("does not clamp the skewed step into its parent's interval", () => {
+    const result = buildTraceWaterfall(skewedEvents(), {cap: 100});
+    const parent = rowOf(result, "s1");
+    const skewed = rowOf(result, "s2");
+    expect(skewed!.startOffsetMs).toBeLessThan(parent!.startOffsetMs);
+    expect(skewed!.durationMs).toBe(20);
+  });
+});
