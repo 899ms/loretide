@@ -691,6 +691,43 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-accounts/${encodeURIComponent(accountId)}/persona`, {method: "POST", body: JSON.stringify({persona_prompt: personaPrompt})});
   }
 
+  async listContentTopics(): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-topics");
+  }
+
+  async getContentTopic(topicCardId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}`);
+  }
+
+  async createContentTopic(body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-topics", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async actOnContentTopic(topicCardId: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}/actions`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async listContentBriefs(topicCardId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}/briefs`);
+  }
+
+  async appendContentBrief(topicCardId: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}/briefs`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async getContentBrief(topicCardId: string, revisionId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}/briefs/${encodeURIComponent(revisionId)}`);
+  }
+
   async contentDiagnosticStream(query: string, signal: AbortSignal): Promise<Response> {
     return this.fetchRaw(`/api/content-diagnostics/stream?${query}`, {signal});
   }

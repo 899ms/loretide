@@ -14,7 +14,7 @@ func TestDeleteWorkspace_PurgesContentDiagnosticsAtomically(t *testing.T) {
 	if testPool == nil {
 		t.Skip("database not available")
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	createWorkspace := func(slug string) string {
 		var id string
@@ -27,6 +27,8 @@ func TestDeleteWorkspace_PurgesContentDiagnosticsAtomically(t *testing.T) {
 	neighbourID := createWorkspace("handler-content-delete-neighbour-" + suffix)
 	t.Cleanup(func() {
 		for _, id := range []string{targetID, neighbourID} {
+			_, _ = testPool.Exec(context.Background(), `DELETE FROM content_brief_revision WHERE workspace_id = $1`, id)
+			_, _ = testPool.Exec(context.Background(), `DELETE FROM content_topic_card WHERE workspace_id = $1`, id)
 			_, _ = testPool.Exec(context.Background(), `DELETE FROM content_technical_log WHERE workspace_id = $1`, id)
 			_, _ = testPool.Exec(context.Background(), `DELETE FROM content_operation_audit WHERE workspace_id = $1`, id)
 			_, _ = testPool.Exec(context.Background(), `DELETE FROM content_diagnostic_run WHERE workspace_id = $1`, id)
@@ -58,6 +60,21 @@ func TestDeleteWorkspace_PurgesContentDiagnosticsAtomically(t *testing.T) {
 		if _, err := testPool.Exec(ctx, `INSERT INTO content_dispatch_outbox (item_id, kind, payload, workspace_id) VALUES ($1, 'diagnostic_run', '\x7b7d'::bytea, $2)`, "outbox-"+id, id); err != nil {
 			t.Fatalf("seed content_dispatch_outbox for %s: %v", id, err)
 		}
+		dbfx.InsertNoID(t, "content_topic_card", testutil.Cols{
+			"topic_card_id": "topic-" + id, "workspace_id": id,
+			"audience_problem_judgment": "audience/problem/judgment", "ip_fit": "fit",
+			"timing": "没有时效依据", "existing_content_relation": "没有",
+			"evidence_gaps_and_investment": "gap", "channels": testutil.Raw(`'[]'::jsonb`),
+			"recommended_action": "start",
+		}, "topic_card_id=$1", "topic-"+id)
+		dbfx.InsertNoID(t, "content_brief_revision", testutil.Cols{
+			"brief_revision_id": "brief-" + id, "topic_card_id": "topic-" + id,
+			"workspace_id": id, "revision": 1, "audience": "audience",
+			"core_problem": "problem", "claim_and_boundaries": "boundary",
+			"channels": testutil.Raw(`'[]'::jsonb`), "format": "format", "structure": "structure",
+			"citation_requirements": "citation", "source_scope": "scope",
+			"deliverable": "deliverable", "time_limit": "time", "cost_limit": "cost",
+		}, "brief_revision_id=$1", "brief-"+id)
 	}
 
 	functionName := "handler_test_fail_content_workspace_delete_" + suffix
@@ -81,7 +98,7 @@ func TestDeleteWorkspace_PurgesContentDiagnosticsAtomically(t *testing.T) {
 	request := newRequest(http.MethodDelete, "/api/workspaces/"+targetID, nil)
 	request = withURLParam(request, "id", targetID)
 	testutil.Call(t, testHandler.DeleteWorkspace, request).Want(http.StatusInternalServerError)
-	for _, table := range []string{"content_diagnostic_run", "content_operation_audit", "content_technical_log", "content_dispatch_outbox"} {
+	for _, table := range []string{"content_diagnostic_run", "content_operation_audit", "content_technical_log", "content_dispatch_outbox", "content_brief_revision", "content_topic_card"} {
 		var count int
 		if err := testPool.QueryRow(ctx, `SELECT count(*) FROM `+table+` WHERE workspace_id = $1`, targetID).Scan(&count); err != nil || count != 1 {
 			t.Fatalf("rollback %s count=%d err=%v, want 1", table, count, err)
@@ -104,7 +121,7 @@ func TestDeleteWorkspace_PurgesContentDiagnosticsAtomically(t *testing.T) {
 	request = newRequest(http.MethodDelete, "/api/workspaces/"+targetID, nil)
 	request = withURLParam(request, "id", targetID)
 	testutil.Call(t, testHandler.DeleteWorkspace, request).Want(http.StatusNoContent)
-	for _, table := range []string{"content_diagnostic_run", "content_operation_audit", "content_technical_log", "content_dispatch_outbox"} {
+	for _, table := range []string{"content_diagnostic_run", "content_operation_audit", "content_technical_log", "content_dispatch_outbox", "content_brief_revision", "content_topic_card"} {
 		for workspaceID, want := range map[string]int{targetID: 0, neighbourID: 1} {
 			var count int
 			if err := testPool.QueryRow(ctx, `SELECT count(*) FROM `+table+` WHERE workspace_id = $1`, workspaceID).Scan(&count); err != nil || count != want {

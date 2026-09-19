@@ -18,7 +18,7 @@
 
 | 诊断面 | 公共入口 | 怎么算做到了 |
 |---|---|---|
-| **审计写入点** | `Store.Audit(ctx, Scope, Event)`、`Store.CommitRun(ctx, Scope, Run, failAudit)` | 模块的每个改变状态的操作在**同一个事务内**调用 `Store.Audit`；审计写失败即整体回滚，不得吞掉错误继续提交 |
+| **审计写入点** | `Store.Audit(ctx, Scope, Event)`、`Store.AuditTx(ctx, Tx, Scope, Event)`、`Store.CommitRun(ctx, Scope, Run, failAudit)` | 自己持有业务事务的模块用 `AuditTx` 在**同一个事务内**写审计，并由调用方统一提交或回滚；审计写失败即整体回滚，不得吞掉错误继续提交。没有外部业务事务的既有调用继续用 `Audit` |
 | **技术日志** | `Store.Technical(ctx, Event)`、`SlogHandler`、`LogBuffer`（`NewLogBuffer`） | 模块的失败路径产出 `Event`，至少填 `Component` / `Severity` / `Action` / `Outcome` / `Code`；技术日志写失败**只计数**（`LogBuffer.Errors`），不得拖垮业务调用 |
 | **trace 传播** | `Child(ctx)`、`Pack(ctx, operation, attempt, sequence)`、`Unpack(ctx, Envelope)`、`DecodeQueuedEnvelope(ctx, wire)`；HTTP 边界由 `server/internal/middleware/trace.go` 承担 | 模块内跨步骤的调用用 `Child` 取子 span；跨进程/队列的消息用 `Pack` 打包、接收端用 `Unpack` 或 `DecodeQueuedEnvelope` 还原。模块**不自己造 trace id**，也不自己解析 `traceparent` |
 | **事务后派发** | `Outbox` 接口、`MemoryOutbox`（`NewMemoryOutbox`） | 事务内 `Register`，提交后 `Settle(ctx, tx, true)`，回滚则 `Settle(ctx, tx, false)`。**`MemoryOutbox` 是进程内实现，不跨重启**——模块若要求「重启后仍会派发」，必须自带持久实现，不得假设默认实现能给 |
