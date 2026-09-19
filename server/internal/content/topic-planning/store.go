@@ -31,8 +31,15 @@ type Store struct {
 	DB          Database
 	Diagnostics DiagnosticStore
 	Accounts    AccountReader
-	Build       string
-	NewID       func() string
+	// Guard is workspace-core's delete/write fence. Every write transaction
+	// takes it as its first statement, so a workspace deletion that has
+	// already committed cannot be followed by an orphan card or brief. The
+	// audit write takes the same lock, but only on paths that audit; leaning
+	// on that would make the fence a side effect of logging and lose it the
+	// day a write path stops auditing (Issue #104).
+	Guard diagnostics.WorkspaceWriteGuard
+	Build string
+	NewID func() string
 }
 
 func (s *Store) newID() string {
@@ -61,12 +68,28 @@ func decodeStrings(raw []byte) ([]string, error) {
 	return values, nil
 }
 
-func (s *Store) begin(ctx context.Context) (pgx.Tx, error) {
-	if s == nil || s.DB == nil || s.Diagnostics == nil {
+// begin opens a write transaction and fences it against workspace deletion.
+// The fence is taken before any topic statement, in the same lock order
+// DeleteWorkspace uses, so the delete either waits and then sweeps the
+// committed rows or commits first and makes this return ErrNotFound. Without a
+// guard there is no protocol to honour, so the write fails closed rather than
+// running unfenced.
+func (s *Store) begin(ctx context.Context, workspaceID string) (pgx.Tx, error) {
+	if s == nil || s.DB == nil || s.Diagnostics == nil || s.Guard == nil {
 		return nil, ErrStorage
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
+		return nil, ErrStorage
+	}
+	if err = s.Guard.LockForContentDiagnosticWrite(ctx, tx, workspaceID); err != nil {
+		_ = tx.Rollback(ctx)
+		// A workspace that is gone is reported exactly as a foreign one, so the
+		// boundary answers 404 and the response cannot be used to tell a
+		// deleted workspace from one the caller never had.
+		if errors.Is(err, diagnostics.ErrDenied) {
+			return nil, ErrNotFound
+		}
 		return nil, ErrStorage
 	}
 	return tx, nil
@@ -75,7 +98,14 @@ func (s *Store) begin(ctx context.Context) (pgx.Tx, error) {
 func (s *Store) event(ctx context.Context, workspaceID, actor, objectID, step string) (context.Context, diagnostics.Event) {
 	child, parent := diagnostics.Child(ctx)
 	span := trace.SpanContextFromContext(child)
-	return child, diagnostics.Sanitize(diagnostics.Event{
+	// Built unsanitized on purpose. Sanitize is the sink's job - AuditTx and
+	// Store.Technical each apply it - and running it here as well would do two
+	// things wrong: it blanks Component to "unknown" before the event has left
+	// the module (the allowlist has no content-module name in it), and it
+	// derives Message/Next/Retryable from a Code that reportFailure has not set
+	// yet. ip-profile and workspace-core hand their events over unsanitized for
+	// the same reason.
+	return child, diagnostics.Event{
 		ID:         s.newID(),
 		Workspace:  workspaceID,
 		Actor:      actor,
@@ -92,7 +122,7 @@ func (s *Store) event(ctx context.Context, workspaceID, actor, objectID, step st
 		Severity:   "info",
 		Build:      s.Build,
 		Occurred:   time.Now().UTC(),
-	})
+	}
 }
 
 func (s *Store) audit(ctx context.Context, tx pgx.Tx, workspaceID, actor, objectID, step string) (context.Context, error) {
@@ -117,7 +147,7 @@ func (s *Store) reportFailure(ctx context.Context, workspaceID, actor, objectID,
 		event.Code = "INPUT_CONFLICT"
 		event.Severity = "warn"
 	}
-	s.Diagnostics.Technical(child, diagnostics.Sanitize(event))
+	s.Diagnostics.Technical(child, event)
 }
 
 func (s *Store) Create(ctx context.Context, actor string, card TopicCard) (TopicCard, error) {
@@ -154,7 +184,7 @@ func (s *Store) Create(ctx context.Context, actor string, card TopicCard) (Topic
 		return TopicCard{}, ErrInvalid
 	}
 
-	tx, err := s.begin(ctx)
+	tx, err := s.begin(ctx, card.WorkspaceID)
 	if err != nil {
 		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
 		return TopicCard{}, err
@@ -247,7 +277,7 @@ func (s *Store) Act(ctx context.Context, workspaceID, actor, topicCardID string,
 		s.reportFailure(ctx, workspaceID, actor, topicCardID, string(req.Action), ErrInvalid)
 		return ActionResult{}, ErrInvalid
 	}
-	tx, err := s.begin(ctx)
+	tx, err := s.begin(ctx, workspaceID)
 	if err != nil {
 		s.reportFailure(ctx, workspaceID, actor, topicCardID, string(req.Action), err)
 		return ActionResult{}, err
@@ -319,7 +349,7 @@ func (s *Store) AppendBrief(ctx context.Context, workspaceID, actor, topicCardID
 		s.reportFailure(ctx, workspaceID, actor, topicCardID, "append-brief", ErrInvalid)
 		return BriefRevision{}, ErrInvalid
 	}
-	tx, err := s.begin(ctx)
+	tx, err := s.begin(ctx, workspaceID)
 	if err != nil {
 		s.reportFailure(ctx, workspaceID, actor, topicCardID, "append-brief", err)
 		return BriefRevision{}, err

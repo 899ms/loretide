@@ -18,6 +18,10 @@ import (
 	"github.com/multica-ai/multica/server/internal/testutil"
 )
 
+// topicTestGuard stands in for workspace-core's fence. This fixture runs in an
+// isolated schema that holds the content tables only, so there is no workspace
+// row to lock here. The fence itself is proven against the real schema by
+// internal/handler's TestContentTopicWritesAreFencedByWorkspaceDeletion.
 type topicTestGuard struct{}
 
 func (topicTestGuard) LockForContentDiagnosticWrite(context.Context, pgx.Tx, string) error {
@@ -97,8 +101,9 @@ func newTopicFixture(t *testing.T) topicFixture {
 	}
 	diagnosticStore := diagnostics.NewStore(pool, topicTestGuard{})
 	return topicFixture{
-		store: &Store{DB: pool, Diagnostics: diagnosticStore, Accounts: testAccountReader{pool}, Build: "test"},
-		db:    testutil.New(pool, "", ""),
+		store: &Store{DB: pool, Diagnostics: diagnosticStore, Accounts: testAccountReader{pool},
+			Guard: topicTestGuard{}, Build: "test"},
+		db: testutil.New(pool, "", ""),
 	}
 }
 

@@ -71,7 +71,11 @@ func (h *Handler) topicPlanningStore() *topicplanning.Store {
 		DB:          topicDatabase{dbExecutor: h.DB, txStarter: h.TxStarter},
 		Diagnostics: diagnosticStore,
 		Accounts:    h.contentAccountService(),
-		Build:       build,
+		// The same guard the diagnostics store holds, handed over directly so
+		// the topic write transaction takes the workspace delete fence itself
+		// instead of inheriting it from whether it happened to audit first.
+		Guard: newContentDiagnosticsWorkspaceWriteGuard(h.Queries),
+		Build: build,
 	}
 }
 

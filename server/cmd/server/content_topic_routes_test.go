@@ -53,6 +53,20 @@ func TestContentTopicEndpointsRejectUnauthenticatedCallers(t *testing.T) {
 	}
 }
 
+// workspaceCoreRefusal matches the row content/workspace-core writes when it
+// refuses a request. It cannot match on the component name: Sanitize is an
+// allowlist and carries no content-module name, so every module's refusal is
+// stored as component "unknown". What survives sanitization still identifies
+// this writer uniquely - the api middleware logs object_type "diagnostics" with
+// action "execute", and no other writer pairs object_type "account" with action
+// "query" and step "not_member".
+const workspaceCoreRefusal = `payload->>'error_code'='AUTHORIZATION_DENIED'
+	AND payload->>'object_type'='account'
+	AND payload->>'action'='query'
+	AND payload->>'outcome'='failed'
+	AND payload->>'severity'='warn'
+	AND payload->>'step'='not_member'`
+
 func TestContentTopicEndpointsHideTheWorkspaceFromNonMembers(t *testing.T) {
 	if testPool == nil || testServer == nil {
 		t.Skip("database not available")
@@ -65,13 +79,11 @@ func TestContentTopicEndpointsHideTheWorkspaceFromNonMembers(t *testing.T) {
 		t.Fatal(err)
 	}
 	fx.Cleanup(t, `DELETE FROM content_technical_log
-		WHERE workspace_id=$1 AND payload->>'actor_id'=$2
-		AND payload->>'component'='workspace-core'
-		AND payload->>'error_code'='AUTHORIZATION_DENIED'`, testWorkspaceID, outsider)
+		WHERE workspace_id=$1 AND payload->>'actor_id'=$2 AND `+workspaceCoreRefusal,
+		testWorkspaceID, outsider)
 	denialsBefore := fx.Count(t, `SELECT count(*) FROM content_technical_log
-		WHERE workspace_id=$1 AND payload->>'actor_id'=$2
-		AND payload->>'component'='workspace-core'
-		AND payload->>'error_code'='AUTHORIZATION_DENIED'`, testWorkspaceID, outsider)
+		WHERE workspace_id=$1 AND payload->>'actor_id'=$2 AND `+workspaceCoreRefusal,
+		testWorkspaceID, outsider)
 	for _, route := range contentTopicRoutes {
 		req, err := http.NewRequest(route.method, testServer.URL+route.path, strings.NewReader("{}"))
 		if err != nil {
@@ -90,9 +102,8 @@ func TestContentTopicEndpointsHideTheWorkspaceFromNonMembers(t *testing.T) {
 		}
 	}
 	denialsAfter := fx.Count(t, `SELECT count(*) FROM content_technical_log
-		WHERE workspace_id=$1 AND payload->>'actor_id'=$2
-		AND payload->>'component'='workspace-core'
-		AND payload->>'error_code'='AUTHORIZATION_DENIED'`, testWorkspaceID, outsider)
+		WHERE workspace_id=$1 AND payload->>'actor_id'=$2 AND `+workspaceCoreRefusal,
+		testWorkspaceID, outsider)
 	if got := denialsAfter - denialsBefore; got != len(contentTopicRoutes) {
 		t.Fatalf("workspace-core recorded %d topic refusals, want %d", got, len(contentTopicRoutes))
 	}
