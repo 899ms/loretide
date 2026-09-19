@@ -27,13 +27,13 @@ import (
 // running server and no test said so.
 //
 // These cases assert the property those handler tests structurally cannot:
-// that the eight endpoints are on the route table, and that they sit inside
+// that the account endpoints are on the route table, and that they sit inside
 // the workspace-member group rather than being exposed.
 
-// contentAccountRoutes is every endpoint LT-011 and LT-012 delivered. The two
-// list-and-detail persona routes are here even though the LT-013 page uses
-// only six of the eight: they belong to the same resource, and mounting them
-// in a later card means editing router.go a second time for no reason.
+// contentAccountRoutes is every endpoint delivered for the account resource,
+// including the profile pair from Issue #98. The two list-and-detail persona
+// routes remain here even though the original account page used only a subset:
+// one authoritative list prevents a handler from landing without a route.
 var contentAccountRoutes = []struct {
 	method  string
 	pattern string
@@ -49,6 +49,8 @@ var contentAccountRoutes = []struct {
 	{http.MethodPost, "/api/content-accounts/{id}/persona", "/api/content-accounts/acct-1/persona"},
 	{http.MethodGet, "/api/content-accounts/{id}/persona/revisions", "/api/content-accounts/acct-1/persona/revisions"},
 	{http.MethodGet, "/api/content-accounts/{id}/persona/{revisionId}", "/api/content-accounts/acct-1/persona/rev-1"},
+	{http.MethodGet, "/api/content-accounts/{id}/profile", "/api/content-accounts/acct-1/profile"},
+	{http.MethodPost, "/api/content-accounts/{id}/profile", "/api/content-accounts/acct-1/profile"},
 	{http.MethodPut, "/api/content-accounts/{id}/scope", "/api/content-accounts/acct-1/scope"},
 }
 

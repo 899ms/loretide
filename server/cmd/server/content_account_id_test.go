@@ -165,6 +165,53 @@ func TestPersonaEndpointsUseTheIdFromTheURLBehindTheRealRouter(t *testing.T) {
 	}
 }
 
+// The expression-profile endpoints carry the same path parameter through the
+// real workspace middleware. The account id deliberately differs from the
+// workspace id, so borrowing workspaceIDFromURL here would reproduce the
+// production-only 404 that direct handler calls cannot see.
+func TestExpressionProfileEndpointsUseTheIdFromTheURLBehindTheRealRouter(t *testing.T) {
+	if testServer == nil {
+		t.Skip("database not available")
+	}
+	accountID := createAccountThroughTheAPI(t,
+		fmt.Sprintf("URL id profile %d", time.Now().UnixNano()))
+
+	write := accountAPIRequest(t, http.MethodPost,
+		"/api/content-accounts/"+accountID+"/profile", `{
+			"audience":{"value":"designers","status":"confirmed"},
+			"content_pillars":{"value":"tools","status":"confirmed"},
+			"primary_channels":{"values":["zhihu"],"status":"confirmed"},
+			"weekly_hours":{"value":4,"status":"confirmed"}
+		}`)
+	defer write.Body.Close()
+	if write.StatusCode != http.StatusCreated {
+		t.Fatalf("POST profile = %d, want 201", write.StatusCode)
+	}
+
+	read := accountAPIRequest(t, http.MethodGet,
+		"/api/content-accounts/"+accountID+"/profile", "")
+	defer read.Body.Close()
+	if read.StatusCode != http.StatusOK {
+		t.Fatalf("GET profile = %d, want 200", read.StatusCode)
+	}
+	var response struct {
+		Profile struct {
+			Audience struct {
+				Value string `json:"value"`
+			} `json:"audience"`
+		} `json:"profile"`
+		Readiness struct {
+			CanStart bool `json:"can_start"`
+		} `json:"readiness"`
+	}
+	if err := json.NewDecoder(read.Body).Decode(&response); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if response.Profile.Audience.Value != "designers" || !response.Readiness.CanStart {
+		t.Fatalf("profile response = %+v", response)
+	}
+}
+
 // The scope endpoint is held to the same standard as the persona ones, and for
 // the same reason: it reads the account id out of the path through the very
 // helper that used to return the workspace id instead. A route-existence case
