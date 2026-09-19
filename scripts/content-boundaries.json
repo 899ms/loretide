@@ -95,6 +95,7 @@
     "server/internal/handler/content_diagnostics.go",
     "server/internal/handler/content_diagnostics_workspace_guard.go",
     "server/internal/handler/content_account.go",
+    "server/internal/handler/content_account_profile.go",
     "server/internal/handler/content_account_revision.go",
     "server/internal/handler/content_account_scope.go",
     "server/internal/handler/handler.go",

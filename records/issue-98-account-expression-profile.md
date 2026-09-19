@@ -1,0 +1,54 @@
+# Issue #98 — account expression profile backend
+
+- Date: 2026-09-19
+- Issue: `#98`
+- Base: `app-main` at `5d6d47f2954d2605c05c0acf1c3c813c2be3ef34`
+Starting implementation: `claude/spec-021-account-expression-profile` at
+`d1b9d3df63906811869d8c3539ec65283270e1be`
+
+## Scope delivered
+
+- Migration 482 adds the profile JSON document to the existing append-only
+  content-account revision.
+- The Go domain type covers all SOP 3.1 fields, per-field status,
+  normalization, shape validation, readiness, and neutral expression.
+- Persona and profile writes carry the unchanged half forward. Only
+  `ErrNotFound` means there is no history; other read failures stop the write.
+- Carry-forward is refreshed after selecting each candidate revision number so
+  a concurrent write is observed or forces a bounded retry instead of silently
+  restoring stale configuration.
+- `POST /api/content-accounts/{id}/profile` confirms a profile.
+- `GET /api/content-accounts/{id}/profile` reads the current profile and
+  derived decisions.
+- Route-table, real-middleware, handler, and pure module tests cover the new
+  contract. The content-boundary adapter allowlist includes the new handler.
+
+## Boundaries kept
+
+- No UI or TypeScript production code.
+- No model calls, profile extraction, or real executor.
+- No service restart and no business-database migration, cleanup, or test.
+- No new table, foreign key, index, update query, or delete query.
+- The UI remains a follow-up PR and requires manual acceptance there.
+
+## Generated and related files
+
+- `server/migrations/482_content_account_revision_profile.*.sql`: reversible
+  schema change.
+- `server/pkg/db/queries/content_account_revision.sql` and generated sqlc
+  outputs: store and retrieve the profile with every revision.
+- `server/internal/content/ip-profile/profile.go`: domain contract and derived
+  decisions.
+- `server/internal/content/ip-profile/revision.go`: append and carry-forward
+  behavior.
+- `server/internal/handler/content_account_profile.go`: HTTP adapter.
+- `server/cmd/server/router.go`: two route registrations.
+- `docs/development/account-expression-profile.md`: developer/API handoff.
+
+## Validation policy
+
+Database-free tests and package compilation may run locally. Database-backed
+handler and real-router tests are compiled but remain pending until a dedicated
+synthetic test database with migration 482 is explicitly authorized and
+available. Any skipped or unrun database test is reported as such; it is not
+presented as acceptance evidence.

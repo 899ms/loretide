@@ -131,15 +131,16 @@ func (s *Service) SetPersonaPrompt(ctx context.Context, workspaceID, actor, acco
 	if err := ValidatePersonaPrompt(prompt); err != nil {
 		return Revision{}, err
 	}
-	// The profile comes along unchanged. Writing a revision with an empty one
-	// would silently discard a profile the creator had just confirmed, and it
-	// would look like nothing happened until they reopened the page.
-	carried, err := s.carriedProfile(ctx, workspaceID, accountID)
-	if err != nil {
-		return Revision{}, err
-	}
 	for attempt := 0; attempt < maxRevisionAttempts; attempt++ {
 		next, err := s.RevisionStore.NextRevision(ctx, workspaceID, accountID)
+		if err != nil {
+			return Revision{}, err
+		}
+		// Read the other half after choosing the candidate number. If another
+		// writer lands before this read, it is carried. If it lands after this
+		// read, both writers contend for the same number and the loser retries,
+		// refreshing the profile instead of quietly restoring an older one.
+		carried, err := s.carriedProfile(ctx, workspaceID, accountID)
 		if err != nil {
 			return Revision{}, err
 		}
@@ -169,23 +170,25 @@ func (s *Service) SetPersonaPrompt(ctx context.Context, workspaceID, actor, acco
 // does when the prompt is what changed: a revision is the whole configuration,
 // and a write that only knows about half of it would drop the other half.
 //
-// The profile is validated before anything is read and normalised before it is
-// written: an unusable shape is refused outright, and a blank field marked
+// The profile is normalised and then validated before anything is read: an
+// unusable shape is refused outright, and a blank field marked
 // confirmed is lowered to pending rather than recording a decision the creator
-// did not make.
+// did not make. Unknown statuses on non-empty fields survive normalisation and
+// are therefore still refused.
 func (s *Service) SetProfile(ctx context.Context, workspaceID, actor, accountID string, profile ExpressionProfile) (Revision, error) {
-	if err := ValidateProfile(profile); err != nil {
-		return Revision{}, err
-	}
 	normalized := NormalizeProfile(profile)
-
-	carried := ""
-	if current, err := s.CurrentPersonaRevision(ctx, workspaceID, accountID); err == nil {
-		carried = current.PersonaPrompt
+	if err := ValidateProfile(normalized); err != nil {
+		return Revision{}, err
 	}
 
 	for attempt := 0; attempt < maxRevisionAttempts; attempt++ {
 		next, err := s.RevisionStore.NextRevision(ctx, workspaceID, accountID)
+		if err != nil {
+			return Revision{}, err
+		}
+		// Same ordering as SetPersonaPrompt: either observe a concurrent prompt
+		// now, or collide on the candidate number and refresh it on the retry.
+		carried, err := s.carriedPersonaPrompt(ctx, workspaceID, accountID)
 		if err != nil {
 			return Revision{}, err
 		}
@@ -213,12 +216,29 @@ func (s *Service) SetProfile(ctx context.Context, workspaceID, actor, accountID 
 // pending.
 func (s *Service) carriedProfile(ctx context.Context, workspaceID, accountID string) (ExpressionProfile, error) {
 	current, err := s.CurrentPersonaRevision(ctx, workspaceID, accountID)
-	if err != nil {
+	if errors.Is(err, ErrNotFound) {
 		// No revision yet is not a failure: the first prompt is written against
 		// an empty profile.
 		return ExpressionProfile{}, nil
 	}
+	if err != nil {
+		return ExpressionProfile{}, err
+	}
 	return current.Profile, nil
+}
+
+// carriedPersonaPrompt is the prompt the next profile revision inherits. Only
+// an account with no revision starts blank; a storage failure must stop the
+// write, otherwise it would quietly turn a real prompt into an empty one.
+func (s *Service) carriedPersonaPrompt(ctx context.Context, workspaceID, accountID string) (string, error) {
+	current, err := s.CurrentPersonaRevision(ctx, workspaceID, accountID)
+	if errors.Is(err, ErrNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return current.PersonaPrompt, nil
 }
 
 // auditRevision records who confirmed which account's configuration, and which

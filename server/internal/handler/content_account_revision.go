@@ -129,6 +129,7 @@ func revisionFromRow(revisionID, accountID, workspaceID string, revision int64, 
 	if len(rawProfile) > 0 {
 		_ = json.Unmarshal(rawProfile, &profile)
 	}
+	profile = ipprofile.NormalizeProfile(profile)
 	return ipprofile.Revision{
 		RevisionID: revisionID, AccountID: accountID, WorkspaceID: workspaceID,
 		Revision: revision, PersonaPrompt: prompt, Profile: profile, CreatedAt: created,

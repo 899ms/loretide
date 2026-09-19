@@ -166,7 +166,7 @@ func NormalizeProfile(profile ExpressionProfile) ExpressionProfile {
 			field.Status = FieldPending
 			continue
 		}
-		if field.Status != FieldConfirmed {
+		if field.Status == "" {
 			field.Status = FieldPending
 		}
 	}
@@ -176,11 +176,11 @@ func NormalizeProfile(profile ExpressionProfile) ExpressionProfile {
 			field.Status = FieldPending
 			continue
 		}
-		if field.Status != FieldConfirmed {
+		if field.Status == "" {
 			field.Status = FieldPending
 		}
 	}
-	if profile.WeeklyHours.Status != FieldConfirmed {
+	if profile.WeeklyHours.Status == "" {
 		profile.WeeklyHours.Status = FieldPending
 	}
 	return profile

@@ -1,6 +1,7 @@
 package ipprofile
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
@@ -264,4 +265,191 @@ func TestNeutralExpressionIsMarkedButNeverBlocks(t *testing.T) {
 	if !UsesNeutralExpression(typed) {
 		t.Error("an unconfirmed sample counted as a style sample")
 	}
+}
+
+type profileRevisionStore struct {
+	current    Revision
+	currentErr error
+	inserted   []Revision
+	nextHook   func(*profileRevisionStore)
+}
+
+func (s *profileRevisionStore) NextRevision(context.Context, string, string) (int64, error) {
+	if s.nextHook != nil {
+		hook := s.nextHook
+		s.nextHook = nil
+		hook(s)
+	}
+	if s.current.Revision > 0 {
+		return s.current.Revision + 1, nil
+	}
+	return 1, nil
+}
+
+func (s *profileRevisionStore) InsertRevision(_ context.Context, revision Revision) (Revision, error) {
+	s.inserted = append(s.inserted, revision)
+	s.current = revision
+	return revision, nil
+}
+
+func (s *profileRevisionStore) GetRevision(context.Context, string, string) (Revision, error) {
+	return Revision{}, ErrNotFound
+}
+
+func (s *profileRevisionStore) CurrentRevision(context.Context, string, string) (Revision, error) {
+	if s.currentErr != nil {
+		return Revision{}, s.currentErr
+	}
+	if s.current.RevisionID == "" {
+		return Revision{}, ErrNotFound
+	}
+	return s.current, nil
+}
+
+func (s *profileRevisionStore) ListRevisions(context.Context, string, string) ([]Revision, error) {
+	return append([]Revision(nil), s.inserted...), nil
+}
+
+func TestSetProfileNormalizesBlankChannelsBeforeValidation(t *testing.T) {
+	store := &profileRevisionStore{}
+	service := &Service{RevisionStore: store, NewID: func() string { return "rev-profile" }}
+
+	written, err := service.SetProfile(t.Context(), "ws", "actor", "acct", ExpressionProfile{
+		PrimaryChannels: ListField{Values: []string{"", "  "}, Status: FieldConfirmed},
+	})
+	if err != nil {
+		t.Fatalf("blank channel entries should normalize to an empty pending list: %v", err)
+	}
+	if written.Profile.PrimaryChannels.Status != FieldPending || len(written.Profile.PrimaryChannels.Values) != 0 {
+		t.Fatalf("stored channels = %+v, want empty and pending", written.Profile.PrimaryChannels)
+	}
+}
+
+func TestSetProfileStillRejectsNonBlankInvalidInput(t *testing.T) {
+	for name, profile := range map[string]ExpressionProfile{
+		"unknown channel": {
+			PrimaryChannels: ListField{Values: []string{"myspace"}, Status: FieldConfirmed},
+		},
+		"unknown status": {
+			Audience: TextField{Value: "designers", Status: "maybe"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := &profileRevisionStore{}
+			service := &Service{RevisionStore: store, NewID: func() string { return "rev-profile" }}
+
+			_, err := service.SetProfile(t.Context(), "ws", "actor", "acct", profile)
+			if !errors.Is(err, ErrProfile) {
+				t.Fatalf("error = %v, want ErrProfile", err)
+			}
+			if len(store.inserted) != 0 {
+				t.Fatalf("invalid profile inserted %d revisions", len(store.inserted))
+			}
+		})
+	}
+}
+
+func TestRevisionWritesCarryTheOtherHalfForward(t *testing.T) {
+	original := Revision{
+		RevisionID: "rev-1", AccountID: "acct", WorkspaceID: "ws", Revision: 1,
+		PersonaPrompt: "original persona",
+		Profile:       ExpressionProfile{Audience: confirmed("designers")},
+	}
+	store := &profileRevisionStore{current: original}
+	service := &Service{RevisionStore: store, NewID: func() string { return "rev-next" }}
+
+	profileWrite, err := service.SetProfile(t.Context(), "ws", "actor", "acct",
+		ExpressionProfile{ContentPillars: confirmed("tools")})
+	if err != nil {
+		t.Fatalf("set profile: %v", err)
+	}
+	if profileWrite.PersonaPrompt != original.PersonaPrompt {
+		t.Errorf("profile write carried persona %q, want %q", profileWrite.PersonaPrompt, original.PersonaPrompt)
+	}
+
+	promptWrite, err := service.SetPersonaPrompt(t.Context(), "ws", "actor", "acct", "next persona")
+	if err != nil {
+		t.Fatalf("set prompt: %v", err)
+	}
+	if promptWrite.Profile.ContentPillars != profileWrite.Profile.ContentPillars {
+		t.Errorf("prompt write did not carry profile: got %+v want %+v",
+			promptWrite.Profile.ContentPillars, profileWrite.Profile.ContentPillars)
+	}
+	if original.Profile.Audience != confirmed("designers") || original.PersonaPrompt != "original persona" {
+		t.Fatalf("old revision changed: %+v", original)
+	}
+}
+
+func TestRevisionWritesPropagateHistoryReadErrorsWithoutInserting(t *testing.T) {
+	readErr := errors.New("revision storage unavailable")
+	for name, write := range map[string]func(*Service) error{
+		"profile": func(service *Service) error {
+			_, err := service.SetProfile(t.Context(), "ws", "actor", "acct", ExpressionProfile{})
+			return err
+		},
+		"persona": func(service *Service) error {
+			_, err := service.SetPersonaPrompt(t.Context(), "ws", "actor", "acct", "persona")
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := &profileRevisionStore{currentErr: readErr}
+			service := &Service{RevisionStore: store, NewID: func() string { return "rev-next" }}
+
+			if err := write(service); !errors.Is(err, readErr) {
+				t.Fatalf("error = %v, want history read error", err)
+			}
+			if len(store.inserted) != 0 {
+				t.Fatalf("history read failure inserted %d revisions", len(store.inserted))
+			}
+		})
+	}
+}
+
+func TestRevisionWritesRefreshTheCarriedHalfAfterChoosingTheNextNumber(t *testing.T) {
+	latest := Revision{
+		RevisionID: "rev-2", AccountID: "acct", WorkspaceID: "ws", Revision: 2,
+		PersonaPrompt: "latest persona",
+		Profile:       ExpressionProfile{Audience: confirmed("latest audience")},
+	}
+
+	t.Run("profile write sees a persona that landed during next-revision lookup", func(t *testing.T) {
+		store := &profileRevisionStore{
+			current: Revision{RevisionID: "rev-1", Revision: 1, PersonaPrompt: "stale persona"},
+			nextHook: func(store *profileRevisionStore) {
+				store.current = latest
+			},
+		}
+		service := &Service{RevisionStore: store, NewID: func() string { return "rev-3" }}
+
+		written, err := service.SetProfile(t.Context(), "ws", "actor", "acct", ExpressionProfile{})
+		if err != nil {
+			t.Fatalf("set profile: %v", err)
+		}
+		if written.PersonaPrompt != latest.PersonaPrompt {
+			t.Fatalf("carried persona = %q, want latest %q", written.PersonaPrompt, latest.PersonaPrompt)
+		}
+	})
+
+	t.Run("persona write sees a profile that landed during next-revision lookup", func(t *testing.T) {
+		store := &profileRevisionStore{
+			current: Revision{
+				RevisionID: "rev-1", Revision: 1,
+				Profile: ExpressionProfile{Audience: confirmed("stale audience")},
+			},
+			nextHook: func(store *profileRevisionStore) {
+				store.current = latest
+			},
+		}
+		service := &Service{RevisionStore: store, NewID: func() string { return "rev-3" }}
+
+		written, err := service.SetPersonaPrompt(t.Context(), "ws", "actor", "acct", "new persona")
+		if err != nil {
+			t.Fatalf("set persona: %v", err)
+		}
+		if written.Profile.Audience != latest.Profile.Audience {
+			t.Fatalf("carried audience = %+v, want latest %+v",
+				written.Profile.Audience, latest.Profile.Audience)
+		}
+	})
 }
