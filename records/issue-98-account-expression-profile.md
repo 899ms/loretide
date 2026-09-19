@@ -5,6 +5,8 @@
 - Base: `app-main` at `5d6d47f2954d2605c05c0acf1c3c813c2be3ef34`
 Starting implementation: `claude/spec-021-account-expression-profile` at
 `d1b9d3df63906811869d8c3539ec65283270e1be`
+- Draft PR: https://github.com/899ms/loretide/pull/100
+- Issue state after handoff: open, assignee `899ms`, label `review-needed`
 
 ## Scope delivered
 
@@ -52,3 +54,13 @@ handler and real-router tests are compiled but remain pending until a dedicated
 synthetic test database with migration 482 is explicitly authorized and
 available. Any skipped or unrun database test is reported as such; it is not
 presented as acceptance evidence.
+
+Completed local evidence:
+
+- `go test ./internal/content/ip-profile -count=1`: PASS=74, SKIP=0, FAIL=0.
+- Targeted `go vet`: pass.
+- Handler and server test packages: compile pass.
+- Content boundaries, diagnostics contract, diagnostics no-upload: pass.
+- `pnpm typecheck --force`: 9/9 tasks, 0 cached.
+- M1, M2, and M3 compile-safe mutations each made the intended test red and
+  were immediately restored.
