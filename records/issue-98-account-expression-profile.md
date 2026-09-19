@@ -64,3 +64,26 @@ Completed local evidence:
 - `pnpm typecheck --force`: 9/9 tasks, 0 cached.
 - M1, M2, and M3 compile-safe mutations each made the intended test red and
   were immediately restored.
+
+## Review correction: raw shape before normalization
+
+PR review identified that `SetProfile` normalized before validation. An
+invalid status on an empty text/list field, or too many blank list entries,
+could therefore disappear before validation. The correction separates raw
+shape validation from content normalization:
+
+- Original statuses, field lengths, list sizes, and weekly-hour range are
+  validated first.
+- Valid blank text and lists are still normalized to `pending`; blank channel
+  entries are still removed.
+- Normalized controlled-channel values are validated before any revision read
+  or insert.
+- A top-level JSON `null` is rejected as a non-object profile.
+- Pure service tests cover invalid blank text/list statuses, an oversized
+  blank-only list, no-insert behavior, and the valid confirmed-empty downgrade.
+- The database-backed handler case asserts HTTP 400 and an unchanged revision
+  count for unknown channels, invalid blank statuses, and top-level `null`.
+
+No local database was used. The handler and real-router packages were compiled
+without executing `TestMain`; the corrected database assertions are reserved
+for the already-approved run-specific GitHub CI database.

@@ -88,14 +88,17 @@ func (h *Handler) GetAccountExpressionProfile(w http.ResponseWriter, r *http.Req
 func decodeExpressionProfile(w http.ResponseWriter, r *http.Request) (ipprofile.ExpressionProfile, error) {
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256*1024))
 	decoder.DisallowUnknownFields()
-	var profile ipprofile.ExpressionProfile
+	var profile *ipprofile.ExpressionProfile
 	if err := decoder.Decode(&profile); err != nil {
+		return ipprofile.ExpressionProfile{}, ipprofile.ErrProfile
+	}
+	if profile == nil {
 		return ipprofile.ExpressionProfile{}, ipprofile.ErrProfile
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return ipprofile.ExpressionProfile{}, ipprofile.ErrProfile
 	}
-	return profile, nil
+	return *profile, nil
 }
 
 func (h *Handler) profileWriteError(w http.ResponseWriter, err error) {

@@ -105,12 +105,12 @@ func validStatus(status FieldStatus) bool {
 	return status == "" || status == FieldPending || status == FieldConfirmed
 }
 
-// ValidateProfile refuses a profile that cannot be stored as it stands.
-//
-// It refuses shape problems only. It never refuses a profile for being
-// incomplete: incomplete is the normal state of a profile somebody is still
-// filling in, and 3.1 says so.
-func ValidateProfile(profile ExpressionProfile) error {
+// validateProfileShape checks the caller's original structure before
+// normalisation is allowed to lower statuses or discard blank list entries.
+// Content normalisation is intentionally not part of this pass: a valid blank
+// channel is removed later, but an invalid status or an oversized blank-only
+// list must not disappear before it can be refused.
+func validateProfileShape(profile ExpressionProfile) error {
 	for _, field := range profile.textFields() {
 		if !validStatus(field.Status) {
 			return ErrProfile
@@ -137,6 +137,19 @@ func ValidateProfile(profile ExpressionProfile) error {
 	}
 	if profile.WeeklyHours.Value < 0 || profile.WeeklyHours.Value > MaxWeeklyHours {
 		return ErrProfile
+	}
+	return nil
+}
+
+// ValidateProfile refuses a profile that cannot be stored as it stands.
+//
+// It refuses shape problems and nonblank controlled values that the account
+// cannot publish to. It never refuses a profile for being incomplete:
+// incomplete is the normal state of a profile somebody is still filling in,
+// and 3.1 says so.
+func ValidateProfile(profile ExpressionProfile) error {
+	if err := validateProfileShape(profile); err != nil {
+		return err
 	}
 	// Channels are the one list whose values are controlled: they are the same
 	// platforms an account can publish on, and a second list of platform names

@@ -310,28 +310,44 @@ func (s *profileRevisionStore) ListRevisions(context.Context, string, string) ([
 	return append([]Revision(nil), s.inserted...), nil
 }
 
-func TestSetProfileNormalizesBlankChannelsBeforeValidation(t *testing.T) {
+func TestSetProfileNormalizesValidBlankContentBeforeValidation(t *testing.T) {
 	store := &profileRevisionStore{}
 	service := &Service{RevisionStore: store, NewID: func() string { return "rev-profile" }}
 
 	written, err := service.SetProfile(t.Context(), "ws", "actor", "acct", ExpressionProfile{
+		Audience:        TextField{Value: "   ", Status: FieldConfirmed},
 		PrimaryChannels: ListField{Values: []string{"", "  "}, Status: FieldConfirmed},
 	})
 	if err != nil {
-		t.Fatalf("blank channel entries should normalize to an empty pending list: %v", err)
+		t.Fatalf("valid blank content should normalize to pending: %v", err)
+	}
+	if written.Profile.Audience.Status != FieldPending {
+		t.Fatalf("stored blank audience = %+v, want pending", written.Profile.Audience)
 	}
 	if written.Profile.PrimaryChannels.Status != FieldPending || len(written.Profile.PrimaryChannels.Values) != 0 {
 		t.Fatalf("stored channels = %+v, want empty and pending", written.Profile.PrimaryChannels)
 	}
 }
 
-func TestSetProfileStillRejectsNonBlankInvalidInput(t *testing.T) {
+func TestSetProfileRejectsInvalidRawShapeBeforeNormalization(t *testing.T) {
 	for name, profile := range map[string]ExpressionProfile{
 		"unknown channel": {
 			PrimaryChannels: ListField{Values: []string{"myspace"}, Status: FieldConfirmed},
 		},
-		"unknown status": {
+		"unknown status on nonblank text": {
 			Audience: TextField{Value: "designers", Status: "maybe"},
+		},
+		"unknown status on blank text": {
+			Audience: TextField{Value: "   ", Status: "maybe"},
+		},
+		"unknown status on empty list": {
+			PrimaryChannels: ListField{Values: []string{}, Status: "maybe"},
+		},
+		"unknown status on blank-only list": {
+			PrimaryChannels: ListField{Values: []string{"", "  "}, Status: "maybe"},
+		},
+		"too many blank list entries": {
+			StyleSamples: ListField{Values: blankEntries(MaxProfileListEntries + 1), Status: FieldPending},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -347,6 +363,14 @@ func TestSetProfileStillRejectsNonBlankInvalidInput(t *testing.T) {
 			}
 		})
 	}
+}
+
+func blankEntries(count int) []string {
+	entries := make([]string, count)
+	for i := range entries {
+		entries[i] = " "
+	}
+	return entries
 }
 
 func TestRevisionWritesCarryTheOtherHalfForward(t *testing.T) {

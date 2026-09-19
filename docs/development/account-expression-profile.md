@@ -15,7 +15,8 @@ Both endpoints are workspace-member protected and use the account id from the
   derived `readiness` and `uses_neutral_expression` fields. A real account with
   no revisions returns an empty, all-`pending` profile with HTTP 200.
 
-The request body is capped at 256 KiB. Unknown JSON fields, wrong JSON shapes,
+The request body is capped at 256 KiB and must be a JSON object; top-level
+`null` is not an empty profile. Unknown JSON fields, wrong JSON shapes,
 unsupported channels, invalid statuses, out-of-range hours, and oversized
 fields return the standard diagnostic 400 response without inserting a row.
 Missing and cross-workspace accounts use the same 404 refusal shape.
@@ -33,6 +34,11 @@ Missing and cross-workspace accounts use the same 404 refusal shape.
   unique-key retry; a successful later revision cannot carry stale data.
 - Pre-migration rows use the database default `{}` and read as an empty,
   all-`pending` profile.
+- The service validates the caller's original statuses, lengths, list sizes,
+  and hour range before normalization. It then removes blank list entries,
+  lowers valid confirmed-but-empty fields to `pending`, and validates
+  controlled channel values. Invalid blank fields therefore cannot become
+  valid merely because normalization discarded their status or entries.
 
 `readiness` and neutral expression are calculated from the current snapshot;
 they are not stored. No model or real executor is called.

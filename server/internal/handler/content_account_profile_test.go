@@ -84,18 +84,27 @@ func TestProfileRejectsInvalidShapeWithoutWriting(t *testing.T) {
 	ws := accountWorkspace(t, "profile-invalid", "owner")
 	accountID := createAccount(t, ws, "zhihu", "Profile invalid")["account_id"].(string)
 
-	var before int
-	dbfx.QueryRow(t, `SELECT count(*) FROM content_account_revision WHERE account_id = $1`, accountID).Scan(&before)
-	req := withURLParam(testutil.WithHeaders(
-		testutil.JSONRequest(http.MethodPost, "/api/content-accounts/"+accountID+"/profile",
-			`{"primary_channels":{"values":["myspace"],"status":"confirmed"}}`),
-		"X-User-ID", testUserID, "X-Workspace-ID", ws), "id", accountID)
-	testutil.Call(t, testHandler.SetAccountExpressionProfile, req).Want(http.StatusBadRequest)
+	for name, payload := range map[string]string{
+		"unknown channel":                `{"primary_channels":{"values":["myspace"],"status":"confirmed"}}`,
+		"blank text with unknown status": `{"audience":{"value":"   ","status":"maybe"}}`,
+		"empty list with unknown status": `{"primary_channels":{"values":[],"status":"maybe"}}`,
+		"blank list with unknown status": `{"primary_channels":{"values":["","  "],"status":"maybe"}}`,
+		"top-level null":                 `null`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var before int
+			dbfx.QueryRow(t, `SELECT count(*) FROM content_account_revision WHERE account_id = $1`, accountID).Scan(&before)
+			req := withURLParam(testutil.WithHeaders(
+				testutil.JSONRequest(http.MethodPost, "/api/content-accounts/"+accountID+"/profile", payload),
+				"X-User-ID", testUserID, "X-Workspace-ID", ws), "id", accountID)
+			testutil.Call(t, testHandler.SetAccountExpressionProfile, req).Want(http.StatusBadRequest)
 
-	var after int
-	dbfx.QueryRow(t, `SELECT count(*) FROM content_account_revision WHERE account_id = $1`, accountID).Scan(&after)
-	if after != before {
-		t.Fatalf("invalid input changed revision count from %d to %d", before, after)
+			var after int
+			dbfx.QueryRow(t, `SELECT count(*) FROM content_account_revision WHERE account_id = $1`, accountID).Scan(&after)
+			if after != before {
+				t.Fatalf("invalid input changed revision count from %d to %d", before, after)
+			}
+		})
 	}
 }
 

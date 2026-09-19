@@ -170,12 +170,15 @@ func (s *Service) SetPersonaPrompt(ctx context.Context, workspaceID, actor, acco
 // does when the prompt is what changed: a revision is the whole configuration,
 // and a write that only knows about half of it would drop the other half.
 //
-// The profile is normalised and then validated before anything is read: an
-// unusable shape is refused outright, and a blank field marked
+// The caller's original shape is validated before normalisation can discard a
+// blank list entry or lower a status. Valid blank content is then normalised
+// and the result is validated again for controlled values. A blank field marked
 // confirmed is lowered to pending rather than recording a decision the creator
-// did not make. Unknown statuses on non-empty fields survive normalisation and
-// are therefore still refused.
+// did not make, while an unknown status is refused even when its value is blank.
 func (s *Service) SetProfile(ctx context.Context, workspaceID, actor, accountID string, profile ExpressionProfile) (Revision, error) {
+	if err := validateProfileShape(profile); err != nil {
+		return Revision{}, err
+	}
 	normalized := NormalizeProfile(profile)
 	if err := ValidateProfile(normalized); err != nil {
 		return Revision{}, err
