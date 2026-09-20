@@ -27,6 +27,9 @@ var contentTopicRoutes = []struct {
 	{http.MethodGet, "/api/content-topics/{id}/briefs", "/api/content-topics/topic-1/briefs"},
 	{http.MethodPost, "/api/content-topics/{id}/briefs", "/api/content-topics/topic-1/briefs"},
 	{http.MethodGet, "/api/content-topics/{id}/briefs/{revisionId}", "/api/content-topics/topic-1/briefs/revision-1"},
+	{http.MethodPost, "/api/content-topics/{id}/briefs/{revisionId}/start", "/api/content-topics/topic-1/briefs/revision-1/start"},
+	{http.MethodGet, "/api/content-topics/{id}/briefs/{revisionId}/snapshots", "/api/content-topics/topic-1/briefs/revision-1/snapshots"},
+	{http.MethodGet, "/api/content-topics/{id}/snapshots/{snapshotId}", "/api/content-topics/topic-1/snapshots/snapshot-1"},
 }
 
 func TestContentTopicEndpointsAreMounted(t *testing.T) {
