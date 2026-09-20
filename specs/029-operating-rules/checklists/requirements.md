@@ -1,7 +1,7 @@
 # Specification Quality Checklist: 运营规则——品牌级设置（029）
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-09-20
+**Created**: 2026-09-20 ｜ **Updated**: 2026-09-20（裁决回写）
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -10,15 +10,15 @@
       — 有一处**故意的例外**：Current State 一节逐行引用了文件路径、行号与既有键名。这不是实现方案，是「今天到底是什么样」的证据；`docs/development/spec-kit-workflow.md` 要求 Current State 以代码为准，025 / 027 都是这么写的。要求（FR-*）本身不指定语言、框架或接口形状。
 - [x] Focused on user value and business needs
 - [x] Written for non-technical stakeholders
-      — User Story 1–4 用的是小张的语言；技术证据集中在 Current State 与 Q1–Q3，主控读的就是这两处。
+      — User Story 1–4 用的是小张的语言；技术证据集中在 Current State 与「裁决记录」两节。
 - [x] All mandatory sections completed
 
 ## Requirement Completeness
 
 - [x] No [NEEDS CLARIFICATION] markers remain
-      — **改成了「三条待裁决」一节**（Q1 存储形态与模块归属、Q2 渠道集与主页链接落点、Q3 027 的待补录判定改不改），每条带选项表、代价与暂定推荐值。这是本仓 025 / 027 已采用并被主控接受的形式；标记式的 `[NEEDS CLARIFICATION]` 会散落在正文里，而裁决需要的是一处能一次读完的比较表。
+      — **三条已于 2026-09-20 裁决**（PR #192 评论），「三条待裁决」一节已改写为「裁决记录」。受影响的 FR 全部回写：FR-012 / FR-012a（Q2）、FR-021（观察时点粒度）、FR-026 / FR-026a（Q3）、FR-027（页面与插槽）、FR-031（无迁移）、FR-033（三个 PR）；SC-014 ～ SC-016 新增。
 - [x] Requirements are testable and unambiguous
-      — 三条待裁决影响的 FR 已逐条标出（FR-012 → Q2、FR-021 → Q2 同类、FR-026 → Q3、FR-027 → Q1、FR-031 → Q1）。其余 FR 与裁决无关，现在就能测。
+      — 裁决之后没有悬而未决的 FR。形状写死在 `contracts/operating-rules.md`：键名、三态、端点、拒绝体点名的字段，逐条可测。
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
       — SC-004 / SC-005 / SC-007 / SC-009 点名了要检索的字段名与符号（`app_secret`、`http.Get`、写死的天数常量）。保留：这几条的全部价值就在于「检索得到什么」，抽象成「系统不保存凭据」会让它变成一句无法执行的话。
@@ -41,8 +41,10 @@
 
 ## Notes
 
-**三条待裁决已带暂定推荐值，不阻塞 `/speckit-plan`。** 按主控的常规指令（「推荐值暂定不阻塞」），plan 与 tasks 可以按 Q1=A / Q2=A / Q3=A 起草；裁决回来后回写四个件并重跑 `/speckit-analyze`，与 025 / 027 的流程一致。
+**四个件已按裁决回写**（2026-09-20）：`spec.md`（裁决记录 + 受影响 FR/SC）、`plan.md`、`contracts/operating-rules.md`、`tasks.md`（43 条，分三个 PR）。
 
-**Q3 是这三条里我最没把握的一条。** 它要动的是 027 里一条**刻意写下来的守卫**（`TestThePendingDerivationHasNoTimeLogic`），而那条守卫的注释正是为了防住「顺手写一个默认天数」。观察时点落地之后，守卫的前提确实过期了——但让守卫认识新的合法写法，和把守卫拆掉，是两件不一样的事。规格里已经写明：若裁为 B，守卫改成「天数必须读自设置，不得是字面量」，而不是允许时间比较。
+**Q3 的裁决把我最担心的事挡住了。** 我提的改良是「守卫不拆，改成『天数必须读自设置，不得是字面量』」，主控接受了这一条，**并且把它单列成第三个 PR**——后者是我没想到的，而它更好：改的是另一个模块里一条刻意写下来的守卫，合进 PR 1 会让这次越界混在四十个文件里看不见。
 
-**一处本规格没有回答、也不该由它回答的事**：§3.2 归哪个模块，权威表在文档仓库 `docs/12 §2`，本会话读不到。Q1 因此只给了三个选项与各自代价，没有替主控选。
+**实施时最容易做反的一处，已经写进三个件**：`ObservationDue` 的 `unknown` 必须走 `passed` 的分支，不是 `not_yet` 的。把「不知道到没到期」当成「还没到」，会让每一条没有发布时间的发布记录从今日工作台静悄悄消失——而它们恰恰是最需要有人去看一眼的那些。合同第 8 节、plan 的风险表、tasks 的 T035 与策略 5 各写了一遍。
+
+**一处本规格没有回答、也不该由它回答的事**：§3.2 归哪个模块，权威表在文档仓库 `docs/12 §2`，本会话读不到。Q1 当时只给了三个选项与各自代价，由主控裁为 A（`workspace-core`，登记表不改）。
