@@ -7,10 +7,14 @@ import type { PendingFeedback } from "./contract";
 // FR-005b said the block shows "暂不可用". The ruling on Q6 made updating that
 // part of this card's storage PR, and this is the function the dashboard uses.
 //
-// There is no time logic here, deliberately. SOP 3.2's brand-level
-// 反馈观察时点 does not exist yet, so "is it due" has no answer; a hard-coded
-// number of days would be a rule the SOP never stated, sitting where no
-// operator can see or change it.
+// The time logic is the server's, and it stays there. SOP 3.2's brand-level
+// 反馈观察时点 landed in specs/029, so "has it been long enough" now has an
+// answer - read out of the brand's settings on every call. This file never
+// computes it: a number of days living in the client would be a second rule,
+// out of step with the one the operator can actually see and change.
+//
+// What reaches here is the server's verdict per row, and all this file does is
+// decide which sentence goes with it.
 
 /** What the dashboard's fifth block shows. */
 export interface PendingFeedbackSummary {
@@ -60,4 +64,31 @@ export function describePending(item: PendingFeedback): string {
  */
 export function feedbackBlockIsAvailable(): boolean {
   return true;
+}
+
+/**
+ * Which sentence a pending row gets, from the server's `due`.
+ *
+ * Three answers, and keeping the last two apart is the whole point. "Nobody
+ * set a window" is not "the window elapsed": the first is a setting waiting to
+ * be filled in, the second is work waiting to be done, and a page that printed
+ * the same line for both would be reporting a measurement it never took.
+ *
+ * "not_yet" is not among them because such a record is not on this list; if a
+ * backend ever sent one it would land in "unstated" rather than being dressed
+ * up as either of the other two.
+ */
+export type PendingDueNote = "passed" | "unknown" | "unstated";
+
+export function pendingDueNote(due: string): PendingDueNote {
+  switch (due) {
+    case "passed":
+      return "passed";
+    case "unknown":
+      return "unknown";
+    default:
+      // Includes "" from a backend that predates 029 and anything this build
+      // has not heard of. Saying nothing beats saying the wrong one of two.
+      return "unstated";
+  }
 }

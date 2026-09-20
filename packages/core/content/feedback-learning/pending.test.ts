@@ -8,6 +8,7 @@ import {
   DASHBOARD_PREVIEW,
   describePending,
   feedbackBlockIsAvailable,
+  pendingDueNote,
   pendingFeedbackSummary,
 } from "./pending";
 
@@ -20,6 +21,7 @@ function pending(over: Partial<PendingFeedback> = {}): PendingFeedback {
     publicationRecordId: "pub-1", workId: "w", artifactId: "a",
     channel: "xiaohongshu", status: "verified_published",
     publishedAt: "2026-09-20T10:00:00Z", createdAt: "2026-09-20T10:00:00Z",
+    due: "passed",
     ...over,
   };
 }
@@ -87,4 +89,23 @@ describe("the dashboard block", () => {
     expect(fr005b, "FR-005b not found in specs/026").not.toBeNull();
     expect(fr005b![1]).not.toContain("暂不可用");
   });
+});
+
+// SOP 3.2's 反馈观察时点, as it reaches a row (specs/029 PR 3).
+describe("pendingDueNote", () => {
+  it("keeps an elapsed window and an unset one apart", () => {
+    expect(pendingDueNote("passed")).toBe("passed");
+    expect(pendingDueNote("unknown")).toBe("unknown");
+    expect(pendingDueNote("passed")).not.toBe(pendingDueNote("unknown"));
+  });
+
+  // A build older than its backend, or newer than one. Either way it was not
+  // told, and inventing "passed" would put a measurement on screen that nobody
+  // made.
+  it.each([["", "absent"], ["not_yet", "a value this list cannot contain"], ["whatever", "unheard of"]])(
+    "says nothing for %s (%s)",
+    (due) => {
+      expect(pendingDueNote(due)).toBe("unstated");
+    },
+  );
 });

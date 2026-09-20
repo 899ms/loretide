@@ -161,6 +161,38 @@ describe("parsePendingFeedback", () => {
     expect(parsePendingFeedback({ pending: null })).toEqual([]);
     expect(parsePendingFeedback(7)).toEqual([]);
   });
+
+  // specs/029 PR 3. A backend that predates the observation window sends no
+  // `due` at all, and a build that filled that in with "passed" would put a
+  // window nobody configured on screen as if it had elapsed.
+  it("reads an absent due as no answer, not as an elapsed window", () => {
+    const [item] = parsePendingFeedback({
+      pending: [{ publication_record_id: "pub-1" }],
+    });
+    expect(item!.due).toBe("");
+    expect(item!.due).not.toBe("passed");
+  });
+
+  it("keeps a due it was given, including one it does not recognise", () => {
+    const rows = parsePendingFeedback({
+      pending: [
+        { publication_record_id: "pub-1", due: "passed" },
+        { publication_record_id: "pub-2", due: "unknown" },
+        { publication_record_id: "pub-3", due: "something-new" },
+      ],
+    });
+    expect(rows.map((row) => row.due)).toEqual(["passed", "unknown", "something-new"]);
+  });
+
+  // A due of the wrong shape must not take the row down with it - the row
+  // still names a real publication record that is waiting for numbers.
+  it("keeps the row when due is not a string", () => {
+    const [item] = parsePendingFeedback({
+      pending: [{ publication_record_id: "pub-1", due: 7 }],
+    });
+    expect(item?.publicationRecordId).toBe("pub-1");
+    expect(item?.due).toBe("");
+  });
 });
 
 describe("comparing and describing values", () => {

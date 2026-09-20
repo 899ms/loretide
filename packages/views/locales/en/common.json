@@ -371,7 +371,7 @@
     "reviewTeamLabel": "Someone else reviews",
     "reviewTeamLater": "Later work. Nothing here can assign a reviewer yet, which is why there is no picker to grey out.",
     "observationTitle": "When to check the numbers",
-    "observationHint": "How long after publishing to go and copy the numbers down. A note to yourself — nothing chases you.",
+    "observationHint": "How long after publishing to go copy the numbers back. It is a note to yourself — nothing will chase you — but \"Feedback to record\" on Today uses this number to decide what it lists.",
     "observationDefaultLabel": "All channels",
     "observationDefaultHint": "Days after publishing. Leave blank and there is no answer to \"is it due\" — which is better than a number nobody chose.",
     "observationPlaceholder": "e.g. 14",
@@ -920,12 +920,15 @@
     "aiUnavailable": "Unavailable for now (executors are off; arrives with EP-08). Nothing below is a generated conclusion.",
     "aiRun": "Run",
     "pendingTitle": "Waiting for numbers",
-    "pendingHint": "Published, and nobody has recorded a single number for it. Not \"overdue\" — there is no observation time to be past.",
+    "pendingHint": "Published, nobody has recorded a single number for it, and the observation window this brand set has elapsed. A piece with no window set stays on the list too — when \"has it been long enough\" has no answer, it is shown rather than hidden.",
     "pendingScope": "Everything under this brand, not only this piece.",
+    "pendingWindowSource": "The window comes from \"When to go look\" in workspace settings, read afresh every time this opens.",
     "pendingEmpty": "Nothing waiting",
     "pendingActive": "Currently selected",
     "pendingOpen": "Record for this one",
     "pendingElsewhere": "On another piece — open that document to record it.",
+    "pendingDuePassed": "Observation window has elapsed",
+    "pendingDueUnknown": "No observation window set — whether it is time cannot be answered",
     "sources": {
       "comment": "Comment",
       "private_message": "Direct message",
@@ -980,7 +983,7 @@
     },
     "feedback": {
       "title": "Feedback to record",
-      "derivation": "Published, and nobody has recorded a single number for it.",
+      "derivation": "Published, no numbers recorded, and the observation window has elapsed — pieces with no window set count too.",
       "noMetrics": "No numbers recorded"
     },
     "accountGaps": {

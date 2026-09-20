@@ -16,6 +16,7 @@ import {
   excerptDraftToInput,
   metricDraftProblem,
   metricDraftToInput,
+  pendingDueNote,
   useContentFeedback,
   useContentMetrics,
   useImportContentMetrics,
@@ -773,12 +774,19 @@ function PendingSection({
   return (
     <SettingsSection
       title={t(($) => $.contentFeedback.pendingTitle)}
-      // The whole rule, stated: it went out and nobody has recorded a number.
-      // Not "overdue" - there is no observation time to be past.
+      // The whole rule, stated: it went out, nobody has recorded a number, and
+      // the brand's observation window (SOP 3.2, specs/029) has elapsed - or
+      // nobody set one, in which case the record is listed rather than hidden,
+      // because "has it been long enough" has no answer to hide it on.
       description={t(($) => $.contentFeedback.pendingHint)}
     >
       <SettingsCard>
         <SettingsRow label={t(($) => $.contentFeedback.pendingScope)}>
+          <span className="text-caption text-muted-foreground" />
+        </SettingsRow>
+        {/* Where the number of days comes from, so a surprising list has
+            somewhere to be corrected rather than argued with. */}
+        <SettingsRow label={t(($) => $.contentFeedback.pendingWindowSource)}>
           <span className="text-caption text-muted-foreground" />
         </SettingsRow>
         {pending.isPending ? (
@@ -823,6 +831,11 @@ function PendingRow({
   const { t } = useT("common");
   const parts = [channelLabel(t, item.channel)];
   if (item.publishedAt) parts.push(item.publishedAt);
+  // Why this row is here. An elapsed window and an absent one are different
+  // sentences, and a build that was told neither says nothing at all rather
+  // than picking one.
+  const note = dueNoteLabel(t, item.due);
+  if (note) parts.push(note);
   return (
     <SettingsRow
       // Weight, not colour: hovering a picked row must not visually downgrade
@@ -873,6 +886,19 @@ function recordLabel(t: Translate, record: FeedbackPublicationOption): string {
   if (record.publishedAt) parts.push(record.publishedAt);
   else if (record.createdAt) parts.push(record.createdAt);
   return parts.join(" · ");
+}
+
+function dueNoteLabel(t: Translate, due: string): string {
+  switch (pendingDueNote(due)) {
+    case "passed":
+      return t(($) => $.contentFeedback.pendingDuePassed);
+    case "unknown":
+      return t(($) => $.contentFeedback.pendingDueUnknown);
+    default:
+      // "unstated": a backend that predates 029, or an answer this build has
+      // not heard of. Nothing is better than the wrong one of the two above.
+      return "";
+  }
 }
 
 function problemLabel(t: Translate, problem: DraftProblem): string {
