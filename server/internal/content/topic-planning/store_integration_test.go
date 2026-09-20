@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -284,6 +285,13 @@ func TestAppendBriefRequiresTheStartAction(t *testing.T) {
 	}
 }
 
+// Two real appends racing for the card lock end up with different revisions.
+// This is the shape the product has, not the regression guard for the lock
+// ordering: which writer reaches the statement first is up to the scheduler,
+// and this test passes even against the single-statement version that numbers
+// from a stale snapshot. The guard is
+// TestAppendBriefNumbersTheRevisionAfterItHoldsTheCardLock, which orders the
+// two writers by hand (Issue #109).
 func TestConcurrentBriefAppendsReceiveDistinctRevisions(t *testing.T) {
 	fx := newTopicFixture(t)
 	ctx := t.Context()
@@ -433,5 +441,192 @@ func TestFixtureSchemaNameIsSafe(t *testing.T) {
 	}
 	if !strings.HasPrefix(name, "topic_test_") || len(name) != len("topic_test_")+32 {
 		t.Fatalf("unexpected schema name %q", name)
+	}
+}
+
+// waitForCardLockWaiter blocks until some other backend is waiting on a lock in
+// a statement that reads content_topic_card, which is how this process observes
+// that the appending goroutine has started its statement - and therefore taken
+// its snapshot - while the test still holds the card lock. Without this the
+// orchestration would race: an append that only starts after the competing
+// revision is committed sees it, and the stale-snapshot defect stays hidden.
+func waitForCardLockWaiter(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		var waiting int
+		if err := pool.QueryRow(context.Background(), `
+			SELECT count(*) FROM pg_stat_activity
+			WHERE datname = current_database() AND pid <> pg_backend_pid()
+			AND wait_event_type = 'Lock' AND query LIKE '%content_topic_card%'`).Scan(&waiting); err != nil {
+			t.Fatalf("inspect lock waiters: %v", err)
+		}
+		if waiting > 0 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("no backend ever waited on the topic card lock; the orchestration proved nothing")
+}
+
+// The revision number must be computed after the card lock is held, not in the
+// same statement that acquires it. READ COMMITTED gives a statement one
+// snapshot, taken when the statement starts; an appender that waits for the
+// lock still evaluates max(revision) against that older snapshot and picks a
+// number the winner has already taken, so a legitimate save dies on the unique
+// index. The orchestration below forces exactly that order: the appender starts
+// and blocks, the competing revision commits, and only then does the appender
+// get the lock.
+func TestAppendBriefNumbersTheRevisionAfterItHoldsTheCardLock(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, actor = "workspace-lock-order", "actor-a"
+	created, err := fx.store.Create(ctx, actor, completeCard(workspace))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = fx.store.Act(ctx, workspace, actor, created.TopicCardID,
+		ActionRequest{Action: ActionStart, Brief: completeBrief()}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The winner holds the card lock and commits its own revision 2 without
+	// letting go in between, so the appender below can only resume after that
+	// revision is visible to any snapshot taken from now on.
+	winner, err := fx.db.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer winner.Rollback(ctx)
+	var locked string
+	if err = winner.QueryRow(ctx, `SELECT topic_card_id FROM content_topic_card
+		WHERE workspace_id=$1 AND topic_card_id=$2 FOR UPDATE`,
+		workspace, created.TopicCardID).Scan(&locked); err != nil {
+		t.Fatalf("take the card lock: %v", err)
+	}
+
+	appended := make(chan struct {
+		brief BriefRevision
+		err   error
+	}, 1)
+	go func() {
+		input := completeBrief()
+		input.CoreProblem = "waited for the lock"
+		brief, appendErr := fx.store.AppendBrief(ctx, workspace, actor, created.TopicCardID, input)
+		appended <- struct {
+			brief BriefRevision
+			err   error
+		}{brief, appendErr}
+	}()
+	waitForCardLockWaiter(t, fx.db.Pool)
+
+	if _, err = winner.Exec(ctx, `INSERT INTO content_brief_revision (
+		brief_revision_id, topic_card_id, workspace_id, revision, audience,
+		core_problem, claim_and_boundaries, channels, format, structure,
+		citation_requirements, source_scope, deliverable, time_limit, cost_limit
+	) VALUES ($1,$2,$3,2,'a','b','c','[]'::jsonb,'d','e','f','g','h','i','j')`,
+		"winner-"+created.TopicCardID, created.TopicCardID, workspace); err != nil {
+		t.Fatalf("winner writes revision 2: %v", err)
+	}
+	if err = winner.Commit(ctx); err != nil {
+		t.Fatalf("winner commit: %v", err)
+	}
+
+	result := <-appended
+	if result.err != nil {
+		t.Fatalf("append after waiting for the lock: %v", result.err)
+	}
+	if result.brief.Revision != 3 {
+		t.Fatalf("append after waiting numbered itself %d, want 3", result.brief.Revision)
+	}
+	briefs, err := fx.store.ListBriefs(ctx, workspace, actor, created.TopicCardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revisions := []int64{}
+	for _, brief := range briefs {
+		revisions = append(revisions, brief.Revision)
+	}
+	if !reflect.DeepEqual(revisions, []int64{1, 2, 3}) {
+		t.Fatalf("revisions = %v, want [1 2 3]", revisions)
+	}
+}
+
+// The start path numbers the first revision from a constant rather than from a
+// count, so it cannot pick a stale number the way AppendBrief could. What it
+// does read under the lock is started_brief_revision_id, and that read has to
+// see the winner's value: a start that still believed the card had no first
+// version would insert a second revision 1 and die on the same unique index.
+// This is the start half of Issue #109, orchestrated the same way.
+func TestStartAfterWaitingForTheCardLockReturnsTheWinnersFirstBrief(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, actor = "workspace-start-lock-order", "actor-a"
+	created, err := fx.store.Create(ctx, actor, completeCard(workspace))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	winner, err := fx.db.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer winner.Rollback(ctx)
+	var locked string
+	if err = winner.QueryRow(ctx, `SELECT topic_card_id FROM content_topic_card
+		WHERE workspace_id=$1 AND topic_card_id=$2 FOR UPDATE`,
+		workspace, created.TopicCardID).Scan(&locked); err != nil {
+		t.Fatalf("take the card lock: %v", err)
+	}
+
+	started := make(chan struct {
+		result ActionResult
+		err    error
+	}, 1)
+	go func() {
+		result, actErr := fx.store.Act(ctx, workspace, actor, created.TopicCardID,
+			ActionRequest{Action: ActionStart, Brief: completeBrief()})
+		started <- struct {
+			result ActionResult
+			err    error
+		}{result, actErr}
+	}()
+	waitForCardLockWaiter(t, fx.db.Pool)
+
+	// Exactly what a start that won the lock commits: the first revision plus
+	// the pointer to it on the card.
+	winnerRevisionID := "winner-first-" + created.TopicCardID
+	if _, err = winner.Exec(ctx, `INSERT INTO content_brief_revision (
+		brief_revision_id, topic_card_id, workspace_id, revision, audience,
+		core_problem, claim_and_boundaries, channels, format, structure,
+		citation_requirements, source_scope, deliverable, time_limit, cost_limit
+	) VALUES ($1,$2,$3,1,'a','b','c','[]'::jsonb,'d','e','f','g','h','i','j')`,
+		winnerRevisionID, created.TopicCardID, workspace); err != nil {
+		t.Fatalf("winner writes the first revision: %v", err)
+	}
+	if _, err = winner.Exec(ctx, `UPDATE content_topic_card
+		SET status='started', started_brief_revision_id=$3, updated_at=now()
+		WHERE workspace_id=$1 AND topic_card_id=$2`,
+		workspace, created.TopicCardID, winnerRevisionID); err != nil {
+		t.Fatalf("winner points the card at it: %v", err)
+	}
+	if err = winner.Commit(ctx); err != nil {
+		t.Fatalf("winner commit: %v", err)
+	}
+
+	outcome := <-started
+	if outcome.err != nil {
+		t.Fatalf("start after waiting for the lock: %v", outcome.err)
+	}
+	if outcome.result.Brief == nil || outcome.result.Brief.BriefRevisionID != winnerRevisionID {
+		t.Fatalf("start after waiting returned %+v, want the winner's %s",
+			outcome.result.Brief, winnerRevisionID)
+	}
+	briefs, err := fx.store.ListBriefs(ctx, workspace, actor, created.TopicCardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(briefs) != 1 {
+		t.Fatalf("two starts left %d revisions, want 1", len(briefs))
 	}
 }

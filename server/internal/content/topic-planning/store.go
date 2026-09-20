@@ -362,15 +362,20 @@ func (s *Store) AppendBrief(ctx context.Context, workspaceID, actor, topicCardID
 		return BriefRevision{}, err
 	}
 
+	// Lock the card first, number the revision second, in two statements.
+	// READ COMMITTED gives a statement one snapshot, taken when the statement
+	// starts, and waiting for a row lock does not refresh it. Numbering inside
+	// the locking statement therefore counts the revisions as they were before
+	// the appender that won the lock committed, picks a number that appender
+	// already used, and turns a legitimate save into a unique-index failure the
+	// caller sees as 503 (Issue #109). The second statement starts after the
+	// lock is granted, so its snapshot includes whatever the winner wrote.
 	var startedBriefRevisionID string
-	var next int64
 	err = tx.QueryRow(ctx, `
-		SELECT COALESCE(started_brief_revision_id, ''),
-			COALESCE((SELECT max(revision) FROM content_brief_revision
-			WHERE workspace_id=$1 AND topic_card_id=$2), 0) + 1
+		SELECT COALESCE(started_brief_revision_id, '')
 		FROM content_topic_card
 		WHERE workspace_id=$1 AND topic_card_id=$2
-		FOR UPDATE`, workspaceID, topicCardID).Scan(&startedBriefRevisionID, &next)
+		FOR UPDATE`, workspaceID, topicCardID).Scan(&startedBriefRevisionID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		_ = tx.Rollback(ctx)
 		s.reportFailure(ctx, workspaceID, actor, topicCardID, "append-brief", ErrNotFound)
@@ -385,6 +390,15 @@ func (s *Store) AppendBrief(ctx context.Context, workspaceID, actor, topicCardID
 		_ = tx.Rollback(ctx)
 		s.reportFailure(ctx, workspaceID, actor, topicCardID, "append-brief", ErrInvalid)
 		return BriefRevision{}, ErrInvalid
+	}
+	var next int64
+	if err = tx.QueryRow(ctx, `
+		SELECT COALESCE(max(revision), 0) + 1 FROM content_brief_revision
+		WHERE workspace_id=$1 AND topic_card_id=$2`,
+		workspaceID, topicCardID).Scan(&next); err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "append-brief", err)
+		return BriefRevision{}, ErrStorage
 	}
 	brief, err := insertBrief(ctx, tx, s.newID(), workspaceID, topicCardID, next, input)
 	if err != nil {
