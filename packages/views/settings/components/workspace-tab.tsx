@@ -15,6 +15,7 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@multica/ui/components/ui/alert-dialog";
+import { OperatingRulesSections } from "@multica/views/content/workspace-core";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@multica/core/auth";
@@ -598,6 +599,11 @@ export function WorkspaceTab() {
             )}
         </SettingsCard>
       </SettingsSection>
+
+      {/* SOP §3.2's operating rules (specs/029). A Loretide section rendered
+          from its own module, so nothing about it lives in this shared file
+          beyond this line. */}
+      <OperatingRulesSections wsId={workspace.id} canManage={canManageWorkspace} />
 
       {/* Danger Zone — gated on the member query settling so the owner-only
           Delete button and the sole-owner Leave guidance don't flash in

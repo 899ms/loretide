@@ -39,6 +39,11 @@ import {
   SettingsTab,
   type SettingsSaveStatus,
 } from "@multica/views/settings/layout";
+import {
+  isWebLink,
+  readHomepage,
+  useSaveAccountHomepage,
+} from "@multica/core/workspace";
 import { PageHeader } from "@multica/views/layout/page-header";
 import { ExpressionProfileSections } from "./expression-profile";
 
@@ -152,6 +157,9 @@ function AccountSettingsContent({ wsId }: AccountSettingsPageProps) {
             accountId={selected.account_id}
             platform={selected.platform}
             displayName={selected.display_name}
+            // The homepage link lives in this blob (specs/029). The list
+            // response already carries it, so there is no second read.
+            settings={selected.settings}
             drafts={drafts}
             setDrafts={setDrafts}
           />
@@ -266,6 +274,7 @@ function AccountEditor({
   accountId,
   platform,
   displayName,
+  settings,
   drafts,
   setDrafts,
 }: {
@@ -273,6 +282,7 @@ function AccountEditor({
   accountId: string;
   platform: string;
   displayName: string;
+  settings: Record<string, unknown> | undefined;
   drafts: DraftState;
   setDrafts: (update: (state: DraftState) => DraftState) => void;
 }) {
@@ -361,6 +371,8 @@ function AccountEditor({
         </SettingsCard>
       </SettingsSection>
 
+      <HomepageSection wsId={wsId} accountId={accountId} settings={settings} />
+
       <SettingsSection
         title={t(($) => $.contentAccounts.personaTitle)}
         description={t(($) => $.contentAccounts.personaDescription)}
@@ -400,6 +412,92 @@ function AccountEditor({
 
       <ExpressionProfileSections wsId={wsId} accountId={accountId} />
     </>
+  );
+}
+
+/**
+ * The account's public page link (specs/029, SOP §3.2: "渠道设置保存账号名称或
+ * 主页链接以便标识").
+ *
+ * Its own save, not folded into "save profile": the link goes to its own
+ * endpoint, which merges one key server-side so the account's material scope
+ * (LT-014) survives. Persona has its own save for the same reason.
+ *
+ * The link is stored and never opened. Nothing here fetches it, and it is not
+ * rendered as an anchor or an image - a row of text is all a person needs to
+ * recognise which account this is.
+ */
+function HomepageSection({
+  wsId,
+  accountId,
+  settings,
+}: {
+  wsId: string;
+  accountId: string;
+  settings: Record<string, unknown> | undefined;
+}) {
+  const { t } = useT("common");
+  const save = useSaveAccountHomepage(wsId);
+  const stored = readHomepage(settings);
+  const [draft, setDraft] = useState<string | null>(null);
+  const value = draft ?? stored.link;
+  // An empty box is a legitimate save: clearing the link is how somebody says
+  // the account moved or the link was wrong.
+  const usable = value.trim() === "" || isWebLink(value.trim());
+  const dirty = value !== stored.link;
+
+  return (
+    <SettingsSection
+      title={t(($) => $.contentAccounts.homepageTitle)}
+      description={t(($) => $.contentAccounts.homepageDescription)}
+    >
+      <SettingsCard>
+        <SettingsRow label={t(($) => $.contentAccounts.homepageNeverOpened)}>
+          <span className="text-caption text-muted-foreground" />
+        </SettingsRow>
+        <SettingsRow
+          label={t(($) => $.contentAccounts.homepageLabel)}
+          description={
+            usable
+              ? stored.stored
+                ? undefined
+                : t(($) => $.contentAccounts.homepageUnset)
+              : t(($) => $.contentAccounts.homepageNotAWebLink)
+          }
+          size="text"
+        >
+          <Input
+            value={value}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder={t(($) => $.contentAccounts.homepagePlaceholder)}
+            aria-label={t(($) => $.contentAccounts.homepageLabel)}
+          />
+        </SettingsRow>
+        <SettingsRow label={t(($) => $.contentAccounts.save)}>
+          <div className="flex items-center gap-3">
+            <SettingsSaveState
+              status={save.isPending ? "saving" : save.isError ? "error" : "idle"}
+              savingLabel={t(($) => $.contentAccounts.saving)}
+              savedLabel={t(($) => $.contentAccounts.saved)}
+              errorLabel={t(($) => $.contentAccounts.failed)}
+            />
+            <Button
+              onClick={() =>
+                save.mutate(
+                  { accountId, homepage: value.trim() },
+                  // The draft goes away on success, so what is on screen from
+                  // here on is the server's value rather than a local copy.
+                  { onSuccess: () => setDraft(null) },
+                )
+              }
+              disabled={save.isPending || !usable || !dirty}
+            >
+              {t(($) => $.contentAccounts.save)}
+            </Button>
+          </div>
+        </SettingsRow>
+      </SettingsCard>
+    </SettingsSection>
   );
 }
 

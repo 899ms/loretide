@@ -115,6 +115,7 @@
     "server/internal/handler/content_source.go",
     "apps/web/app/[workspaceSlug]/(dashboard)/sources/page.tsx",
     "server/internal/handler/content_operating_rules.go",
-    "server/internal/handler/content_account_homepage.go"
+    "server/internal/handler/content_account_homepage.go",
+    "packages/views/settings/components/workspace-tab.tsx"
   ]
 }

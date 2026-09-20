@@ -83,17 +83,17 @@ description: "Task list for 029 operating rules — SOP §3.2 brand-level settin
 
 ## Phase 5: 页面（PR 2）
 
-- [ ] T027 `packages/views/content/workspace-core/index.tsx`：四个区块，**只挂既有组件**，不新增控件、不改样式。可用的上游 import 里已包含 `@multica/core/workspace` 与 `@multica/views/settings/layout`（`upstreamImports`），**登记表不改**
-- [ ] T027a `packages/views/package.json` 加 `./content/workspace-core` 导出，**与 `index.tsx` 同一个提交**。#177 曾只加导出不加目录，把 `rich-content/package-exports.test.ts` 弄红了一轮
-- [ ] T028 节奏区：八个平台各一个数字输入；**留空与填 0 在界面上看得出来是两件事**（留空显示「未设」，0 显示「这周不发」）
-- [ ] T029 渠道模板区：每渠道一段自由文本；**四个能交付、四个不能**，不能交付的**写明这一点**（FR-012a），但**照样可以配**
-- [ ] T029a 账号标识：主页链接输入，写明**只存不访问**；账号名沿用账号页既有字段，**不在本区块重复提供编辑入口**
-- [ ] T030 审核规则区：显示「自己审核」；**团队复核写明是后续能力**，**不提供任何成员选择控件——包括禁用的**（FR-019）
-- [ ] T030a 既有的**自动预检开关**（019）与审核规则**在同一处可见**，**不改它的键名、默认值或语义**（FR-020）
-- [ ] T031 观察时点区：全局一个数 + 每渠道可覆盖；界面说得出**「这个渠道自己设的」还是「用的全局值」**（`source` 三态）；**写明「观察时点尚未接入待补录判定」**（FR-026a，PR 3 合入前）
-- [ ] T032 插槽与注入：`workspace-tab.tsx` 加 `renderOperatingRules?`、`settings-page.tsx` 透传、`apps/web/.../settings/page.tsx` 注入。**两个上游文件各约三行，全是新增**；`git diff -w` 既有行零删除，**单列 `upstream:` 提交**。不要用 `extraDeviceTabs`——它的 prop 名与注释都写着是桌面端设备设置，而且它加的是一个新 tab，不是工作区分区里的一节
-- [ ] T033 四语言文案（en / zh-Hans / ja / ko）并跑 `locales/parity.test.ts`
-- [ ] T034 新建 `manual-ui-todo.md`，界面项全部进去并一律记「未执行」；**不写 UI 单测**（宪法 II），核对 `packages/views` 下没有本卡新增的 `.test.tsx`；跑 `rich-content/package-exports.test.ts`
+- [x] T027 `packages/views/content/workspace-core/index.tsx`：四个区块，**只挂既有组件**，不新增控件、不改样式。可用的上游 import 里已包含 `@multica/core/workspace` 与 `@multica/views/settings/layout`（`upstreamImports`），**登记表不改**
+- [x] T027a `packages/views/package.json` 加 `./content/workspace-core` 导出，**与 `index.tsx` 同一个提交**。#177 曾只加导出不加目录，把 `rich-content/package-exports.test.ts` 弄红了一轮
+- [x] T028 节奏区：八个平台各一个数字输入；**留空与填 0 在界面上看得出来是两件事**（留空显示「未设」，0 显示「这周不发」）
+- [x] T029 渠道模板区：每渠道一段自由文本；**四个能交付、四个不能**，不能交付的**写明这一点**（FR-012a），但**照样可以配**
+- [x] T029a 账号标识：主页链接输入，写明**只存不访问**；账号名沿用账号页既有字段，**不在本区块重复提供编辑入口**
+- [x] T030 审核规则区：显示「自己审核」；**团队复核写明是后续能力**，**不提供任何成员选择控件——包括禁用的**（FR-019）
+- [x] T030a 既有的**自动预检开关**（019）与审核规则**在同一处可见**，**不改它的键名、默认值或语义**（FR-020）
+- [x] T031 观察时点区：全局一个数 + 每渠道可覆盖；界面说得出**「这个渠道自己设的」还是「用的全局值」**（`source` 三态）；**写明「观察时点尚未接入待补录判定」**（FR-026a，PR 3 合入前）
+- [x] T032 插槽与注入：`workspace-tab.tsx` 加 `renderOperatingRules?`、`settings-page.tsx` 透传、`apps/web/.../settings/page.tsx` 注入。**两个上游文件各约三行，全是新增**；`git diff -w` 既有行零删除，**单列 `upstream:` 提交**。不要用 `extraDeviceTabs`——它的 prop 名与注释都写着是桌面端设备设置，而且它加的是一个新 tab，不是工作区分区里的一节
+- [x] T033 四语言文案（en / zh-Hans / ja / ko）并跑 `locales/parity.test.ts`
+- [x] T034 新建 `manual-ui-todo.md`，界面项全部进去并一律记「未执行」；**不写 UI 单测**（宪法 II），核对 `packages/views` 下没有本卡新增的 `.test.tsx`；跑 `rich-content/package-exports.test.ts`
 
 ---
 
@@ -160,3 +160,21 @@ T001 裁决回写 → T002 基线 → T003 读三处既有形状
 **一处守卫第一版是漏的，变异把它抓出来了：**
 
 **M5（把 `PUT` 改成整体替换）第一次只被真实 DB 用例抓到，静态守卫放过了它。** 守卫问的是「包里有没有出现过 `jsonb_set(`」，而变异只改了两条语句中的一条，另一条还在，包级检索就满足了。已改成**逐条检查每一处 `SET settings =` 的右侧表达式**，并断言至少有两处（规则一处、主页一处）。重跑 M5b，静态守卫也变红。**这是 027 的 M6/M8 同一个教训第三次出现：一条放过了变异的守卫，就是一条没在工作的守卫。**
+
+---
+
+## 实施记录（PR 2 页面，2026-09-20）
+
+分支 `claude/impl-029-operating-rules-page`，base `app-main` @ `60a9d2a`。T027–T034 全部落地。
+
+**三处与清单写的不一样，都在 PR 正文单列：**
+
+1. **`adapters` 加了一行，加的是一个上游文件。** 清单 T027 写的是「登记表不改」——那句话对 `modules` 成立，对 `adapters` 不成立。边界检查器 `scripts/check-content-boundaries.mjs:141` 规定：**任何不在内容根目录下的文件，只要 import 了内容模块，就必须在 `adapters` 里**。按主控指定的「独立分节组件 + 只加一行引用」，那一行引用就让 `packages/views/settings/components/workspace-tab.tsx` 成了适配器。先例是 `server/cmd/server/router.go`——它本来就是上游文件且早在 `adapters` 里。
+
+2. **core 的三个新文件从 `packages/core/workspace/index.ts` 再导出。** `upstreamImports` 给 `packages/views/content` 的允许项是 `@multica/core/workspace` **精确匹配**，子路径不算（只有 `@multica/ui` 和 `github.`/`go.` 前缀享受前缀匹配）。`timezone` 与 `auto-precheck` 早就是这么从桶里导出的，本卡照做，**没有去放宽 `upstreamImports`**。
+
+3. **多了一个 `rules-form.ts`（+22 条 node 用例）。** 清单 T028/T031 只说「留空与填 0 看得出来是两件事」「说得出是渠道的还是全局的」，没说判定放哪。和 027 的 `form.ts`、028 的 `draft.ts` 同一个理由：按钮可不可点、一个值该怎么读，是规则不是排版；桌面端将来复用的是这些纯函数，不是这个页面。
+
+**一处顺手修掉的**：`SettingsSaveState` 的错误文案我原本写成 `contentAccounts.saveFailed`，那个键不存在——`contentAccounts` 里已有的是 `failed`。typecheck 当场报出来，改用既有键，没有新增一个同义的。
+
+**页面 PR 没有变异验证这一环**（宪法 II 不写 UI 单测），所以 22 条 node 用例是这一段唯一的自动化证据。其中「清空的框不能变成 0」「存进去的 0 不能显示成未设置」两组是照着已知会出错的地方写的，不是照着实现反推的。
