@@ -61,6 +61,7 @@ import {
   type SettingsSaveStatus,
 } from "@multica/views/settings/layout";
 import { PageHeader } from "@multica/views/layout/page-header";
+import { StartRunSection } from "./start";
 
 // Topic cards and their frozen briefs (EP-04a, PR 2).
 //
@@ -583,6 +584,18 @@ function TopicCardPanel({
       <DecisionSection wsId={wsId} card={current} />
       {canAppendBrief(current) ? (
         <BriefSection wsId={wsId} card={current} />
+      ) : null}
+      {/* EP-04b sits after the decision actions and the brief versions: the
+          "start" action above accepts the topic and freezes the first brief,
+          "start a run" below takes one of those revisions up for work. Two
+          verbs on one card, adjacent and separately labelled. Shown only once
+          there is a revision to start. */}
+      {canAppendBrief(current) ? (
+        <StartRunSection
+          wsId={wsId}
+          card={current}
+          accountOptions={accountOptions}
+        />
       ) : null}
     </>
   );
