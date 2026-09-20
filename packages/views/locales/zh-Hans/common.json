@@ -520,5 +520,67 @@
         "uses_neutral_expression": "中性表达"
       }
     }
+  },
+  "contentWorks": {
+    "sectionTitle": "作品",
+    "sectionDescription": "这张选题卡下的作品。没有模型也能写——写作、编辑、留版本全都不需要它。",
+    "empty": "还没有作品。新建一个就可以开始写。",
+    "create": "新建作品",
+    "titleLabel": "标题",
+    "titlePlaceholder": "给这次产出起个名字",
+    "open": "打开",
+    "close": "收起",
+    "documentsTitle": "文档",
+    "documentsEmpty": "还没有文档。新建一篇正文或渠道稿。",
+    "addDocument": "新建文档",
+    "kindLabel": "类型",
+    "kinds": {
+      "body": "正文",
+      "channel_draft": "渠道稿"
+    },
+    "editorTitle": "编辑",
+    "bodyLabel": "正文",
+    "bodyPlaceholder": "在这里写。停下打字后会自动保存，但自动保存不产生版本。",
+    "draftStatus": {
+      "working": "有未存为版本的改动",
+      "saved": "已与最新版本一致"
+    },
+    "autosaving": "保存中",
+    "autosaveFailed": "自动保存失败，内容还在编辑框里",
+    "saveVersion": "存为一版",
+    "historyTitle": "版本历史",
+    "historyEmpty": "还没有版本。写完一段就可以存一版。",
+    "revision": "第 {{number}} 版",
+    "sourceLabel": "来源",
+    "actionLabel": "动作",
+    "sources": {
+      "generated": "模型生成",
+      "edited": "人工",
+      "adopted": "采用"
+    },
+    "actions": {
+      "saved": "存为一版",
+      "restored": "恢复",
+      "adopted": "采用为基线"
+    },
+    "fromLabel": "来自",
+    "restore": "恢复这一版",
+    "adopt": "采用为基线",
+    "restoreHint": "恢复会产生一个新版本，旧版本一条都不会改。",
+    "compareTitle": "版本对照",
+    "compareHint": "并排显示两版全文。本阶段不做逐字差异。",
+    "compareAgainst": "与哪一版对照",
+    "compareNone": "只有一版时无从对照。",
+    "compareLeft": "较早的一版",
+    "compareRight": "较晚的一版",
+    "aiTitle": "AI 辅助",
+    "aiUnavailable": "暂不可用（执行器禁用，EP-08 接入）",
+    "ai": {
+      "rewriteSelection": "选段改写",
+      "polishWhole": "全文润色",
+      "candidateVersions": "候选版本"
+    },
+    "failed": "操作失败",
+    "conflict": "有人同时存了一版，再存一次即可"
   }
 }

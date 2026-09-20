@@ -520,5 +520,67 @@
         "uses_neutral_expression": "Neutral expression"
       }
     }
+  },
+  "contentWorks": {
+    "sectionTitle": "Works",
+    "sectionDescription": "What has been produced from this topic card. No model is needed — writing, editing and keeping versions all work without one.",
+    "empty": "No works yet. Create one to start writing.",
+    "create": "New work",
+    "titleLabel": "Title",
+    "titlePlaceholder": "Name this piece of work",
+    "open": "Open",
+    "close": "Close",
+    "documentsTitle": "Documents",
+    "documentsEmpty": "No documents yet. Add a body or a channel cut.",
+    "addDocument": "New document",
+    "kindLabel": "Kind",
+    "kinds": {
+      "body": "Body",
+      "channel_draft": "Channel cut"
+    },
+    "editorTitle": "Editor",
+    "bodyLabel": "Body",
+    "bodyPlaceholder": "Write here. It saves on its own when you pause — and autosaving does not create a version.",
+    "draftStatus": {
+      "working": "Changes not saved as a version",
+      "saved": "Matches the latest version"
+    },
+    "autosaving": "Saving",
+    "autosaveFailed": "Autosave failed; your text is still in the editor",
+    "saveVersion": "Save as a version",
+    "historyTitle": "Version history",
+    "historyEmpty": "No versions yet. Save one when a passage is ready.",
+    "revision": "Version {{number}}",
+    "sourceLabel": "Source",
+    "actionLabel": "Action",
+    "sources": {
+      "generated": "Model",
+      "edited": "Written",
+      "adopted": "Adopted"
+    },
+    "actions": {
+      "saved": "Saved",
+      "restored": "Restored",
+      "adopted": "Adopted as baseline"
+    },
+    "fromLabel": "From",
+    "restore": "Restore this version",
+    "adopt": "Adopt as baseline",
+    "restoreHint": "Restoring adds a new version. No older version changes.",
+    "compareTitle": "Compare versions",
+    "compareHint": "Two full texts side by side. Word-level differences are not part of this phase.",
+    "compareAgainst": "Compare against",
+    "compareNone": "There is nothing to compare a single version with.",
+    "compareLeft": "Older",
+    "compareRight": "Newer",
+    "aiTitle": "AI assistance",
+    "aiUnavailable": "Not available yet (executors disabled, arriving with EP-08)",
+    "ai": {
+      "rewriteSelection": "Rewrite selection",
+      "polishWhole": "Polish the whole text",
+      "candidateVersions": "Candidate versions"
+    },
+    "failed": "That did not work",
+    "conflict": "Someone saved a version at the same moment; save again"
   }
 }

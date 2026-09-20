@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useState } from "react";
 import { useT } from "@multica/views/i18n";
 import {
@@ -241,9 +242,16 @@ function ReadOnlyValue({ value }: { value: string }) {
 
 export interface TopicPlanningPageProps {
   wsId: string;
+  /**
+   * Slot rendered at the end of a card's detail view. The work editor is a
+   * separate content module that the registry places downstream of this one,
+   * so the page it lives on may not import it; the web adapter composes the
+   * two and passes the section in here.
+   */
+  renderCardExtras?: (topicCardId: string) => ReactNode;
 }
 
-export function TopicPlanningPage({ wsId }: TopicPlanningPageProps) {
+export function TopicPlanningPage({ wsId, renderCardExtras }: TopicPlanningPageProps) {
   const { t } = useT("common");
   return (
     <>
@@ -252,12 +260,12 @@ export function TopicPlanningPage({ wsId }: TopicPlanningPageProps) {
           {t(($) => $.contentTopics.title)}
         </span>
       </PageHeader>
-      <TopicPlanningContent wsId={wsId} />
+      <TopicPlanningContent wsId={wsId} renderCardExtras={renderCardExtras} />
     </>
   );
 }
 
-function TopicPlanningContent({ wsId }: TopicPlanningPageProps) {
+function TopicPlanningContent({ wsId, renderCardExtras }: TopicPlanningPageProps) {
   const { t } = useT("common");
   const accountOptions = useAccountOptions(wsId);
   // "" is every card; the sentinel is the cards no account was chosen for.
@@ -376,6 +384,7 @@ function TopicPlanningContent({ wsId }: TopicPlanningPageProps) {
             wsId={wsId}
             card={selected}
             accountOptions={accountOptions}
+            renderCardExtras={renderCardExtras}
           />
         ) : null}
       </SettingsTab>
@@ -564,10 +573,12 @@ function TopicCardPanel({
   wsId,
   card,
   accountOptions,
+  renderCardExtras,
 }: {
   wsId: string;
   card: TopicCard;
   accountOptions: { value: string; label: string }[];
+  renderCardExtras?: (topicCardId: string) => ReactNode;
 }) {
   // The detail query is what the four actions refresh, so the panel reads it
   // rather than the row it was selected from.
@@ -597,6 +608,11 @@ function TopicCardPanel({
           accountOptions={accountOptions}
         />
       ) : null}
+      {/* 024's work sections sit after the start block, which is where the
+          ruling put their entry point. Rendered whatever the card's state:
+          SOP 6.2 requires that writing works with nothing else in place, so a
+          work does not wait on a brief or a start. */}
+      {renderCardExtras ? renderCardExtras(current.topicCardId) : null}
     </>
   );
 }

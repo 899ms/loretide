@@ -85,11 +85,11 @@ description: "Task list for 024 work-editor — manual writing, works, artifacts
 
 ## Phase 6: 页面 PR
 
-- [ ] T029 `packages/views/content/work-editor/`：编辑器页，**只挂既有组件**，不新增控件、不改样式
-- [ ] T030 编辑副本状态 `working` / `saved` 在界面上看得出来；版本历史侧栏**来源与动作两列都显示**（§7.1「来源与动作记录」）——压成一列会逼读者去看另一列才知道发生了什么
-- [ ] T031 **三个 AI 入口**（选段改写 / 全文润色 / 候选版本）：存在、**禁用**、写明「暂不可用（执行器禁用，EP-08 接入）」；**没有任何伪造的候选**
-- [ ] T032 版本差异：**只用既有组件**；没有合适的就**并排显示两版全文**，**不引入 diff 库**（plan 已写死这条，免得页面 PR 临时决定引入依赖）
-- [ ] T033 四语言文案（en / zh-Hans / ja / ko）并跑 `locales/parity.test.ts`；新建 `manual-ui-todo.md`，界面项全部进去；**不写 UI 单测**（宪法 II），核对 `packages/views` 下没有本卡新增的 `.test.tsx`
+- [x] T029 `packages/views/content/work-editor/`：编辑器页，**只挂既有组件**，不新增控件、不改样式
+- [x] T030 编辑副本状态 `working` / `saved` 在界面上看得出来；版本历史侧栏**来源与动作两列都显示**（§7.1「来源与动作记录」）——压成一列会逼读者去看另一列才知道发生了什么
+- [x] T031 **三个 AI 入口**（选段改写 / 全文润色 / 候选版本）：存在、**禁用**、写明「暂不可用（执行器禁用，EP-08 接入）」；**没有任何伪造的候选**
+- [x] T032 版本差异：**只用既有组件**；没有合适的就**并排显示两版全文**，**不引入 diff 库**（plan 已写死这条，免得页面 PR 临时决定引入依赖）
+- [x] T033 四语言文案（en / zh-Hans / ja / ko）并跑 `locales/parity.test.ts`；新建 `manual-ui-todo.md`，界面项全部进去；**不写 UI 单测**（宪法 II），核对 `packages/views` 下没有本卡新增的 `.test.tsx`
 
 ---
 
@@ -105,7 +105,7 @@ description: "Task list for 024 work-editor — manual writing, works, artifacts
       (M6) 让恢复写 `source = restored`（把动作当成第四种来源）→ T012a 变红；
       (M7) 让存版本忘记把 `draft_status` 置为 `saved` → T016a 与 T023 变红
 - [x] T036 核对改动文件全部落在 plan.md 清单内；清单外的在 PR 正文单列
-- [ ] T037 PR 正文：迁移说明（三张表 + **七个** CONCURRENTLY 索引、无外键、R5 为何不用 `PRIMARY KEY`、R6 **七条**登记、**每张表都有 `workspace_id` 打头的索引**及其理由）、**上游改动一节**、UI 影响（复用了哪些既有组件）、「SOP 对应」逐句写明现在可操作到什么程度。**两件本卡验不了的事如实写**：「已审核/交接/发布版本永不删除」只有结构保证；「EP-08 接上不必改调用方」今天无法证明
+- [x] T037 PR 正文：迁移说明（三张表 + **七个** CONCURRENTLY 索引、无外键、R5 为何不用 `PRIMARY KEY`、R6 **七条**登记、**每张表都有 `workspace_id` 打头的索引**及其理由）、**上游改动一节**、UI 影响（复用了哪些既有组件）、「SOP 对应」逐句写明现在可操作到什么程度。**两件本卡验不了的事如实写**：「已审核/交接/发布版本永不删除」只有结构保证；「EP-08 接上不必改调用方」今天无法证明
 
 ---
 

@@ -164,7 +164,8 @@
     "./autopilots/stores": "./autopilots/stores/index.ts",
     "./content/diagnostics": "./content/diagnostics/index.ts",
     "./content/ip-profile": "./content/ip-profile/index.ts",
-    "./content/topic-planning": "./content/topic-planning/index.ts"
+    "./content/topic-planning": "./content/topic-planning/index.ts",
+    "./content/work-editor": "./content/work-editor/index.ts"
   },
   "dependencies": {
     "@formatjs/intl-localematcher": "catalog:",

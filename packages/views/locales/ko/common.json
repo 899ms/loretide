@@ -520,5 +520,67 @@
         "uses_neutral_expression": "중립적 표현"
       }
     }
+  },
+  "contentWorks": {
+    "sectionTitle": "작품",
+    "sectionDescription": "이 주제 카드에서 나온 작품입니다. 모델 없이도 작성, 편집, 버전 보관이 모두 가능합니다.",
+    "empty": "아직 작품이 없습니다. 하나 만들면 바로 쓸 수 있습니다.",
+    "create": "작품 만들기",
+    "titleLabel": "제목",
+    "titlePlaceholder": "이번 결과물의 이름",
+    "open": "열기",
+    "close": "닫기",
+    "documentsTitle": "문서",
+    "documentsEmpty": "아직 문서가 없습니다. 본문이나 채널 원고를 추가하세요.",
+    "addDocument": "문서 만들기",
+    "kindLabel": "종류",
+    "kinds": {
+      "body": "본문",
+      "channel_draft": "채널 원고"
+    },
+    "editorTitle": "편집",
+    "bodyLabel": "본문",
+    "bodyPlaceholder": "여기에 씁니다. 입력을 멈추면 자동 저장되지만, 자동 저장은 버전을 만들지 않습니다.",
+    "draftStatus": {
+      "working": "버전으로 저장하지 않은 변경이 있습니다",
+      "saved": "최신 버전과 같습니다"
+    },
+    "autosaving": "저장 중",
+    "autosaveFailed": "자동 저장에 실패했습니다. 내용은 편집창에 그대로 있습니다",
+    "saveVersion": "버전으로 저장",
+    "historyTitle": "버전 기록",
+    "historyEmpty": "아직 버전이 없습니다. 한 단락을 마치면 저장하세요.",
+    "revision": "{{number}}번째 버전",
+    "sourceLabel": "출처",
+    "actionLabel": "동작",
+    "sources": {
+      "generated": "모델 생성",
+      "edited": "사람이 작성",
+      "adopted": "채택"
+    },
+    "actions": {
+      "saved": "버전으로 저장",
+      "restored": "복원",
+      "adopted": "기준으로 채택"
+    },
+    "fromLabel": "원본",
+    "restore": "이 버전으로 복원",
+    "adopt": "기준으로 채택",
+    "restoreHint": "복원하면 새 버전이 생깁니다. 기존 버전은 하나도 바뀌지 않습니다.",
+    "compareTitle": "버전 비교",
+    "compareHint": "두 버전의 전문을 나란히 보여줍니다. 단어 단위 차이는 이번 단계 범위가 아닙니다.",
+    "compareAgainst": "비교할 버전",
+    "compareNone": "버전이 하나뿐이면 비교할 수 없습니다.",
+    "compareLeft": "이전 버전",
+    "compareRight": "이후 버전",
+    "aiTitle": "AI 지원",
+    "aiUnavailable": "아직 사용할 수 없습니다(실행기 비활성화, EP-08에서 연결)",
+    "ai": {
+      "rewriteSelection": "선택 구간 다시 쓰기",
+      "polishWhole": "전문 다듬기",
+      "candidateVersions": "후보 버전"
+    },
+    "failed": "작업에 실패했습니다",
+    "conflict": "같은 순간에 다른 버전이 저장되었습니다. 다시 저장하세요"
   }
 }

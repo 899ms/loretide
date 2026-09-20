@@ -59,7 +59,8 @@
     "./locales/*": "./locales/*",
     "./content/diagnostics": "./content/diagnostics/index.tsx",
     "./content/ip-profile": "./content/ip-profile/index.tsx",
-    "./content/topic-planning": "./content/topic-planning/index.tsx"
+    "./content/topic-planning": "./content/topic-planning/index.tsx",
+    "./content/work-editor": "./content/work-editor/index.tsx"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",
