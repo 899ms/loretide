@@ -25,6 +25,11 @@ type DiagnosticStore interface {
 
 type AccountReader interface {
 	Get(context.Context, string, string) (ipprofile.Account, error)
+	// CurrentPersonaRevision is what a start pins: the revision id becomes the
+	// snapshot's persona_ref, and the expression profile on it is what the
+	// minimum start condition is judged from (EP-04b). Read through the same
+	// interface as Get so a test can hand over one fake, not two.
+	CurrentPersonaRevision(context.Context, string, string) (ipprofile.Revision, error)
 }
 
 type Store struct {

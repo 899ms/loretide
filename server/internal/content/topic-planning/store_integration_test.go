@@ -2,6 +2,7 @@ package topicplanning
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -39,13 +40,50 @@ type testAccountReader struct{ pool *pgxpool.Pool }
 
 func (r testAccountReader) Get(ctx context.Context, workspaceID, accountID string) (ipprofile.Account, error) {
 	var account ipprofile.Account
-	err := r.pool.QueryRow(ctx, `SELECT account_id, workspace_id FROM content_account
+	var settings []byte
+	err := r.pool.QueryRow(ctx, `SELECT account_id, workspace_id, settings FROM content_account
 		WHERE workspace_id=$1 AND account_id=$2`, workspaceID, accountID).
-		Scan(&account.AccountID, &account.WorkspaceID)
+		Scan(&account.AccountID, &account.WorkspaceID, &settings)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ipprofile.Account{}, ipprofile.ErrNotFound
 	}
-	return account, err
+	if err != nil {
+		return ipprofile.Account{}, err
+	}
+	// Settings carry the stored material scope preference, which a start
+	// records as saved_preference. Leaving them unread here would make the
+	// preference silently default and the two scope fields agree by accident.
+	if len(settings) > 0 {
+		if err = json.Unmarshal(settings, &account.Settings); err != nil {
+			return ipprofile.Account{}, err
+		}
+	}
+	return account, nil
+}
+
+// The account's settings and its current persona revision, read from the same
+// fixture schema. The revision is what a start pins and what readiness is
+// judged from; it is served here rather than mocked so an integration test
+// exercises the real profile JSON round trip.
+func (r testAccountReader) CurrentPersonaRevision(ctx context.Context, workspaceID, accountID string) (ipprofile.Revision, error) {
+	var revision ipprofile.Revision
+	var profile []byte
+	err := r.pool.QueryRow(ctx, `SELECT revision_id, account_id, workspace_id, revision, persona_prompt, profile
+		FROM content_account_revision
+		WHERE workspace_id=$1 AND account_id=$2
+		ORDER BY revision DESC LIMIT 1`, workspaceID, accountID).
+		Scan(&revision.RevisionID, &revision.AccountID, &revision.WorkspaceID,
+			&revision.Revision, &revision.PersonaPrompt, &profile)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ipprofile.Revision{}, ipprofile.ErrNotFound
+	}
+	if err != nil {
+		return ipprofile.Revision{}, err
+	}
+	if err = json.Unmarshal(profile, &revision.Profile); err != nil {
+		return ipprofile.Revision{}, err
+	}
+	return revision, nil
 }
 
 func newTopicFixture(t *testing.T) topicFixture {
@@ -87,11 +125,20 @@ func newTopicFixture(t *testing.T) topicFixture {
 		"470_content_audit_id.up.sql",
 		"471_content_log_id.up.sql",
 		"477_content_account.up.sql",
+		// The account's revision history and its profile column: a start pins
+		// the revision id and judges readiness from the profile on it.
+		"479_content_account_revision.up.sql",
+		"480_content_account_revision_unique_idx.up.sql",
+		"482_content_account_revision_profile.up.sql",
 		"483_content_topic_card.up.sql",
 		"485_content_brief_revision.up.sql",
 		"486_content_brief_revision_unique_idx.up.sql",
 		"488_content_topic_card_id_unique_idx.up.sql",
 		"489_content_brief_revision_id_unique_idx.up.sql",
+		"490_content_start_snapshot.up.sql",
+		"491_content_start_snapshot_id_unique_idx.up.sql",
+		"492_content_start_snapshot_workspace_idx.up.sql",
+		"493_content_start_snapshot_card_idx.up.sql",
 	} {
 		sql, readErr := os.ReadFile(filepath.Join(migrations, name))
 		if readErr != nil {
