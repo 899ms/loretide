@@ -947,6 +947,7 @@
   "contentToday": {
     "title": "今日工作台",
     "description": "值得写的、正在推进的、需要决定的、以及到期的。",
+    "quickCapture": "快速采集",
     "open": "打开",
     "seeAll": "查看全部",
     "loading": "加载中…",
@@ -994,6 +995,15 @@
         "contentPillars": "内容方向",
         "primaryChannels": "主要渠道",
         "weeklyHours": "每周投入"
+      }
+    },
+    "sources": {
+      "title": "待整理",
+      "hint": "收下来还没处理的。点开会进素材收件箱。",
+      "waiting": "待整理",
+      "kinds": {
+        "pasted_text": "粘贴文本",
+        "url": "链接"
       }
     }
   },

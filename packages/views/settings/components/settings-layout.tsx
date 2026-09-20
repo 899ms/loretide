@@ -30,21 +30,33 @@ export function SettingsContent({
 export function SettingsTab({
   title,
   description,
+  action,
   children,
 }: {
   title: ReactNode;
   description?: ReactNode;
+  /**
+   * One control in the page header, beside the title.
+   *
+   * For the action a page is *for* rather than an action on one of its rows -
+   * the Today dashboard's quick-capture entry is the first of these (SOP §11).
+   * Optional, so every existing tab renders exactly as before.
+   */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="space-y-8">
-      <header>
-        <h2 className="text-title-lg font-semibold tracking-tight">{title}</h2>
-        {description ? (
-          <p className="mt-1 max-w-2xl text-body leading-6 text-muted-foreground">
-            {description}
-          </p>
-        ) : null}
+      <header className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-title-lg font-semibold tracking-tight">{title}</h2>
+          {description ? (
+            <p className="mt-1 max-w-2xl text-body leading-6 text-muted-foreground">
+              {description}
+            </p>
+          ) : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
       </header>
       {children}
     </div>

@@ -65,6 +65,7 @@
     "discord_card": {
       "title": "加入 Discord",
       "dismiss": "关闭"
-    }
+    },
+    "content_group": "内容"
   }
 }

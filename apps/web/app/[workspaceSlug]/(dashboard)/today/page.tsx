@@ -30,6 +30,7 @@ import {
   useContentDeliveries,
   useContentReviews,
 } from "@multica/core/content/review-delivery";
+import { useContentSources } from "@multica/core/content/source-inbox";
 import {
   describePending,
   pendingDueNote,
@@ -42,6 +43,7 @@ import {
   accountsMissingConfig,
   deliveriesNeedingAction,
   reviewsNeedingAttention,
+  sourcesToOrganise,
   todayLinks,
   worksInProgress,
   worthWritingTopics,
@@ -53,6 +55,7 @@ import type {
   ProfileLike,
   ReviewEntry,
   Section,
+  SourceEntry,
   TodayLinks,
   TopicEntry,
   WorkEntry,
@@ -89,6 +92,7 @@ function TodayPage({ wsId }: { wsId: string }) {
   // URL that parses fine and resolves to no workspace (Issue #191).
   const slug = useRequiredWorkspaceSlug();
   const links = todayLinks(slug);
+  const navigation = useNavigation();
   return (
     <>
       <PageHeader className="xl:hidden">
@@ -98,14 +102,26 @@ function TodayPage({ wsId }: { wsId: string }) {
         <SettingsTab
           title={t(($) => $.contentToday.title)}
           description={t(($) => $.contentToday.description)}
+          // SOP §11's 随时 row asks for two things: a quick way in and a list
+          // of what is waiting. This is the first; the seventh section below
+          // is the second. Keeping the entry point at the top is the whole
+          // point of "quick" - putting it beside the list would mean scrolling
+          // past six sections to note something down.
+          action={
+            <Button variant="outline" onClick={() => navigation.push(links.sources)}>
+              {t(($) => $.contentToday.quickCapture)}
+            </Button>
+          }
         >
-          {/* SOP §2's five, in the sentence's own order, then the sixth. */}
+          {/* SOP §2's five, in the sentence's own order, then the two
+              additional ones (FR-005a). */}
           <TopicsSection wsId={wsId} links={links} />
           <WorksSection wsId={wsId} links={links} />
           <ReviewsSection wsId={wsId} links={links} />
           <DeliveriesSection wsId={wsId} links={links} />
           <FeedbackSection wsId={wsId} links={links} />
           <AccountGapsSection wsId={wsId} links={links} />
+          <SourcesSection wsId={wsId} links={links} />
         </SettingsTab>
       </SettingsContent>
     </>
@@ -440,6 +456,59 @@ function missingFieldLabel(t: Translate, field: string): string {
       // A newer server may name a field this build has no label for. Showing
       // the raw field name beats dropping the item.
       return field;
+  }
+}
+
+// ---------------------------------------------------------------- section 7
+
+/**
+ * SOP §11's "待整理收件箱": material collected and not yet dealt with.
+ *
+ * An additional section like the account gaps above it, not one of SOP §2's
+ * five - §2 does not mention the inbox, and inserting it among the five would
+ * misquote a sentence this page is built to follow (FR-005, FR-005a).
+ */
+function SourcesSection({ wsId, links }: SectionProps) {
+  const { t } = useT("common");
+  const navigation = useNavigation();
+  // Asked for by status rather than filtered here: the endpoint takes it, and
+  // fetching every archived item to drop it would be work done twice.
+  const sources = useContentSources(wsId, "inbox");
+  const section = sourcesToOrganise(sources.data ?? []);
+
+  return (
+    <SectionShell
+      title={t(($) => $.contentToday.sources.title)}
+      description={t(($) => $.contentToday.sources.hint)}
+      state={queryState(sources.isPending, sources.isError)}
+      section={section}
+      t={t}
+      onSeeAll={() => navigation.push(links.sources)}
+      renderRow={(entry: SourceEntry) => (
+        <SettingsRow
+          key={entry.sourceId}
+          label={entry.label}
+          description={`${sourceKindLabel(t, entry.kind)} · ${t(($) => $.contentToday.sources.waiting)}`}
+        >
+          <Button variant="outline" onClick={() => navigation.push(links.sources)}>
+            {t(($) => $.contentToday.open)}
+          </Button>
+        </SettingsRow>
+      )}
+    />
+  );
+}
+
+function sourceKindLabel(t: Translate, kind: string): string {
+  switch (kind) {
+    case "pasted_text":
+      return t(($) => $.contentToday.sources.kinds.pasted_text);
+    case "url":
+      return t(($) => $.contentToday.sources.kinds.url);
+    default:
+      // A newer server may name a kind this build has no label for. The raw
+      // value beats hiding the row.
+      return kind;
   }
 }
 

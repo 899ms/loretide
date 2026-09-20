@@ -32,6 +32,13 @@ const WORKSPACE_ROUTE_SEGMENTS = new Set([
   "runtimes",
   "skills",
   "settings",
+  // Loretide's content surfaces, so a pasted "/today/..." is recognised as an
+  // app route and gets the workspace prefix like every other one.
+  "today",
+  "sources",
+  "topics",
+  "accounts",
+  "diagnostics",
 ]);
 
 /**

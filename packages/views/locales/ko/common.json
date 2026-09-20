@@ -947,6 +947,7 @@
   "contentToday": {
     "title": "오늘의 작업대",
     "description": "쓸 만한 것, 진행 중인 것, 결정이 필요한 것, 기한이 된 것.",
+    "quickCapture": "빠른 수집",
     "open": "열기",
     "seeAll": "전체 보기",
     "loading": "불러오는 중…",
@@ -994,6 +995,15 @@
         "contentPillars": "콘텐츠 방향",
         "primaryChannels": "주요 채널",
         "weeklyHours": "주간 투입 시간"
+      }
+    },
+    "sources": {
+      "title": "정리 대기",
+      "hint": "수집했지만 아직 처리하지 않은 항목. 열면 자료 수신함으로 이동합니다.",
+      "waiting": "정리 대기",
+      "kinds": {
+        "pasted_text": "붙여넣은 텍스트",
+        "url": "링크"
       }
     }
   },

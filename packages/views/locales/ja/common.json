@@ -947,6 +947,7 @@
   "contentToday": {
     "title": "今日のワークベンチ",
     "description": "書く価値のあるもの、進行中のもの、判断が要るもの、期限が来たもの。",
+    "quickCapture": "クイック収集",
     "open": "開く",
     "seeAll": "すべて見る",
     "loading": "読み込み中…",
@@ -994,6 +995,15 @@
         "contentPillars": "コンテンツの方向性",
         "primaryChannels": "主要チャネル",
         "weeklyHours": "週あたりの投入時間"
+      }
+    },
+    "sources": {
+      "title": "未整理",
+      "hint": "収集したがまだ処理していないもの。開くと素材インボックスに移動します。",
+      "waiting": "未整理",
+      "kinds": {
+        "pasted_text": "貼り付けテキスト",
+        "url": "リンク"
       }
     }
   },

@@ -122,7 +122,12 @@ type NavKey =
   | "usage"
   | "runtimes"
   | "skills"
-  | "settings";
+  | "settings"
+  | "today"
+  | "sources"
+  | "topics"
+  | "accounts"
+  | "contentDiagnostics";
 
 // Static schema (key only) — labels resolved at render via useT("layout"),
 // icons derived from the destination path via routeIconForPath.
@@ -138,7 +143,12 @@ type NavLabelKey =
   | "usage"
   | "runtimes"
   | "skills"
-  | "settings";
+  | "settings"
+  | "today"
+  | "sources"
+  | "topics"
+  | "accounts"
+  | "content_diagnostics";
 
 // Nav icons are NOT declared here: they are derived from each item's
 // destination path at render time, so the sidebar and the desktop tab bar
@@ -160,6 +170,17 @@ const aiTeamNav: { key: NavKey; labelKey: NavLabelKey }[] = [
   { key: "squads", labelKey: "squads" },
   { key: "skills", labelKey: "skills" },
   { key: "runtimes", labelKey: "runtimes" },
+];
+
+// Loretide's content surfaces, in the order someone moves through them:
+// what to do today, what was collected, what to write about, who it is for,
+// and how the machinery is behaving.
+const contentNav: { key: NavKey; labelKey: NavLabelKey }[] = [
+  { key: "today", labelKey: "today" },
+  { key: "sources", labelKey: "sources" },
+  { key: "topics", labelKey: "topics" },
+  { key: "accounts", labelKey: "accounts" },
+  { key: "contentDiagnostics", labelKey: "content_diagnostics" },
 ];
 
 const utilityNav: { key: NavKey; labelKey: NavLabelKey }[] = [
@@ -873,6 +894,31 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
             <SidebarGroupContent>
               <SidebarMenu className="gap-0.5">
                 {aiTeamNav.map((item) => {
+                  const href = p[item.key]();
+                  const Icon = routeIconForPath(href);
+                  const isActive = isNavActive(pathname, href);
+                  return (
+                    <SidebarMenuItem key={item.key}>
+                      <SidebarMenuButton
+                        isActive={isActive}
+                        render={<AppLink href={href} />}
+                        className={NAV_ITEM_CLASS_NAME}
+                      >
+                        <Icon />
+                        <span>{t(($) => $.nav[item.labelKey])}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel>{t(($) => $.sidebar.content_group)}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu className="gap-0.5">
+                {contentNav.map((item) => {
                   const href = p[item.key]();
                   const Icon = routeIconForPath(href);
                   const isActive = isNavActive(pathname, href);

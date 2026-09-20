@@ -65,6 +65,7 @@
     "discord_card": {
       "title": "Join our Discord",
       "dismiss": "Dismiss"
-    }
+    },
+    "content_group": "Content"
   }
 }

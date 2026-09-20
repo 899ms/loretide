@@ -65,6 +65,7 @@
     "discord_card": {
       "title": "Discord 참여하기",
       "dismiss": "닫기"
-    }
+    },
+    "content_group": "콘텐츠"
   }
 }

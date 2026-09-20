@@ -135,6 +135,14 @@ vi.mock("@multica/core/paths", async (importOriginal) => ({
     runtimes: () => "/acme/runtimes",
     skills: () => "/acme/skills",
     settings: () => "/acme/settings",
+    // Loretide's content surfaces. The sidebar resolves each nav item as
+    // p[item.key](), so a key in contentNav and missing here throws
+    // "p[item.key] is not a function".
+    today: () => "/acme/today",
+    sources: () => "/acme/sources",
+    topics: () => "/acme/topics",
+    accounts: () => "/acme/accounts",
+    contentDiagnostics: () => "/acme/diagnostics",
     issueDetail: (id: string) => `/acme/issues/${id}`,
     projectDetail: (id: string) => `/acme/projects/${id}`,
   }),

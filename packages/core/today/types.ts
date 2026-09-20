@@ -128,6 +128,32 @@ export interface DeliveryEntry {
   reason: "due" | "pending_registration";
 }
 
+/**
+ * A collected source, as source-inbox's contract returns it.
+ *
+ * Declared here rather than imported for the same reason as everything else in
+ * this file: `packages/core/today/` sits outside the content roots, so it may
+ * not import a content module. The adapter page passes the real parsed objects
+ * in, and typecheck there is what keeps this honest.
+ */
+export interface SourceLike {
+  sourceId: string;
+  kind: string;
+  title: string;
+  url: string;
+  status: string;
+  capturedAt: string;
+}
+
+/** One row of the "waiting to be organised" section (SOP §11's 随时 row). */
+export interface SourceEntry {
+  sourceId: string;
+  /** What to show: the title someone gave it, else the link, else the id. */
+  label: string;
+  kind: string;
+  capturedAt: string;
+}
+
 export interface AccountGapEntry {
   accountId: string;
   displayName: string;
