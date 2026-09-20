@@ -735,8 +735,7 @@
     "sectionFailed": "이 섹션을 불러오지 못했습니다",
     "rowFailed": "이 항목을 불러오지 못했습니다",
     "more": "{{hidden}}건 더 (총 {{total}}건)",
-    "noPageYet": "이 항목들을 열 페이지가 아직 없습니다 — 검토·인계 페이지가 아직 구현되지 않았습니다.",
-    "noPageYetShort": "페이지 미구현",
+    "deepLinkHint": "주제 페이지를 엽니다: 검토와 인계는 카드의 작품과 문서 아래에 있으며 자체 경로가 없습니다.",
     "listSeparator": ", ",
     "topics": {
       "title": "쓸 만한 주제",

@@ -233,26 +233,30 @@ function WorksSection({ wsId }: { wsId: string }) {
 
 function ReviewsSection({ wsId }: { wsId: string }) {
   const { t } = useT("common");
+  const navigation = useNavigation();
   const reviews = useContentReviews(wsId);
   const section = reviewsNeedingAttention(reviews.data ?? []);
   return (
     <SectionShell
       title={t(($) => $.contentToday.reviews.title)}
-      // The review-delivery pages have not landed, so there is nowhere to send
-      // anyone. Saying that beats a control that goes nowhere.
-      description={t(($) => $.contentToday.noPageYet)}
+      // Review sections live inside the topics page, under a card's work and
+      // document. There is no route that addresses one review, so opening a
+      // row lands on the topics page rather than on the row itself - which is
+      // what the hint says, instead of implying a precise link.
+      description={t(($) => $.contentToday.deepLinkHint)}
       state={queryState(reviews.isPending, reviews.isError)}
       section={section}
       t={t}
+      onSeeAll={() => navigation.push(`/${wsId}/topics`)}
       renderRow={(entry: ReviewEntry) => (
         <SettingsRow
           key={entry.reviewRequestId}
           label={entry.channel}
           description={t(($) => $.contentToday.reviews.status[statusKey(entry.status)])}
         >
-          <span className="text-caption text-muted-foreground">
-            {t(($) => $.contentToday.noPageYetShort)}
-          </span>
+          <Button variant="outline" onClick={() => navigation.push(`/${wsId}/topics`)}>
+            {t(($) => $.contentToday.open)}
+          </Button>
         </SettingsRow>
       )}
     />
@@ -267,15 +271,17 @@ function statusKey(status: string): "pending" | "changesRequested" {
 
 function DeliveriesSection({ wsId }: { wsId: string }) {
   const { t } = useT("common");
+  const navigation = useNavigation();
   const deliveries = useContentDeliveries(wsId);
   const section = deliveriesNeedingAction(deliveries.data ?? []);
   return (
     <SectionShell
       title={t(($) => $.contentToday.deliveries.title)}
-      description={t(($) => $.contentToday.noPageYet)}
+      description={t(($) => $.contentToday.deepLinkHint)}
       state={queryState(deliveries.isPending, deliveries.isError)}
       section={section}
       t={t}
+      onSeeAll={() => navigation.push(`/${wsId}/topics`)}
       renderRow={(entry: DeliveryEntry) => (
         <SettingsRow
           key={entry.deliveryTaskId}
@@ -286,9 +292,9 @@ function DeliveriesSection({ wsId }: { wsId: string }) {
               : t(($) => $.contentToday.deliveries.pendingRegistration)
           }
         >
-          <span className="text-caption text-muted-foreground">
-            {t(($) => $.contentToday.noPageYetShort)}
-          </span>
+          <Button variant="outline" onClick={() => navigation.push(`/${wsId}/topics`)}>
+            {t(($) => $.contentToday.open)}
+          </Button>
         </SettingsRow>
       )}
     />
@@ -412,7 +418,7 @@ function SectionShell<T>({
   state: SectionState;
   section: Section<T>;
   renderRow: (entry: T) => ReactNode;
-  onSeeAll?: () => void;
+  onSeeAll: () => void;
   t: Translate;
 }) {
   return (
@@ -440,15 +446,9 @@ function SectionShell<T>({
               total: section.total,
             })}
           >
-            {onSeeAll ? (
-              <Button variant="outline" onClick={onSeeAll}>
-                {t(($) => $.contentToday.seeAll)}
-              </Button>
-            ) : (
-              <span className="text-caption text-muted-foreground">
-                {t(($) => $.contentToday.noPageYetShort)}
-              </span>
-            )}
+            <Button variant="outline" onClick={onSeeAll}>
+              {t(($) => $.contentToday.seeAll)}
+            </Button>
           </SettingsRow>
         ) : null}
       </SettingsCard>

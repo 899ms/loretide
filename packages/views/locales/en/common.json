@@ -735,8 +735,7 @@
     "sectionFailed": "Could not load this section",
     "rowFailed": "Could not read this one",
     "more": "{{hidden}} more ({{total}} in total)",
-    "noPageYet": "These items have no page to open yet — the review and handover pages have not landed.",
-    "noPageYetShort": "No page yet",
+    "deepLinkHint": "Opens the topics page: reviews and handovers live under a card's work and document, and have no route of their own.",
     "listSeparator": ", ",
     "topics": {
       "title": "Topics worth writing",

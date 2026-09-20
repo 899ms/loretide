@@ -735,8 +735,7 @@
     "sectionFailed": "这个区块读取失败",
     "rowFailed": "这一条读取失败",
     "more": "还有 {{hidden}} 条（共 {{total}} 条）",
-    "noPageYet": "这些条目暂时无处可打开——审核与交接页面尚未落地。",
-    "noPageYetShort": "页面尚未落地",
+    "deepLinkHint": "打开后进入选题页：审核与交接在选题卡的作品与文档之下，没有独立路由，需在那里找到这一条。",
     "listSeparator": "、",
     "topics": {
       "title": "值得写的选题",
