@@ -101,6 +101,14 @@ const PAGE_KEYWORDS: Record<WorkspacePageKey, string[]> = {
   runtimes: ["runtimes", "environments", "machines", "运行时"],
   skills: ["skills", "library", "技能"],
   settings: ["settings", "config", "preferences", "设置", "配置"],
+  // Loretide's content surfaces. Registering them in WORKSPACE_PAGES put them
+  // in the palette automatically (see the note above); these are the extra
+  // words someone would actually type to find them.
+  today: ["today", "workbench", "dashboard", "今日", "工作台"],
+  sources: ["sources", "materials", "inbox", "clippings", "素材", "收件箱"],
+  topics: ["topics", "ideas", "选题", "题目"],
+  accounts: ["accounts", "brand", "persona", "账号", "品牌"],
+  contentDiagnostics: ["diagnostics", "content", "traces", "诊断", "内容"],
 };
 
 const NAV_PAGE_KEYS = Object.keys(WORKSPACE_PAGES) as WorkspacePageKey[];

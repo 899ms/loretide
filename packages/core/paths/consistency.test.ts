@@ -30,6 +30,12 @@ describe("paths.workspace() shape", () => {
       ["skills", "skills"],
       ["squads", "squads"],
       ["settings", "settings"],
+      // Loretide's content surfaces (Issue #191).
+      ["today", "today"],
+      ["sources", "sources"],
+      ["topics", "topics"],
+      ["accounts", "accounts"],
+      ["contentDiagnostics", "diagnostics"],
     ];
     const wsAsAny = ws as unknown as Record<string, () => string>;
     for (const [method, segment] of expectedSegments) {

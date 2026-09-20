@@ -11,7 +11,12 @@
     "usage": "Analytics",
     "runtimes": "Runtimes",
     "skills": "Skills",
-    "settings": "Settings"
+    "settings": "Settings",
+    "today": "Today",
+    "sources": "Materials",
+    "topics": "Topics",
+    "accounts": "Accounts",
+    "content_diagnostics": "Content diagnostics"
   },
   "tab": {
     "issue": "Issue",

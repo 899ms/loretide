@@ -33,6 +33,15 @@ export type RouteIconName =
   | "Server"
   | "BookOpenText"
   | "Settings"
+  // Loretide's content surfaces (Issue #191). New names rather than reused
+  // ones: Inbox belongs to /inbox and ListTodo to /issues, and two nav items
+  // wearing the same icon are two nav items a person has to read to tell
+  // apart.
+  | "CalendarCheck"
+  | "FileStack"
+  | "Lightbulb"
+  | "AtSign"
+  | "Activity"
   | "File"
   | "FileText"
   | "FileImage"
@@ -55,7 +64,12 @@ export type NavLabelKey =
   | "usage"
   | "runtimes"
   | "skills"
-  | "settings";
+  | "settings"
+  | "today"
+  | "sources"
+  | "topics"
+  | "accounts"
+  | "content_diagnostics";
 
 /** Stable identifier for each workspace navigation page. */
 export type WorkspacePageKey =
@@ -70,7 +84,12 @@ export type WorkspacePageKey =
   | "usage"
   | "runtimes"
   | "skills"
-  | "settings";
+  | "settings"
+  | "today"
+  | "sources"
+  | "topics"
+  | "accounts"
+  | "contentDiagnostics";
 
 export interface WorkspacePage {
   /** Route segment at index 1 of `/{slug}/{segment}/...`. */
@@ -98,6 +117,19 @@ export const WORKSPACE_PAGES: Record<WorkspacePageKey, WorkspacePage> = {
   runtimes: { segment: "runtimes", icon: "Monitor", navKey: "runtimes" },
   skills: { segment: "skills", icon: "BookOpenText", navKey: "skills" },
   settings: { segment: "settings", icon: "Settings", navKey: "settings" },
+  // Loretide's content surfaces. Registered here because the coverage test in
+  // route-icons.test.ts requires every parameterless workspace route to have a
+  // page entry - without one the icon silently falls back to ListTodo and the
+  // route looks like Issues.
+  today: { segment: "today", icon: "CalendarCheck", navKey: "today" },
+  sources: { segment: "sources", icon: "FileStack", navKey: "sources" },
+  topics: { segment: "topics", icon: "Lightbulb", navKey: "topics" },
+  accounts: { segment: "accounts", icon: "AtSign", navKey: "accounts" },
+  contentDiagnostics: {
+    segment: "diagnostics",
+    icon: "Activity",
+    navKey: "content_diagnostics",
+  },
 };
 
 /** Reverse lookup: route segment → page key. */

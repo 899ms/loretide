@@ -80,6 +80,15 @@ const WORKSPACE_ROUTES: readonly RoutePattern[] = [
   ["skills", ":id"],
   ["settings"],
   ["attachments", ":id", "preview"],
+  // Loretide's content surfaces. Registered so a diagnostic path from one of
+  // them buckets to its own route instead of the catch-all mask - the mask is
+  // what the coverage test in diagnostic-context.test.ts refuses to accept for
+  // any builder paths.ts exposes.
+  ["today"],
+  ["sources"],
+  ["topics"],
+  ["accounts"],
+  ["diagnostics"],
 ];
 
 const GLOBAL_ROUTES: readonly RoutePattern[] = [
