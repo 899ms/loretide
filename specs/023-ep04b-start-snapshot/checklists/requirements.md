@@ -16,7 +16,7 @@
 ## Requirement Completeness
 
 - [x] No [NEEDS CLARIFICATION] markers remain
-      — 三个待裁决项已提升为文末「待裁决（clarify）」一节，各带推荐值与取舍，**不阻塞 plan**。
+      — 三条 clarify **已由主控裁决**（2026-09-20，Q1=B / Q2=A / Q3=A，附带一问接受，T026 入口已定），文末「裁决记录」一节记了结论与它改变了什么。
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -36,8 +36,9 @@
 
 ## Notes
 
-- **Q1 会影响 FR-013/FR-014/FR-023 与 Key Entities**：选 A（简报版本加 `snapshot jsonb` 列）则无新表、无删除清单改动；选 B（新表）则 FR-023 全部生效。plan 阶段需要先有裁决，或按推荐值 A 起草并在裁决后回写。
-- **Q2 只影响 FR-022 的措辞**，不影响结构。
-- **Q3 影响 FR-009～FR-012**，推荐值 A 已写进这四条。
+- **Q1=B 已回写**：FR-013（独立实体 + 稳定键）、FR-014（字面只插不改）、**新增 FR-014a**（可多次开始、端点不幂等）、FR-023（R1–R6 全生效）、**新增 FR-023a**（删除清单）、Key Entities（新表九列、无 `revision` 计数器）。决策顺序去掉第 7 条 409，读回改为两条新 GET，上游改动从一个文件变两个。
+- **Q2=A 已回写**：FR-022 的九个字段各有一条负例。
+- **Q3=A 已回写**：FR-009～FR-012。
+- **T026 入口已定**：选题卡详情页 `start` 之后的区块，列表不加。它反过来加了第三个索引 493（按卡列出），见 `analysis.md` §3 第 4 点。
 - 宪法 II：本卡不写 UI 单测、不做自动浏览器验收（FR-027）。界面项在实施时进 `manual-ui-todo.md`。
 - 宪法 X：本清单勾选只代表「已核对」，不代表验收通过。

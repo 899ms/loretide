@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-20
 
-**Status**: Draft（三个 clarify 待裁决，见文末）
+**Status**: Draft（三条 clarify 已裁决 2026-09-20，见文末「裁决记录」）
 
 **Input**: EP-04 拆分方案的第二切片，见 [../022-ep04-topic-brief/ep04-breakdown.md](../022-ep04-topic-brief/ep04-breakdown.md) 的 EP-04b 卡。Issue #127。
 
@@ -158,10 +158,10 @@ file_hashes     temperature     budget        timeout_ms
 
 ### Edge Cases
 
-- **同一份简报版本被开始两次**会怎样？见 **Q1**——这是本规格未定的基数问题。
+- **同一份简报版本被开始两次**：合法，产生两份独立快照（Q1=B，FR-014a）。端点**不是幂等的**；页面在飞行中禁用按钮，但服务端**不得**用「已存在快照」去拒绝。
 - **账号在「开始」与「写快照」之间被删**：写路径持删除栅栏，整个开始操作失败，不留半份快照。
 - **工作区在开始过程中被删**：同上，按 #104 的栅栏，拒绝与「工作区不存在」同形。
-- **`required_sources` / `excluded_sources` / `grants` 今天无来源**：见 **Q2**。
+- **九个字段今天无来源**：一律恒空并各有一条负例（Q2=A，FR-022）。
 - **预检开关关闭时**：本卡仍照常开始，只把开关当时的值记进快照；**触发或跳过预检是 EP-06 的事**，本卡不据此拒绝。
 - **中性表达**：`uses_neutral_expression` 为真**不**阻止开始（021 已定它是标记不是门槛），但它应当被记下来，否则事后无法解释成稿为什么是中性口吻。
 - **时钟**：快照的时间来自服务端，不接受客户端传入的时间。
@@ -195,8 +195,9 @@ file_hashes     temperature     budget        timeout_ms
 
 **输入快照**
 
-- **FR-013**：「开始」成功 MUST 产生恰好一份输入快照，字段 MUST 与 `diagnostics.Snapshot` 的十六个字段逐名对齐，MUST NOT 新造同义字段。
-- **FR-014**：快照 MUST 不可改写。口径要精确，因为 Q1=A 下它不是「只插」：没有更新端点、没有删除端点，写入路径只有「开始」一条，且该写入 MUST 只能把空快照变成非空快照，MUST NOT 改写一份已存在的快照。（Q1=B 下这条退化为字面意义的「只插不改」。）
+- **FR-013**：「开始」成功 MUST 产生恰好一份输入快照**实体**，带一个被引用的稳定键（`snapshot_id`）；其配置字段 MUST 与 `diagnostics.Snapshot` 的十六个字段逐名对齐，MUST NOT 新造同义字段。
+- **FR-014**：快照 MUST 只插不改：没有 UPDATE 语句，没有 DELETE 语句（工作区删除链里的那一条除外），没有更新端点，没有删除端点。守卫用例照 022 的 A6 形状扫查询文件。
+- **FR-014a**：同一版简报 MUST 可以被开始多次，每次产生一份独立的快照。重复开始 MUST NOT 被当作冲突拒绝——它是正常的产品行为（同一份简报换个资料范围再跑一次）。因此本端点 **不是幂等的**，这一点 MUST 写进合同与页面（按钮在飞行中禁用）。
 - **FR-015**：快照 MUST 记下开始那一刻的：所钉简报版本、账号表达配置版本（`persona_ref`）、资料范围与账号偏好、品牌预检开关值、是否中性表达、执行器状态。
 - **FR-015a**：品牌预检开关与中性表达在 `diagnostics.Snapshot` 的十六项里**没有对应字段**。它们 MUST 作为 `topic-planning` 的**扩展键**显式标注，MUST NOT 挤进任何一个既有字段——十六项各有含义，借用其中任何一个都会让「与 Snapshot 对齐」这句话变成半真。
 - **FR-016**：事后修改账号配置、账号偏好、简报或品牌开关 MUST NOT 改变任何已存在的快照。
@@ -212,7 +213,8 @@ file_hashes     temperature     budget        timeout_ms
 
 **工程约束**
 
-- **FR-023**：若本卡引入新表或新列，迁移 MUST 无外键、无级联；索引 MUST `CONCURRENTLY` 且单文件单语句；MUST 登记进 `concurrentIndexCleanups`；新表 MUST 进工作区删除清单并有用例。
+- **FR-023**：新表 `content_start_snapshot` 的迁移 MUST 无外键、无级联（R1/R2）；建表迁移 MUST NOT 含 `PRIMARY KEY` 或 `UNIQUE`（R5，它们会隐式建非并发索引）；每个索引 MUST `CREATE INDEX CONCURRENTLY` 且**单文件单语句**（R3/R4）；每个建索引的 up 迁移 MUST 登记进 `cmd/migrate` 的 `concurrentIndexCleanups`（R6），登记的索引名 MUST 与迁移真正建的那个逐字相同；建表迁移 MUST NOT 登记。
+- **FR-023a**：`content_start_snapshot` MUST 进工作区删除清单（`workspace_delete_manifest_test.go`），标为 `workspaceDelete`，并在删除事务的同一 CTE 链里有一条按 `workspace_id` 的 `DELETE`。
 - **FR-024**：快照写入 MUST 与工作区删除栅栏在同一事务内。
 - **FR-025**：交付 MUST 拆成「存储与接口 PR」与「页面 PR」两次。
 - **FR-026**：界面 MUST 只复用既有 Multica 组件，MUST NOT 新增控件或改样式；四语言 MUST 齐。
@@ -221,7 +223,7 @@ file_hashes     temperature     budget        timeout_ms
 
 ### Key Entities
 
-- **输入快照（Input Snapshot）**：一次「开始」所固定的全部配置。字段与 `diagnostics.Snapshot` 对齐。引用一个 `brief_revision_id`、一个账号、一个工作区，可选地引用一个项目。**只插不改。** 存放位置与基数见 **Q1**。
+- **输入快照（Input Snapshot）**：一次「开始」所固定的全部配置，**独立的新表 `content_start_snapshot`**。`snapshot_id` 是被引用的稳定键（将来 agent-workflow 的运行钉它）；引用一个 `brief_revision_id`、一个 `topic_card_id`、一个账号、一个工作区，可选地引用一个项目（空串是真实状态，不是缺失值）。**只插不改**，且**一版简报可有多份**。没有 `revision` 计数器——简报需要它是因为 §5.3 要给人看「第几版」，快照没有这个需求，加一个只会让人以为它是跨表键。
 - **简报版本（既有）**：`content_brief_revision`，append-only，`brief_revision_id` 是被快照引用的稳定键。
 - **选题卡（既有）**：`content_topic_card`，`account_id` 可空。
 - **账号表达配置（既有）**：随 `content_account_revision` 走，`revision_id` 是 `persona_ref` 的来源。
@@ -236,12 +238,14 @@ file_hashes     temperature     budget        timeout_ms
 
 - **SC-001**：四项最小条件的**每一项**单独缺失时，界面都能点名它；四项全齐时「开始」可点。共 5 种组合各有一条用例。
 - **SC-002**：开始一次后，改账号配置、改账号偏好、追加简报版本、改品牌开关四件事**各做一遍**，再读回快照，**十六个对齐字段与两个扩展键逐字节不变**。四件事各有一条用例，不合并成一条。
+- **SC-002a**：同一版简报连续开始两次、两次的 `source_scope` 不同，产生**两份 `snapshot_id` 不同的快照**，且**第一份逐字节不变**。
 - **SC-003**：跨品牌简报版本、不存在的版本 id、非本账号的简报三种非法依赖，各返回与「不存在」同形的拒绝；三者的响应体**互相逐字节相同**。
 - **SC-004**：项目留空的开始成功率 100%；不存在任何把项目当必填的路径。
-- **SC-005**：`required_sources` / `excluded_sources` / `grants` 在本阶段的所有响应里**恒为空数组**，有一条用例在它们非空时变红。
+- **SC-005**：FR-022 的**九个**字段在本阶段的所有响应里恒空，**各有一条**用例在它非空时变红——九条，不是一条。
 - **SC-006**：「暂不可用」的那半边在界面上**永远显示原因**，且不存在任何伪造的素材/知识卡条目。
 - **SC-007**：服务端就绪复核有效：构造「前端判定可开始、提交时已不可开始」的时序，服务端拒绝。
-- **SC-008**：接入合同三条全绿；`concurrentIndexCleanups` 的 R6 与工作区删除清单用例全绿。
+- **SC-008**：接入合同三条全绿；迁移规则 **R1–R6 逐条**全绿——其中 **R5** 专门确认建表迁移不含 `PRIMARY KEY` / `UNIQUE`，**R6** 确认 491/492/493 三条登记的索引名与迁移逐字相同、且建表迁移 490 **未**被登记。
+- **SC-009**：`content_start_snapshot` 在工作区删除清单里，删一个工作区后该表在该工作区的行数为 0，有一条用例。
 
 ---
 
@@ -268,42 +272,35 @@ file_hashes     temperature     budget        timeout_ms
 
 ---
 
-## 待裁决（clarify）
+## 裁决记录（主控 2026-09-20）
 
-三条都给了推荐值，**不阻塞**后续 plan；主任务裁决后回写本节与相应 FR。
+三条 clarify 已裁决，规格、计划、任务与合同均已按裁决回写。原选项表保留在 PR #129 的正文里，此处只记结论与它改变了什么。
 
-### Q1：输入快照存在哪里，一份简报版本能开始几次？
+### Q1 = **B**：新建 `content_start_snapshot`，append-only，一版简报可多次开始
 
-**Context**：拆分卡写的是「**无新表**。一页界面加一个快照装配点」。但 `diagnostics` 的 `Run`/`content_diagnostic_run` 带着 `scenario` / `seed` / `expected_code` / `regression` / `is_test`，那是自检模拟运行，不是内容生产运行；而内容生产运行的主人 `agent-workflow` 还没落地。
+**理由（主控原话）**：A 的受限 UPDATE 打破 022 简报「只插不改」的守卫。
 
-**What we need to know**：快照落在哪个载体上，以及「同一简报版本能否被开始多次」。
+**它改变了什么**：
 
-| 选项 | 做法 | 含义 |
+| 处 | Q1=A 曾经的写法 | 现在 |
 |---|---|---|
-| **A（推荐）** | 给 `content_brief_revision` 加 `snapshot jsonb` 列（照抄迁移 482 给 `content_account_revision` 加 `profile jsonb` 的做法）；**一个简报版本最多开始一次** | 真正「无新表」；append-only 天然免疫事后修改，不需要第二套不可变保证；代价是**一份简报版本只能开一次工**，要再开一次必须先追加一个新版本（这也说得通：配置不同就是不同的一次）|
-| B | 新建 `content_start_snapshot` 表，一个简报版本可有多份快照 | 与拆分卡的「无新表」冲突；换来的是「同一份简报可以用不同配置开多次」；要自己保证不可变（无 UPDATE/DELETE 路径 + 守卫用例）|
-| C | 复用 `content_diagnostic_run` 加一个 kind | 把生产语义混进自检模块，`is_test` / `scenario` / `regression` 都会变成半真半假的字段；**不推荐** |
+| 存储 | `content_brief_revision` 加 `snapshot jsonb`，一个加列迁移、无索引 | **新表 + 三个 CONCURRENTLY 索引**，四个迁移文件，各单条语句 |
+| FR-014 | 「写入只能把空变非空」 | **字面意义的只插不改**：无 UPDATE、无 DELETE（工作区删除除外） |
+| 基数 | 一版简报最多开始一次，重复开始 409 | **一版简报可多次开始**（新增 FR-014a）；决策顺序**没有第 7 条**；端点**不幂等** |
+| 迁移规则 | 不触发 R6，删除清单无需改动 | **R5**（建表不得有 PK/UNIQUE）、**R6**（三条索引登记）、**删除清单登记**全部生效（FR-023 / FR-023a） |
+| 上游改动 | 只有 `router.go` | `router.go` **与** `cmd/migrate/main.go` 的三条登记，**同一个 `upstream:` 提交** |
+| 与拆分卡 | 「无新表」成立 | **与拆分卡的「无新表」一句冲突**，记在合同 §1；拆分卡不追改 |
 
-**倾向 A 的理由**：它同时满足「无新表」与「不可变」，而且把「再开一次 = 先定一版新简报」这条规则显性化——反过来说，如果产品上确实需要「同一版简报换个资料范围再跑一次」，那就只能选 B，请明示。
+**附带一问同时被接受**：品牌预检开关与中性表达作为 `topic-planning` 的**扩展键**（FR-015a），不挤进 `diagnostics.Snapshot` 的十六项。
 
-### Q2：`grants` / `required_sources` / `excluded_sources` / 四个 version 字段今天怎么填？
+### Q2 = **A**：九个无来源字段一律恒空，各有一条负例
 
-**Context**：LT-016 的 `CanRead` 是纯函数，**仓库里没有任何地方存 Grant**；必用/排除等 EP-04d + W-03；`sop_version` / `skill_version` / `rule_version` / `config_version` 今天没有版本源。
+`config_version` / `sop_version` / `skill_version` / `rule_version` / `executor_version` / `required_sources` / `excluded_sources` / `grants` / `file_hashes`。见 FR-022 与合同 §4。
 
-| 选项 | 做法 | 含义 |
-|---|---|---|
-| **A（推荐）** | 七个字段一律写空（`[]` / `""`），并各有一条**负例**钉住「本阶段必须为空」 | 诚实；接入方改动时用例会红，逼人显式改规则而不是悄悄填上 |
-| B | 省略这些字段，等有来源时再加 | 与 `diagnostics.Snapshot` 不再对齐，拆分卡明写「不要再造第二套」 |
-| C | 填入占位值（如 `"unavailable"`） | 占位值会被下游当成真值读，最差 |
+### Q3 = **A**：受控偏好为准，两个字段各自独立
 
-### Q3：开始界面的「资料范围」以谁为准？
+初值取账号偏好，本次可改；`saved_preference` 记开始那刻读到的账号偏好，`source_scope` 记本次实际选择；成功后写回账号偏好。简报的 `source_scope` 自由文本不参与判定，且**不得**被补上受控集校验。见 FR-009～FR-012 与合同 §4。
 
-**Context**：三处同名不同物——`BriefRevision.SourceScope`（022，§5.3 的自由文本「资料范围」，无受控集校验）、账号偏好 `settings["loretide.scope"]`（LT-014，受控 `local/web/all`）、`Snapshot.Scope` + `Snapshot.Preference`（specs/018 已确认是**两个独立字段**）。
+### T026 入口 = **选题卡详情页 `start` 之后的区块，列表不加**
 
-| 选项 | 做法 | 含义 |
-|---|---|---|
-| **A（推荐）** | 开始界面用**受控偏好**：初值取账号偏好，本次可改；`saved_preference` 记开始那一刻读到的账号偏好，`source_scope` 记本次实际生效的选择；成功后把本次选择写回账号偏好。简报的 `source_scope` 文本**不参与判定**，只作为简报内容随版本一起被钉住 | 与 specs/018「两个独立字段」逐字一致；「保存上次选择」有确定含义；简报文本与受控偏好不打架 |
-| B | 以简报的 `source_scope` 文本为准 | 它是自由文本，无法映射到 `local/web/all`，会逼本卡给它补一个受控集——那是改 022 的契约 |
-| C | 只用账号偏好，本次不可改 | 最简单，但「开始界面校验并确认配置」就名存实亡了 |
-
-**注意**：无论选哪个，本卡都**不得**给 `BriefRevision.SourceScope` 加受控集校验——那会让 022 已存的自由文本数据变成非法。
+开始界面从选题卡详情页进入，位置在 EP-04a 的 `start` 动作区块之后。**选题卡列表不加入口。** 该区块同时是「这张卡一共开始过几次」的展示位（合同 §7 的 `493` 索引就是为它建的）。`manual-ui-todo.md` 里因此**不再**留这条待裁定项。
