@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
@@ -95,6 +97,78 @@ func (p feedbackPublications) Resolve(ctx context.Context, workspaceID, publicat
 	return workID, artifactID, versionID, nil
 }
 
+// feedbackObservation answers SOP 3.2's 反馈观察时点 for one publication
+// record (specs/029).
+//
+// It reads the brand's rules through workspace-core's own store rather than
+// reaching into the settings blob here: the reading rule - a channel's window,
+// falling back to the brand's, falling back to "no answer" - lives in one
+// place, and this is a call to it.
+//
+// Every failure answers DueUnknown, never DueNotYet. A settings read that did
+// not work is not evidence that it is too early to look; answering "not yet"
+// would drop the record off the workbench because the database hiccuped.
+type feedbackObservation struct {
+	store *workspacecore.Store
+	// One read of the settings, and one clock, for the whole request.
+	//
+	// The pending list asks this question once per row, so without the memo a
+	// brand with two hundred published pieces would run two hundred identical
+	// settings queries to answer one page. The frozen clock matters for a
+	// smaller reason that is still a real one: rows compared against different
+	// instants could disagree about a window that elapsed mid-scan, and a list
+	// that is internally inconsistent is worse than one that is a second old.
+	//
+	// It is per request because feedbackStore builds a fresh one each time,
+	// so a change to the window shows up on the next call rather than being
+	// held until something evicts it.
+	state *observationState
+}
+
+type observationState struct {
+	mu     sync.Mutex
+	now    time.Time
+	rules  map[string]workspacecore.Rules
+	failed map[string]bool
+}
+
+func newObservationState() *observationState {
+	return &observationState{
+		now:    time.Now().UTC(),
+		rules:  map[string]workspacecore.Rules{},
+		failed: map[string]bool{},
+	}
+}
+
+func (o feedbackObservation) DueFor(
+	ctx context.Context,
+	workspaceID, channel string,
+	publishedAt *time.Time,
+) workspacecore.Due {
+	if o.store == nil || o.state == nil {
+		return workspacecore.DueUnknown
+	}
+	o.state.mu.Lock()
+	defer o.state.mu.Unlock()
+
+	// A failed read is remembered too. Retrying it once per row would turn one
+	// database problem into a burst of them.
+	if o.state.failed[workspaceID] {
+		return workspacecore.DueUnknown
+	}
+	rules, cached := o.state.rules[workspaceID]
+	if !cached {
+		read, err := o.store.ReadRules(ctx, workspaceID)
+		if err != nil {
+			o.state.failed[workspaceID] = true
+			return workspacecore.DueUnknown
+		}
+		rules = read
+		o.state.rules[workspaceID] = read
+	}
+	return workspacecore.ObservationDueFor(rules, channel, publishedAt, o.state.now)
+}
+
 func (h *Handler) feedbackStore() *feedbacklearning.Store {
 	var diagnosticStore feedbacklearning.DiagnosticStore
 	build := ""
@@ -106,6 +180,9 @@ func (h *Handler) feedbackStore() *feedbacklearning.Store {
 		DB:           feedbackDatabase{dbExecutor: h.DB, txStarter: h.TxStarter},
 		Diagnostics:  diagnosticStore,
 		Publications: feedbackPublications{db: h.DB},
+		// specs/029's observation window. Without it every record answers
+		// DueUnknown, which is the list exactly as it was before this card.
+		Observation: feedbackObservation{store: h.operatingRulesStore(), state: newObservationState()},
 		// The same fence the diagnostics store holds, handed over directly so
 		// the write transaction takes the workspace delete lock itself instead
 		// of inheriting it from whether it happened to audit first (#104).
