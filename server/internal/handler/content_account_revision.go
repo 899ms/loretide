@@ -7,9 +7,11 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
 	ipprofile "github.com/multica-ai/multica/server/internal/content/ip-profile"
 	workspacecore "github.com/multica-ai/multica/server/internal/content/workspace-core"
+	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
@@ -111,6 +113,13 @@ func (h *Handler) personaWriteError(w http.ResponseWriter, err error) {
 			"error": err.Error(), "code": event.Code, "trace_id": event.Trace,
 			"component": event.Component, "retryable": true, "next_action": event.Next,
 		})
+	case errors.Is(err, ipprofile.ErrWorkspaceGone):
+		// The workspace was deleted while this write was in flight. Answered as
+		// 404 and byte-identical to "no such account": a caller must not learn
+		// from a refusal that a workspace used to exist. Spelled out rather
+		// than left to the default so it stays a decision.
+		writeJSON(w, workspacecore.RefusalStatus(workspacecore.ReasonNotMember),
+			workspacecore.RefusalBody(w.Header().Get("X-Diagnostic-Trace")))
 	default:
 		writeJSON(w, workspacecore.RefusalStatus(workspacecore.ReasonNotMember),
 			workspacecore.RefusalBody(w.Header().Get("X-Diagnostic-Trace")))
@@ -121,10 +130,18 @@ func (h *Handler) personaWriteError(w http.ResponseWriter, err error) {
 // Append-only: it offers an insert and reads, and nothing that mutates a row.
 type contentRevisionStore struct{ q *db.Queries }
 
-func revisionFromRow(revisionID, accountID, workspaceID string, revision int64, prompt, created string) ipprofile.Revision {
+func revisionFromRow(revisionID, accountID, workspaceID string, revision int64, prompt string, rawProfile []byte, created string) ipprofile.Revision {
+	// A revision written before migration 482 has an empty profile document.
+	// It reads back as every field pending, which is exactly right: nobody
+	// filled those fields in, so nothing about them is confirmed.
+	profile := ipprofile.ExpressionProfile{}
+	if len(rawProfile) > 0 {
+		_ = json.Unmarshal(rawProfile, &profile)
+	}
+	profile = ipprofile.NormalizeProfile(profile)
 	return ipprofile.Revision{
 		RevisionID: revisionID, AccountID: accountID, WorkspaceID: workspaceID,
-		Revision: revision, PersonaPrompt: prompt, CreatedAt: created,
+		Revision: revision, PersonaPrompt: prompt, Profile: profile, CreatedAt: created,
 	}
 }
 
@@ -136,10 +153,14 @@ func (s contentRevisionStore) NextRevision(ctx context.Context, workspaceID, acc
 }
 
 func (s contentRevisionStore) InsertRevision(ctx context.Context, revision ipprofile.Revision) (ipprofile.Revision, error) {
+	profile, err := json.Marshal(revision.Profile)
+	if err != nil {
+		return ipprofile.Revision{}, err
+	}
 	row, err := s.q.InsertContentAccountRevision(ctx, db.InsertContentAccountRevisionParams{
 		RevisionID: revision.RevisionID, AccountID: revision.AccountID,
 		WorkspaceID: revision.WorkspaceID, Revision: revision.Revision,
-		PersonaPrompt: revision.PersonaPrompt,
+		PersonaPrompt: revision.PersonaPrompt, Profile: profile,
 	})
 	if err != nil {
 		// Somebody else claimed this revision number. Retryable, and the module
@@ -150,7 +171,7 @@ func (s contentRevisionStore) InsertRevision(ctx context.Context, revision ippro
 		return ipprofile.Revision{}, err
 	}
 	return revisionFromRow(row.RevisionID, row.AccountID, row.WorkspaceID, row.Revision,
-		row.PersonaPrompt, timestampToString(row.CreatedAt)), nil
+		row.PersonaPrompt, row.Profile, timestampToString(row.CreatedAt)), nil
 }
 
 func (s contentRevisionStore) GetRevision(ctx context.Context, workspaceID, revisionID string) (ipprofile.Revision, error) {
@@ -161,7 +182,7 @@ func (s contentRevisionStore) GetRevision(ctx context.Context, workspaceID, revi
 		return ipprofile.Revision{}, accountStorageError(err)
 	}
 	return revisionFromRow(row.RevisionID, row.AccountID, row.WorkspaceID, row.Revision,
-		row.PersonaPrompt, timestampToString(row.CreatedAt)), nil
+		row.PersonaPrompt, row.Profile, timestampToString(row.CreatedAt)), nil
 }
 
 func (s contentRevisionStore) CurrentRevision(ctx context.Context, workspaceID, accountID string) (ipprofile.Revision, error) {
@@ -172,7 +193,7 @@ func (s contentRevisionStore) CurrentRevision(ctx context.Context, workspaceID, 
 		return ipprofile.Revision{}, accountStorageError(err)
 	}
 	return revisionFromRow(row.RevisionID, row.AccountID, row.WorkspaceID, row.Revision,
-		row.PersonaPrompt, timestampToString(row.CreatedAt)), nil
+		row.PersonaPrompt, row.Profile, timestampToString(row.CreatedAt)), nil
 }
 
 func (s contentRevisionStore) ListRevisions(ctx context.Context, workspaceID, accountID string) ([]ipprofile.Revision, error) {
@@ -185,7 +206,51 @@ func (s contentRevisionStore) ListRevisions(ctx context.Context, workspaceID, ac
 	revisions := make([]ipprofile.Revision, 0, len(rows))
 	for _, row := range rows {
 		revisions = append(revisions, revisionFromRow(row.RevisionID, row.AccountID,
-			row.WorkspaceID, row.Revision, row.PersonaPrompt, timestampToString(row.CreatedAt)))
+			row.WorkspaceID, row.Revision, row.PersonaPrompt, row.Profile,
+			timestampToString(row.CreatedAt)))
 	}
 	return revisions, nil
+}
+
+// contentRevisionFence is ip-profile's half of the workspace delete/write
+// protocol (AGENTS.md L42-45), the same one the diagnostics store has always
+// held.
+//
+// content_account_revision has a text workspace id and no foreign key, so a
+// revision written while DeleteWorkspace is committing would simply remain,
+// belonging to nothing. Holding FOR KEY SHARE on the workspace row in the same
+// transaction as the insert makes the two orders the only possible ones: the
+// delete waits and then sweeps this revision, or the delete commits first and
+// this fence finds no row.
+type contentRevisionFence struct{ h *Handler }
+
+func (f contentRevisionFence) WithWorkspaceFence(ctx context.Context, workspaceID string, fn func(ipprofile.RevisionTx) error) error {
+	workspaceUUID, err := util.ParseUUID(workspaceID)
+	if err != nil {
+		// Not a workspace id, so there is no row to hold. Same answer as a
+		// workspace that is gone: the caller turns both into 404.
+		return ipprofile.ErrWorkspaceGone
+	}
+
+	tx, err := f.h.TxStarter.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	// Rollback on every path that does not reach Commit, including a revision
+	// number collision: 23505 aborts the transaction, and the retry needs a
+	// fresh one.
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	queries := f.h.Queries.WithTx(tx)
+	if _, err := queries.LockWorkspaceForContentDiagnosticWrite(ctx, workspaceUUID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ipprofile.ErrWorkspaceGone
+		}
+		return err
+	}
+
+	if err := fn(contentRevisionStore{q: queries}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

@@ -82,6 +82,7 @@ func (h *Handler) contentAccountService() *ipprofile.Service {
 	return &ipprofile.Service{
 		Store:         contentAccountStore{q: h.Queries},
 		RevisionStore: contentRevisionStore{q: h.Queries},
+		Fence:         contentRevisionFence{h: h},
 		Audit:         contentAccountAuditor{h: h},
 		Build:         "loretide",
 	}

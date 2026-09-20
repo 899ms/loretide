@@ -1,0 +1,21 @@
+-- The rest of the account's expression profile (SOP 3.1), carried by the same
+-- revision as the persona prompt.
+--
+-- One column rather than one per field, and rather than a second table. The
+-- fields are still settling, and a table of its own would mean two version
+-- counters and two "current revision" answers - a run would have to pin two
+-- snapshots to be reproducible, which is the second source of truth LT-012
+-- exists to avoid.
+--
+-- Structure is enforced in Go by a controlled type; an unusable shape is
+-- answered with 400 and a diagnostic error object rather than being stored.
+-- Same trade as the workspace timezone and the account scope: the database
+-- holds the blob, the application owns the vocabulary.
+--
+-- Default '{}' so every revision written before this migration reads back as an
+-- empty profile - every field pending, nothing guessed - instead of NULL.
+--
+-- No index: nothing queries by a field inside this document. No foreign keys
+-- and no cascades, as everywhere else in this schema.
+ALTER TABLE content_account_revision
+    ADD COLUMN IF NOT EXISTS profile jsonb NOT NULL DEFAULT '{}'::jsonb;

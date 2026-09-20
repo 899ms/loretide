@@ -24,7 +24,11 @@ type Revision struct {
 	WorkspaceID   string `json:"workspace_id"`
 	Revision      int64  `json:"revision"`
 	PersonaPrompt string `json:"persona_prompt"`
-	CreatedAt     string `json:"created_at"`
+	// Profile is the rest of the expression configuration (SOP 3.1). It rides
+	// the same revision as the prompt, so one confirmation is one snapshot and
+	// a run pins one revision_id.
+	Profile   ExpressionProfile `json:"profile"`
+	CreatedAt string            `json:"created_at"`
 }
 
 // MaxPersonaPromptRunes bounds one prompt. Counted in runes, not bytes: a
@@ -45,6 +49,16 @@ var (
 	// ErrRevisionConflict is what the caller sees once retries are exhausted.
 	// Answered as 409: the write did not happen and the caller may try again.
 	ErrRevisionConflict = errors.New("revision conflict")
+	// ErrWorkspaceGone means the workspace row was gone when the fence tried to
+	// hold it. The caller answers 404, the same as any other "you cannot have
+	// this" - a deleted workspace must not be distinguishable from one that
+	// never existed.
+	ErrWorkspaceGone = errors.New("workspace no longer exists")
+	// ErrNoWorkspaceFence is a wiring mistake, not a runtime condition: a
+	// Service that can write revisions was built without the fence. It is an
+	// error rather than a silent unfenced write, because the unfenced write is
+	// the bug.
+	ErrNoWorkspaceFence = errors.New("revision writes require a workspace fence")
 )
 
 // ValidatePersonaPrompt accepts blank.
@@ -68,6 +82,33 @@ func ValidatePersonaPrompt(prompt string) error {
 type RevisionStore interface {
 	NextRevision(ctx context.Context, workspaceID, accountID string) (int64, error)
 	InsertRevision(ctx context.Context, revision Revision) (Revision, error)
+}
+
+// RevisionTx is the same persistence, bound to one transaction. Every revision
+// write goes through it, because a revision write is three statements - read
+// the next number, read the current revision, insert - and all three have to
+// see the same workspace.
+type RevisionTx interface {
+	NextRevision(ctx context.Context, workspaceID, accountID string) (int64, error)
+	CurrentRevision(ctx context.Context, workspaceID, accountID string) (Revision, error)
+	InsertRevision(ctx context.Context, revision Revision) (Revision, error)
+}
+
+// WorkspaceFence is the workspace delete/write protocol (AGENTS.md L42-45),
+// expressed in this module's terms.
+//
+// content_account_revision carries a text workspace id and no foreign key, so
+// nothing in the database stops a revision being written for a workspace that
+// is being deleted right now. The protocol is explicit instead: the write takes
+// FOR KEY SHARE on the workspace row in the same transaction as its insert.
+// DeleteWorkspace takes FOR UPDATE, so one of two things happens and never
+// anything else - the delete waits and then sweeps the committed revision, or
+// the delete commits first and the fence finds no row, which is ErrWorkspaceGone.
+//
+// diagnostics has held this fence since it shipped; ip-profile did not, which
+// is the defect this closes.
+type WorkspaceFence interface {
+	WithWorkspaceFence(ctx context.Context, workspaceID string, fn func(RevisionTx) error) error
 }
 
 // RevisionReader is the read half. Separate from RevisionStore so a test that
@@ -127,17 +168,96 @@ func (s *Service) SetPersonaPrompt(ctx context.Context, workspaceID, actor, acco
 	if err := ValidatePersonaPrompt(prompt); err != nil {
 		return Revision{}, err
 	}
+	return s.appendRevision(ctx, workspaceID, actor, accountID,
+		func(current Revision) Revision {
+			// The profile comes along unchanged; see appendRevision for why the
+			// read happens inside the fence.
+			return Revision{PersonaPrompt: prompt, Profile: current.Profile}
+		})
+}
+
+// SetProfile records a new revision carrying the confirmed expression profile.
+//
+// The persona prompt comes along unchanged, for the same reason the profile
+// does when the prompt is what changed: a revision is the whole configuration,
+// and a write that only knows about half of it would drop the other half.
+//
+// The caller's original shape is validated before normalisation can discard a
+// blank list entry or lower a status. Valid blank content is then normalised
+// and the result is validated again for controlled values. A blank field marked
+// confirmed is lowered to pending rather than recording a decision the creator
+// did not make, while an unknown status is refused even when its value is blank.
+func (s *Service) SetProfile(ctx context.Context, workspaceID, actor, accountID string, profile ExpressionProfile) (Revision, error) {
+	if err := validateProfileShape(profile); err != nil {
+		return Revision{}, err
+	}
+	normalized := NormalizeProfile(profile)
+	if err := ValidateProfile(normalized); err != nil {
+		return Revision{}, err
+	}
+	return s.appendRevision(ctx, workspaceID, actor, accountID,
+		func(current Revision) Revision {
+			return Revision{PersonaPrompt: current.PersonaPrompt, Profile: normalized}
+		})
+}
+
+// appendRevision is the one write path for revisions. Both setters use it, so
+// the fence, the carry-forward and the retry exist once rather than twice.
+//
+// Everything that decides what is written happens inside one transaction that
+// first holds the workspace fence:
+//
+//   - the candidate revision number,
+//   - the current revision, whose other half is carried forward,
+//   - the insert.
+//
+// Reading the current revision outside that transaction was the defect: between
+// the read and the insert, DeleteWorkspace could commit, and the insert would
+// then create a revision belonging to a workspace that no longer exists. There
+// is no foreign key to catch it, so the row would simply stay there.
+//
+// compose receives the current revision (zero-valued when the account has none)
+// and returns the halves for the new one; identity and numbering are filled in
+// here so a caller cannot get them wrong.
+//
+// A collision on the revision number aborts its transaction - the unique index
+// raises 23505 - and the next attempt opens a fresh one, re-reading both the
+// number and the other half. That is the same bounded retry as before; what
+// changed is that each attempt is now atomic.
+func (s *Service) appendRevision(ctx context.Context, workspaceID, actor, accountID string,
+	compose func(current Revision) Revision) (Revision, error) {
+	if s.Fence == nil {
+		return Revision{}, ErrNoWorkspaceFence
+	}
+
 	for attempt := 0; attempt < maxRevisionAttempts; attempt++ {
-		next, err := s.RevisionStore.NextRevision(ctx, workspaceID, accountID)
-		if err != nil {
-			return Revision{}, err
-		}
-		written, err := s.RevisionStore.InsertRevision(ctx, Revision{
-			RevisionID:    s.newID(),
-			AccountID:     accountID,
-			WorkspaceID:   workspaceID,
-			Revision:      next,
-			PersonaPrompt: prompt,
+		var written Revision
+		err := s.Fence.WithWorkspaceFence(ctx, workspaceID, func(tx RevisionTx) error {
+			next, nextErr := tx.NextRevision(ctx, workspaceID, accountID)
+			if nextErr != nil {
+				return nextErr
+			}
+
+			current, currentErr := tx.CurrentRevision(ctx, workspaceID, accountID)
+			if currentErr != nil {
+				if !errors.Is(currentErr, ErrNotFound) {
+					// A storage failure must stop the write. Treating it as
+					// "no current revision" would quietly replace a real
+					// prompt or profile with an empty one.
+					return currentErr
+				}
+				current = Revision{}
+			}
+
+			candidate := compose(current)
+			candidate.RevisionID = s.newID()
+			candidate.AccountID = accountID
+			candidate.WorkspaceID = workspaceID
+			candidate.Revision = next
+
+			var insertErr error
+			written, insertErr = tx.InsertRevision(ctx, candidate)
+			return insertErr
 		})
 		if err == nil {
 			s.auditRevision(ctx, workspaceID, actor, accountID, written.Revision)
@@ -146,7 +266,8 @@ func (s *Service) SetPersonaPrompt(ctx context.Context, workspaceID, actor, acco
 		if !errors.Is(err, ErrRevisionTaken) {
 			return Revision{}, err
 		}
-		// Someone else claimed this number. Read the new maximum and try again.
+		// Someone else claimed this number. A fresh transaction reads the new
+		// maximum and the other half again.
 	}
 	return Revision{}, ErrRevisionConflict
 }

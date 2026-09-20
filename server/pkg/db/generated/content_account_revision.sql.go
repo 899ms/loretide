@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countContentAccountRevisions = `-- name: CountContentAccountRevisions :one
@@ -21,7 +23,7 @@ func (q *Queries) CountContentAccountRevisions(ctx context.Context, workspaceID 
 }
 
 const getContentAccountRevision = `-- name: GetContentAccountRevision :one
-SELECT revision_id, account_id, workspace_id, revision, persona_prompt, created_at
+SELECT revision_id, account_id, workspace_id, revision, persona_prompt, profile, created_at
 FROM content_account_revision
 WHERE revision_id = $1 AND workspace_id = $2
 `
@@ -31,22 +33,33 @@ type GetContentAccountRevisionParams struct {
 	WorkspaceID string `json:"workspace_id"`
 }
 
-func (q *Queries) GetContentAccountRevision(ctx context.Context, arg GetContentAccountRevisionParams) (ContentAccountRevision, error) {
+type GetContentAccountRevisionRow struct {
+	RevisionID    string             `json:"revision_id"`
+	AccountID     string             `json:"account_id"`
+	WorkspaceID   string             `json:"workspace_id"`
+	Revision      int64              `json:"revision"`
+	PersonaPrompt string             `json:"persona_prompt"`
+	Profile       []byte             `json:"profile"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) GetContentAccountRevision(ctx context.Context, arg GetContentAccountRevisionParams) (GetContentAccountRevisionRow, error) {
 	row := q.db.QueryRow(ctx, getContentAccountRevision, arg.RevisionID, arg.WorkspaceID)
-	var i ContentAccountRevision
+	var i GetContentAccountRevisionRow
 	err := row.Scan(
 		&i.RevisionID,
 		&i.AccountID,
 		&i.WorkspaceID,
 		&i.Revision,
 		&i.PersonaPrompt,
+		&i.Profile,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getCurrentContentAccountRevision = `-- name: GetCurrentContentAccountRevision :one
-SELECT revision_id, account_id, workspace_id, revision, persona_prompt, created_at
+SELECT revision_id, account_id, workspace_id, revision, persona_prompt, profile, created_at
 FROM content_account_revision
 WHERE account_id = $1 AND workspace_id = $2
 ORDER BY revision DESC
@@ -58,17 +71,28 @@ type GetCurrentContentAccountRevisionParams struct {
 	WorkspaceID string `json:"workspace_id"`
 }
 
+type GetCurrentContentAccountRevisionRow struct {
+	RevisionID    string             `json:"revision_id"`
+	AccountID     string             `json:"account_id"`
+	WorkspaceID   string             `json:"workspace_id"`
+	Revision      int64              `json:"revision"`
+	PersonaPrompt string             `json:"persona_prompt"`
+	Profile       []byte             `json:"profile"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 // The current revision is simply the highest one. No pointer column exists to
 // disagree with this.
-func (q *Queries) GetCurrentContentAccountRevision(ctx context.Context, arg GetCurrentContentAccountRevisionParams) (ContentAccountRevision, error) {
+func (q *Queries) GetCurrentContentAccountRevision(ctx context.Context, arg GetCurrentContentAccountRevisionParams) (GetCurrentContentAccountRevisionRow, error) {
 	row := q.db.QueryRow(ctx, getCurrentContentAccountRevision, arg.AccountID, arg.WorkspaceID)
-	var i ContentAccountRevision
+	var i GetCurrentContentAccountRevisionRow
 	err := row.Scan(
 		&i.RevisionID,
 		&i.AccountID,
 		&i.WorkspaceID,
 		&i.Revision,
 		&i.PersonaPrompt,
+		&i.Profile,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -77,9 +101,9 @@ func (q *Queries) GetCurrentContentAccountRevision(ctx context.Context, arg GetC
 const insertContentAccountRevision = `-- name: InsertContentAccountRevision :one
 
 INSERT INTO content_account_revision
-    (revision_id, account_id, workspace_id, revision, persona_prompt)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING revision_id, account_id, workspace_id, revision, persona_prompt, created_at
+    (revision_id, account_id, workspace_id, revision, persona_prompt, profile)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING revision_id, account_id, workspace_id, revision, persona_prompt, profile, created_at
 `
 
 type InsertContentAccountRevisionParams struct {
@@ -88,6 +112,17 @@ type InsertContentAccountRevisionParams struct {
 	WorkspaceID   string `json:"workspace_id"`
 	Revision      int64  `json:"revision"`
 	PersonaPrompt string `json:"persona_prompt"`
+	Profile       []byte `json:"profile"`
+}
+
+type InsertContentAccountRevisionRow struct {
+	RevisionID    string             `json:"revision_id"`
+	AccountID     string             `json:"account_id"`
+	WorkspaceID   string             `json:"workspace_id"`
+	Revision      int64              `json:"revision"`
+	PersonaPrompt string             `json:"persona_prompt"`
+	Profile       []byte             `json:"profile"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
 // Account configuration revisions. Append-only by construction: there is no
@@ -99,28 +134,30 @@ type InsertContentAccountRevisionParams struct {
 // revision_id alone would hand another brand's persona to anyone holding an id.
 // The unique index on (account_id, revision) is what makes a concurrent pair of
 // writers land as two revisions instead of one: the loser gets 23505 and retries.
-func (q *Queries) InsertContentAccountRevision(ctx context.Context, arg InsertContentAccountRevisionParams) (ContentAccountRevision, error) {
+func (q *Queries) InsertContentAccountRevision(ctx context.Context, arg InsertContentAccountRevisionParams) (InsertContentAccountRevisionRow, error) {
 	row := q.db.QueryRow(ctx, insertContentAccountRevision,
 		arg.RevisionID,
 		arg.AccountID,
 		arg.WorkspaceID,
 		arg.Revision,
 		arg.PersonaPrompt,
+		arg.Profile,
 	)
-	var i ContentAccountRevision
+	var i InsertContentAccountRevisionRow
 	err := row.Scan(
 		&i.RevisionID,
 		&i.AccountID,
 		&i.WorkspaceID,
 		&i.Revision,
 		&i.PersonaPrompt,
+		&i.Profile,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const listContentAccountRevisions = `-- name: ListContentAccountRevisions :many
-SELECT revision_id, account_id, workspace_id, revision, persona_prompt, created_at
+SELECT revision_id, account_id, workspace_id, revision, persona_prompt, profile, created_at
 FROM content_account_revision
 WHERE account_id = $1 AND workspace_id = $2
 ORDER BY revision ASC
@@ -131,21 +168,32 @@ type ListContentAccountRevisionsParams struct {
 	WorkspaceID string `json:"workspace_id"`
 }
 
-func (q *Queries) ListContentAccountRevisions(ctx context.Context, arg ListContentAccountRevisionsParams) ([]ContentAccountRevision, error) {
+type ListContentAccountRevisionsRow struct {
+	RevisionID    string             `json:"revision_id"`
+	AccountID     string             `json:"account_id"`
+	WorkspaceID   string             `json:"workspace_id"`
+	Revision      int64              `json:"revision"`
+	PersonaPrompt string             `json:"persona_prompt"`
+	Profile       []byte             `json:"profile"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListContentAccountRevisions(ctx context.Context, arg ListContentAccountRevisionsParams) ([]ListContentAccountRevisionsRow, error) {
 	rows, err := q.db.Query(ctx, listContentAccountRevisions, arg.AccountID, arg.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ContentAccountRevision{}
+	items := []ListContentAccountRevisionsRow{}
 	for rows.Next() {
-		var i ContentAccountRevision
+		var i ListContentAccountRevisionsRow
 		if err := rows.Scan(
 			&i.RevisionID,
 			&i.AccountID,
 			&i.WorkspaceID,
 			&i.Revision,
 			&i.PersonaPrompt,
+			&i.Profile,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

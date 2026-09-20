@@ -82,3 +82,289 @@ jobs:
           go test ./pkg/executionpolicy ./pkg/agent ./internal/daemon/execenv -run 'TestMissingPolicy|TestConfiguredPolicy|TestLoretide' -count=1
           go test ./internal/migrations -run 'TestMigrationNumericPrefixesAreUnique|TestMigrationFilesHaveMatchingDirections|TestContentMigrationConstraints' -count=1
           go build ./cmd/server
+
+  # Temporary, PR-scoped evidence gate for Issue #98. This is intentionally a
+  # separate job and database from the diagnostics fixture above: the handler
+  # and real-router TestMain packages require the complete application schema.
+  issue-98-account-profile-db:
+    needs: boundaries
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.ref == 'codex/issue-98-account-expression-profile' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: issue-98-account-profile-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Derive run-specific database identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ || ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[0-9]+$ ]]; then
+            echo "::error::GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT must be decimal integers"
+            exit 1
+          fi
+
+          expected_db="loretide_handler_test_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          expected_role="loretide_handler_role_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          if [[ ! "$expected_db" =~ ^loretide_handler_test_[0-9]+_[0-9]+$ ||
+                ! "$expected_role" =~ ^loretide_handler_role_[0-9]+_[0-9]+$ ]]; then
+            echo "::error::derived database identifiers failed the allowlist"
+            exit 1
+          fi
+
+          printf 'LORETIDE_HANDLER_TEST_DB=%s\n' "$expected_db" >> "$GITHUB_ENV"
+          printf 'LORETIDE_HANDLER_TEST_ROLE=%s\n' "$expected_role" >> "$GITHUB_ENV"
+
+      - name: Start native PostgreSQL
+        run: sudo systemctl start postgresql
+
+      - name: Provision isolated least-privilege handler database
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ || ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[0-9]+$ ]]; then
+            echo "::error::invalid GitHub run identity; refusing database provisioning"
+            exit 1
+          fi
+
+          expected_db="loretide_handler_test_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          expected_role="loretide_handler_role_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          if [[ ! "$expected_db" =~ ^loretide_handler_test_[0-9]+_[0-9]+$ ||
+                ! "$expected_role" =~ ^loretide_handler_role_[0-9]+_[0-9]+$ ||
+                "${LORETIDE_HANDLER_TEST_DB:-}" != "$expected_db" ||
+                "${LORETIDE_HANDLER_TEST_ROLE:-}" != "$expected_role" ]]; then
+            echo "::error::run-derived database identifiers are missing or inconsistent; refusing provisioning"
+            exit 1
+          fi
+
+          pg_password="$(openssl rand -hex 24)"
+          echo "::add-mask::$pg_password"
+          sudo -u postgres psql -X -v ON_ERROR_STOP=1 -q \
+            -v db_name="$expected_db" -v role_name="$expected_role" -v pw="$pg_password" <<'SQL'
+          SELECT pg_terminate_backend(pid)
+            FROM pg_stat_activity
+           WHERE datname = :'db_name' AND pid <> pg_backend_pid();
+          DROP DATABASE IF EXISTS :"db_name";
+          DROP ROLE IF EXISTS :"role_name";
+          CREATE ROLE :"role_name"
+            LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS
+            PASSWORD :'pw';
+          CREATE DATABASE :"db_name" OWNER :"role_name";
+          SQL
+
+          # These two required extensions are installed by the cluster admin;
+          # optional pg_bigm/pg_cron migrations retain their own skip behavior.
+          sudo -u postgres psql -X -v ON_ERROR_STOP=1 -q -d "$expected_db" <<'SQL'
+          CREATE EXTENSION IF NOT EXISTS pgcrypto;
+          CREATE EXTENSION IF NOT EXISTS pg_trgm;
+          SQL
+
+          database_url="postgres://${expected_role}:${pg_password}@127.0.0.1:5432/${expected_db}?sslmode=disable"
+          echo "::add-mask::$database_url"
+          printf 'DATABASE_URL=%s\n' "$database_url" >> "$GITHUB_ENV"
+
+      - name: Verify isolated database identity and role attributes
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ || ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[0-9]+$ ]]; then
+            echo "::error::invalid GitHub run identity; refusing handler tests"
+            exit 1
+          fi
+
+          expected_db="loretide_handler_test_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          expected_role="loretide_handler_role_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          if [[ ! "$expected_db" =~ ^loretide_handler_test_[0-9]+_[0-9]+$ ||
+                ! "$expected_role" =~ ^loretide_handler_role_[0-9]+_[0-9]+$ ||
+                "${LORETIDE_HANDLER_TEST_DB:-}" != "$expected_db" ||
+                "${LORETIDE_HANDLER_TEST_ROLE:-}" != "$expected_role" ||
+                -z "${DATABASE_URL:-}" ]]; then
+            echo "::error::run-derived database identity is missing or inconsistent; refusing handler tests"
+            exit 1
+          fi
+
+          bash scripts/verify-handler-test-db.sh
+          identity="$(psql "$DATABASE_URL" -X -A -t -F '|' -v ON_ERROR_STOP=1 -c \
+            "SELECT current_database(), current_user, r.rolcanlogin::text, r.rolsuper::text, r.rolcreatedb::text, r.rolcreaterole::text, r.rolreplication::text, r.rolbypassrls::text, (d.datdba = r.oid)::text FROM pg_roles r JOIN pg_database d ON d.datname = current_database() WHERE r.rolname = current_user")"
+          expected_identity="${expected_db}|${expected_role}|true|false|false|false|false|false|true"
+          echo "handler identity (database|role|login|super|createdb|createrole|replication|bypassrls|owns_target_db): $identity"
+          if [[ "$identity" != "$expected_identity" ]]; then
+            echo "::error::isolated handler database identity or role attributes differ from the run-specific contract"
+            exit 1
+          fi
+
+      - name: Apply full application schema
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run ./cmd/migrate up
+
+      - name: Verify migration 482 ledger and profile column contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          ledger_count="$(psql "$DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 \
+            -c "SELECT count(*) FROM schema_migrations WHERE version = '482_content_account_revision_profile'")"
+          if [[ "$ledger_count" != "1" ]]; then
+            echo "::error::migration 482 is not recorded exactly once in schema_migrations"
+            exit 1
+          fi
+
+          profile_shape="$(psql "$DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c \
+            "SELECT format_type(a.atttypid, a.atttypmod) || '|' || a.attnotnull::text || '|' || COALESCE(pg_get_expr(d.adbin, d.adrelid), '') FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum WHERE n.nspname = 'public' AND c.relname = 'content_account_revision' AND a.attname = 'profile' AND NOT a.attisdropped")"
+          echo "migration 482 profile shape (type|not_null|default): $profile_shape"
+          if [[ "$profile_shape" != "jsonb|true|'{}'::jsonb" ]]; then
+            echo "::error::content_account_revision.profile does not match migration 482's type/nullability/default contract"
+            exit 1
+          fi
+
+      - name: Run the five Issue 98 handler tests serially
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          handler_pattern='^(TestProfileAndPersonaConfirmationsCarryTheOtherHalf|TestProfileRejectsInvalidShapeWithoutWriting|TestProfileReadinessReturnsCurrentDerivedDecision|TestOldRevisionWithoutProfileReadsAsEmptyPendingProfile|TestAnotherBrandsProfileIsIndistinguishableFromAMissingAccount|TestAWriteIsRefusedAfterTheWorkspaceIsDeleted|TestADeleteWaitsForAnInFlightRevisionWriteAndThenSweepsIt|TestTheFenceRefusesAnIdThatIsNotAWorkspace|TestADeletedWorkspaceAnswersLikeAMissingAccount)$'
+          go test -json -count=1 -p=1 -parallel=1 ./internal/handler -run "$handler_pattern" \
+            | tee "$RUNNER_TEMP/issue-98-handler.jsonl"
+
+      - name: Run the five Issue 98 real-router tests serially
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          router_pattern='^(TestExpressionProfileEndpointsUseTheIdFromTheURLBehindTheRealRouter|TestContentAccountEndpointsAreMounted|TestContentAccountEndpointsRejectUnauthenticatedCallers|TestContentAccountEndpointsRejectNonMembers|TestMountingContentAccountsLeftNeighbouringRoutesAlone)$'
+          go test -json -count=1 -p=1 -parallel=1 ./cmd/server -run "$router_pattern" \
+            | tee "$RUNNER_TEMP/issue-98-router.jsonl"
+
+      - name: Require all ten tests and every discovered subtest to pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const suites = [
+            {
+              label: 'handler',
+              file: path.join(process.env.RUNNER_TEMP, 'issue-98-handler.jsonl'),
+              expected: [
+                'TestProfileAndPersonaConfirmationsCarryTheOtherHalf',
+                'TestProfileRejectsInvalidShapeWithoutWriting',
+                'TestProfileReadinessReturnsCurrentDerivedDecision',
+                'TestOldRevisionWithoutProfileReadsAsEmptyPendingProfile',
+                'TestAnotherBrandsProfileIsIndistinguishableFromAMissingAccount',
+                // Issue #104: the workspace delete/write fence.
+                'TestAWriteIsRefusedAfterTheWorkspaceIsDeleted',
+                'TestADeleteWaitsForAnInFlightRevisionWriteAndThenSweepsIt',
+                'TestTheFenceRefusesAnIdThatIsNotAWorkspace',
+                'TestADeletedWorkspaceAnswersLikeAMissingAccount',
+              ],
+            },
+            {
+              label: 'router',
+              file: path.join(process.env.RUNNER_TEMP, 'issue-98-router.jsonl'),
+              expected: [
+                'TestExpressionProfileEndpointsUseTheIdFromTheURLBehindTheRealRouter',
+                'TestContentAccountEndpointsAreMounted',
+                'TestContentAccountEndpointsRejectUnauthenticatedCallers',
+                'TestContentAccountEndpointsRejectNonMembers',
+                'TestMountingContentAccountsLeftNeighbouringRoutesAlone',
+              ],
+            },
+          ];
+
+          const summary = [];
+          for (const suite of suites) {
+            if (!fs.existsSync(suite.file) || fs.statSync(suite.file).size === 0) {
+              throw new Error(`${suite.label}: JSON event file is missing or empty`);
+            }
+            const lines = fs.readFileSync(suite.file, 'utf8').split(/\r?\n/).filter(Boolean);
+            const events = lines.map((line, index) => {
+              try {
+                return JSON.parse(line);
+              } catch (error) {
+                throw new Error(`${suite.label}: invalid JSON event at line ${index + 1}: ${error.message}`);
+              }
+            });
+
+            for (const test of suite.expected) {
+              const terminal = events.filter((event) =>
+                event.Test === test && ['pass', 'fail', 'skip'].includes(event.Action));
+              if (terminal.length !== 1 || terminal[0].Action !== 'pass') {
+                throw new Error(`${suite.label}: ${test} did not have exactly one terminal pass event`);
+              }
+
+              const childNames = new Set(events
+                .filter((event) => typeof event.Test === 'string' && event.Test.startsWith(`${test}/`))
+                .map((event) => event.Test));
+              for (const child of childNames) {
+                const childTerminal = events.filter((event) =>
+                  event.Test === child && ['pass', 'fail', 'skip'].includes(event.Action));
+                if (childTerminal.length !== 1 || childTerminal[0].Action !== 'pass') {
+                  throw new Error(`${suite.label}: subtest ${child} did not have exactly one terminal pass event`);
+                }
+              }
+              summary.push(`${suite.label}: ${test}: pass (${childNames.size} subtests)`);
+            }
+          }
+
+          if (summary.length !== 14) {
+            throw new Error(`verified ${summary.length} top-level tests, expected 14`);
+          }
+          const report = `${summary.join('\n')}\nverified-top-level-tests=14\n`;
+          process.stdout.write(report);
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'issue-98-verification-summary.txt'), report);
+          NODE
+
+      - name: Upload Issue 98 JSON test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-98-account-profile-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/issue-98-handler.jsonl
+            ${{ runner.temp }}/issue-98-router.jsonl
+            ${{ runner.temp }}/issue-98-verification-summary.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Drop only this run's isolated database and role
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ || ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[0-9]+$ ]]; then
+            echo "::error::invalid GitHub run identity; refusing cleanup"
+            exit 1
+          fi
+
+          expected_db="loretide_handler_test_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          expected_role="loretide_handler_role_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          if [[ ! "$expected_db" =~ ^loretide_handler_test_[0-9]+_[0-9]+$ ||
+                ! "$expected_role" =~ ^loretide_handler_role_[0-9]+_[0-9]+$ ||
+                "${LORETIDE_HANDLER_TEST_DB:-}" != "$expected_db" ||
+                "${LORETIDE_HANDLER_TEST_ROLE:-}" != "$expected_role" ]]; then
+            echo "::error::run-derived database identifiers are missing or inconsistent; refusing terminate/drop"
+            exit 1
+          fi
+
+          sudo -u postgres psql -X -v ON_ERROR_STOP=1 -q \
+            -v db_name="$expected_db" -v role_name="$expected_role" <<'SQL'
+          SELECT pg_terminate_backend(pid)
+            FROM pg_stat_activity
+           WHERE datname = :'db_name' AND pid <> pg_backend_pid();
+          DROP DATABASE IF EXISTS :"db_name";
+          DROP ROLE IF EXISTS :"role_name";
+          SQL

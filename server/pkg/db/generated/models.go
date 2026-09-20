@@ -608,6 +608,7 @@ type ContentAccountRevision struct {
 	Revision      int64              `json:"revision"`
 	PersonaPrompt string             `json:"persona_prompt"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	Profile       []byte             `json:"profile"`
 }
 
 type ContentBriefRevision struct {
