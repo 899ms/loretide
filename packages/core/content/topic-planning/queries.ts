@@ -18,7 +18,10 @@ import {
 
 export const topicPlanningKeys = {
   all: (workspaceId: string) => ["contentTopics", workspaceId] as const,
-  list: (workspaceId: string) => ["contentTopics", workspaceId, "list"] as const,
+  // The filter is part of the key: two filters are two lists, and a shared key
+  // would serve one of them the other's cards.
+  list: (workspaceId: string, accountFilter = "") =>
+    ["contentTopics", workspaceId, "list", accountFilter] as const,
   detail: (workspaceId: string, topicCardId: string) =>
     ["contentTopics", workspaceId, "detail", topicCardId] as const,
   briefs: (workspaceId: string, topicCardId: string) =>
@@ -34,10 +37,11 @@ export const topicPlanningKeys = {
     ] as const,
 };
 
-export function useContentTopics(workspaceId: string) {
+export function useContentTopics(workspaceId: string, accountFilter = "") {
   return useQuery<TopicCard[]>({
-    queryKey: topicPlanningKeys.list(workspaceId),
-    queryFn: async () => parseTopicCards(await api.listContentTopics()),
+    queryKey: topicPlanningKeys.list(workspaceId, accountFilter),
+    queryFn: async () =>
+      parseTopicCards(await api.listContentTopics(accountFilter)),
   });
 }
 
@@ -67,9 +71,7 @@ export function useContentBrief(
     queryKey: topicPlanningKeys.brief(workspaceId, topicCardId, revisionId),
     enabled: !!topicCardId && !!revisionId,
     queryFn: async () =>
-      parseBriefRevision(
-        await api.getContentBrief(topicCardId, revisionId),
-      ),
+      parseBriefRevision(await api.getContentBrief(topicCardId, revisionId)),
   });
 }
 
@@ -79,7 +81,9 @@ export function useCreateContentTopic(workspaceId: string) {
     mutationFn: async (input: TopicCardInput) =>
       parseTopicCard(await api.createContentTopic(topicCardInputToWire(input))),
     onSuccess: () =>
-      client.invalidateQueries({ queryKey: topicPlanningKeys.all(workspaceId) }),
+      client.invalidateQueries({
+        queryKey: topicPlanningKeys.all(workspaceId),
+      }),
   });
 }
 
@@ -95,6 +99,26 @@ export function useActOnContentTopic(workspaceId: string) {
           input.topicCardId,
           topicActionInputToWire(input.body),
         ),
+      ),
+    onSuccess: () =>
+      client.invalidateQueries({
+        queryKey: topicPlanningKeys.all(workspaceId),
+      }),
+  });
+}
+
+// Changing which account a card belongs to invalidates the whole workspace
+// prefix: the card's own detail, and every filtered list — the one it left and
+// the one it joined.
+export function useSetContentTopicAccount(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      topicCardId: string;
+      accountId: string | null;
+    }) =>
+      parseTopicCard(
+        await api.setContentTopicAccount(input.topicCardId, input.accountId),
       ),
     onSuccess: () =>
       client.invalidateQueries({

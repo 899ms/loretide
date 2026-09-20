@@ -17,6 +17,11 @@ import {
   sortedRevisions,
   topicCardDraftToInput,
   topicStatusKey,
+  accountSelectionChanged,
+  accountSelectionOf,
+  accountSelectionToWire,
+  TOPIC_ACCOUNT_FILTER_ALL,
+  TOPIC_ACCOUNT_FILTER_NONE,
   TOPIC_ACTIONS,
 } from "./form-state";
 
@@ -25,6 +30,7 @@ function revision(overrides: Partial<BriefRevision>): BriefRevision {
 }
 
 const filledCardDraft = {
+  accountId: "",
   audienceProblemJudgment: " 写给刚起步的运营者 ",
   ipFit: "适合这个 IP",
   timing: "没有时效依据",
@@ -60,6 +66,13 @@ describe("topic card draft", () => {
     expect(input.audienceProblemJudgment).toBe("写给刚起步的运营者");
     expect(input.channels).toEqual(["知乎", "公众号"]);
     expect(input.accountId).toBeNull();
+  });
+
+  it("sends the chosen account, and null when none is chosen", () => {
+    expect(topicCardDraftToInput(filledCardDraft).accountId).toBeNull();
+    expect(
+      topicCardDraftToInput({ ...filledCardDraft, accountId: " account-1 " }).accountId,
+    ).toBe("account-1");
   });
 
   it("accepts an honest 没有 but refuses a blank", () => {
@@ -142,5 +155,37 @@ describe("status labels", () => {
     // A state this build has never heard of must still render as something.
     expect(topicStatusKey("archived_by_a_newer_server")).toBe("unknown");
     expect(topicStatusKey("")).toBe("unknown");
+  });
+});
+
+describe("account selection", () => {
+  it("treats an empty selection as no account, not as an empty id", () => {
+    expect(accountSelectionToWire("")).toBeNull();
+    expect(accountSelectionToWire("   ")).toBeNull();
+    expect(accountSelectionToWire(" account-1 ")).toBe("account-1");
+  });
+
+  it("shows what the card stores, including nothing", () => {
+    expect(accountSelectionOf("account-1")).toBe("account-1");
+    expect(accountSelectionOf(null)).toBe("");
+    expect(accountSelectionOf(undefined)).toBe("");
+  });
+
+  it("reports a change only when the link would really differ", () => {
+    // Re-confirming the same account would write an audit event saying
+    // nothing happened.
+    expect(accountSelectionChanged("account-1", "account-1")).toBe(false);
+    expect(accountSelectionChanged("", null)).toBe(false);
+    expect(accountSelectionChanged("account-2", "account-1")).toBe(true);
+    expect(accountSelectionChanged("", "account-1")).toBe(true);
+    expect(accountSelectionChanged("account-1", null)).toBe(true);
+  });
+
+  it("keeps the three filter answers apart", () => {
+    // "every card" is absent from the query string; "no account" needs a word
+    // of its own because it has no id.
+    expect(TOPIC_ACCOUNT_FILTER_ALL).toBe("");
+    expect(TOPIC_ACCOUNT_FILTER_NONE).toBe("none");
+    expect(TOPIC_ACCOUNT_FILTER_NONE).not.toBe(TOPIC_ACCOUNT_FILTER_ALL);
   });
 });

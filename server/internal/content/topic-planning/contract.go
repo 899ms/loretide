@@ -47,6 +47,13 @@ func (a Action) Status() (Status, bool) {
 	}
 }
 
+// AccountFilterNone selects the cards that are linked to no account.
+//
+// A list filter needs three answers, not two: every card, the cards of one
+// account, and the cards nobody has attached to an account yet. The third one
+// has no id to name it, so it gets a word an id can never be - ids are hex.
+const AccountFilterNone = "none"
+
 type TopicCard struct {
 	TopicCardID               string    `json:"topic_card_id"`
 	WorkspaceID               string    `json:"workspace_id"`

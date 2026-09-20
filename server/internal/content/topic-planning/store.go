@@ -158,19 +158,9 @@ func (s *Store) Create(ctx context.Context, actor string, card TopicCard) (Topic
 		s.reportFailure(ctx, card.WorkspaceID, actor, "", "create", ErrInvalid)
 		return TopicCard{}, ErrInvalid
 	}
-	if card.AccountID != nil {
-		if s == nil || s.Accounts == nil {
-			s.reportFailure(ctx, card.WorkspaceID, actor, "", "create", ErrStorage)
-			return TopicCard{}, ErrStorage
-		}
-		if _, err := s.Accounts.Get(ctx, card.WorkspaceID, *card.AccountID); err != nil {
-			if errors.Is(err, ipprofile.ErrNotFound) {
-				s.reportFailure(ctx, card.WorkspaceID, actor, "", "create", ErrNotFound)
-				return TopicCard{}, ErrNotFound
-			}
-			s.reportFailure(ctx, card.WorkspaceID, actor, "", "create", err)
-			return TopicCard{}, ErrStorage
-		}
+	if err := s.checkAccount(ctx, card.WorkspaceID, card.AccountID); err != nil {
+		s.reportFailure(ctx, card.WorkspaceID, actor, "", "create", err)
+		return TopicCard{}, err
 	}
 	card.TopicCardID = s.newID()
 	card.Status = StatusDraft
@@ -220,6 +210,82 @@ func (s *Store) Create(ctx context.Context, actor string, card TopicCard) (Topic
 	return card, nil
 }
 
+// checkAccount refuses an account that is not this brand's.
+//
+// Nil means "no account", which is a legitimate state: a card may be written
+// before anyone decides which account publishes it. A foreign or missing
+// account is ErrNotFound, the same answer a foreign card gets, so a refusal
+// cannot be used to find out which account ids exist.
+func (s *Store) checkAccount(ctx context.Context, workspaceID string, accountID *string) error {
+	if accountID == nil {
+		return nil
+	}
+	if s == nil || s.Accounts == nil {
+		return ErrStorage
+	}
+	if _, err := s.Accounts.Get(ctx, workspaceID, *accountID); err != nil {
+		if errors.Is(err, ipprofile.ErrNotFound) {
+			return ErrNotFound
+		}
+		return ErrStorage
+	}
+	return nil
+}
+
+// SetAccount attaches the card to an account, or detaches it when accountID is
+// nil. Its own entry point rather than a field on the four decision actions:
+// those change what happens to the card, this changes who it is written for,
+// and folding them together would make "save" able to silently re-target a
+// card (SOP 5.2 asks the card to say why it fits THIS IP).
+//
+// The whole thing runs inside the workspace delete fence, the brand check
+// included: a check taken outside it could be answered before the workspace is
+// deleted and the write applied after.
+func (s *Store) SetAccount(ctx context.Context, workspaceID, actor, topicCardID string, accountID *string) (TopicCard, error) {
+	if workspaceID == "" || actor == "" || topicCardID == "" {
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-account", ErrInvalid)
+		return TopicCard{}, ErrInvalid
+	}
+	tx, err := s.begin(ctx, workspaceID)
+	if err != nil {
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-account", err)
+		return TopicCard{}, err
+	}
+	defer tx.Rollback(ctx)
+	ctx, err = s.audit(ctx, tx, workspaceID, actor, topicCardID, "link-account")
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-account", err)
+		return TopicCard{}, err
+	}
+	if err = s.checkAccount(ctx, workspaceID, accountID); err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-account", err)
+		return TopicCard{}, err
+	}
+	card, err := scanTopicCard(tx.QueryRow(ctx, topicCardSelect+` WHERE workspace_id=$1 AND topic_card_id=$2 FOR UPDATE`, workspaceID, topicCardID))
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-account", err)
+		return TopicCard{}, err
+	}
+	err = tx.QueryRow(ctx, `
+		UPDATE content_topic_card SET account_id=$3, updated_at=now()
+		WHERE workspace_id=$1 AND topic_card_id=$2
+		RETURNING updated_at`, workspaceID, topicCardID, accountID).Scan(&card.UpdatedAt)
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-account", err)
+		return TopicCard{}, ErrStorage
+	}
+	if err = tx.Commit(ctx); err != nil {
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-account", err)
+		return TopicCard{}, ErrStorage
+	}
+	card.AccountID = accountID
+	return card, nil
+}
+
 func (s *Store) Get(ctx context.Context, workspaceID, actor, topicCardID string) (TopicCard, error) {
 	if s == nil || s.DB == nil {
 		if s != nil {
@@ -238,7 +304,13 @@ func (s *Store) Get(ctx context.Context, workspaceID, actor, topicCardID string)
 	return card, err
 }
 
-func (s *Store) List(ctx context.Context, workspaceID, actor string) ([]TopicCard, error) {
+// List returns the brand's cards, optionally narrowed to one account.
+//
+// accountFilter is empty for every card, AccountFilterNone for the cards no
+// account has been chosen for, and an account id otherwise. The filter is part
+// of the query rather than something the caller drops afterwards: a page that
+// filters after reading would still have carried every card across the network.
+func (s *Store) List(ctx context.Context, workspaceID, actor, accountFilter string) ([]TopicCard, error) {
 	if s == nil || s.DB == nil {
 		if s != nil {
 			s.reportFailure(ctx, workspaceID, actor, "", "list", ErrStorage)
@@ -249,7 +321,16 @@ func (s *Store) List(ctx context.Context, workspaceID, actor string) ([]TopicCar
 		s.reportFailure(ctx, workspaceID, actor, "", "list", ErrInvalid)
 		return nil, ErrInvalid
 	}
-	rows, err := s.DB.Query(ctx, topicCardSelect+` WHERE workspace_id=$1 ORDER BY created_at DESC, topic_card_id`, workspaceID)
+	where, args := ` WHERE workspace_id=$1`, []any{workspaceID}
+	switch accountFilter {
+	case "":
+	case AccountFilterNone:
+		where += ` AND account_id IS NULL`
+	default:
+		where += ` AND account_id=$2`
+		args = append(args, accountFilter)
+	}
+	rows, err := s.DB.Query(ctx, topicCardSelect+where+` ORDER BY created_at DESC, topic_card_id`, args...)
 	if err != nil {
 		s.reportFailure(ctx, workspaceID, actor, "", "list", err)
 		return nil, ErrStorage

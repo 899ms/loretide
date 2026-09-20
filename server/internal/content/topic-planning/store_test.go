@@ -86,6 +86,10 @@ func TestWritesFailClosedWithoutTheWorkspaceFence(t *testing.T) {
 			_, err := store.AppendBrief(t.Context(), "workspace-a", "actor-a", "topic-a", BriefRevision{})
 			return err
 		},
+		"set-account": func() error {
+			_, err := store.SetAccount(t.Context(), "workspace-a", "actor-a", "topic-a", nil)
+			return err
+		},
 	}
 	for name, write := range writes {
 		t.Run(name, func(t *testing.T) {
