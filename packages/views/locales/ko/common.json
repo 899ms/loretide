@@ -371,7 +371,7 @@
     "reviewTeamLabel": "다른 구성원이 검토",
     "reviewTeamLater": "이후 기능입니다. 검토자를 지정할 방법이 아직 없어서, 비활성화된 선택 항목도 두지 않았습니다.",
     "observationTitle": "언제 숫자를 확인할지",
-    "observationHint": "발행 후 며칠 뒤에 숫자를 옮겨 적을지. 스스로를 위한 메모이며 재촉하지 않습니다.",
+    "observationHint": "게시 후 얼마나 지나 숫자를 옮겨 적으러 갈지. 스스로를 위한 메모입니다 — 아무도 재촉하지 않지만, 오늘 화면의 \"기록할 피드백\"은 이 일수로 무엇을 올릴지 정합니다.",
     "observationDefaultLabel": "모든 채널",
     "observationDefaultHint": "발행 후 일수. 비워 두면 \"기한이 되었는지\"에 답이 없습니다 — 아무도 정하지 않은 숫자보다 그편이 정확합니다.",
     "observationPlaceholder": "예: 14",
@@ -920,12 +920,15 @@
     "aiUnavailable": "현재 사용할 수 없습니다(실행기 비활성, EP-08 에서 연결). 아래에 생성된 결론은 하나도 없습니다.",
     "aiRun": "실행",
     "pendingTitle": "기록할 피드백",
-    "pendingHint": "발행했는데 숫자가 하나도 기록되지 않았습니다. \"기한 초과\"가 아닙니다 — 관측 시점이라는 설정이 아직 없습니다.",
+    "pendingHint": "게시되었고 숫자가 하나도 기록되지 않았으며, 브랜드가 정한 관찰 일수가 지났습니다. 일수를 정하지 않은 건도 목록에 남습니다 — \"충분히 지났는가\"에 답할 수 없을 때는 숨기지 않고 보여 줍니다.",
     "pendingScope": "이 브랜드 전체이며, 이 글만이 아닙니다.",
+    "pendingWindowSource": "관찰 일수는 워크스페이스 설정의 \"언제 보러 갈지\"에서 읽어 오며, 열 때마다 다시 읽습니다.",
     "pendingEmpty": "기다리는 항목이 없습니다",
     "pendingActive": "현재 선택됨",
     "pendingOpen": "이 건 기록하기",
     "pendingElsewhere": "다른 글의 항목입니다 — 해당 문서를 열어 기록하세요.",
+    "pendingDuePassed": "관찰 일수가 지났습니다",
+    "pendingDueUnknown": "관찰 일수 미설정 — 시점인지 답할 수 없습니다",
     "sources": {
       "comment": "댓글",
       "private_message": "다이렉트 메시지",
@@ -980,7 +983,7 @@
     },
     "feedback": {
       "title": "기록할 피드백",
-      "derivation": "발행했는데 숫자가 하나도 기록되지 않았습니다.",
+      "derivation": "게시되었고 기록된 숫자가 없으며 관찰 일수가 지난 건. 일수를 정하지 않은 건도 포함합니다.",
       "noMetrics": "기록된 숫자 없음"
     },
     "accountGaps": {

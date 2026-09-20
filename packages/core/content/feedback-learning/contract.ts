@@ -95,11 +95,26 @@ export interface PendingFeedback {
   artifactId: string;
   channel: string;
   status: string;
-  /** null when 025's publication record carried no publication time. It does
-   *  not affect whether the record is pending - this card's derivation has no
-   *  time logic at all. */
+  /** null when 025's publication record carried no publication time. A record
+   *  with no time cannot have a window that elapsed, so the server answers
+   *  `due: "unknown"` for it and keeps it on the list. */
   publishedAt: string | null;
   createdAt: string;
+  /**
+   * Why this row is here, as the server derived it from SOP 3.2's
+   * 反馈观察时点 (specs/029).
+   *
+   * "passed" - the brand's observation window elapsed.
+   * "unknown" - nobody set a window, or there is no publication time, so
+   *   "has it been long enough" has no answer. The record is listed anyway.
+   * "" - this build got no answer: an older backend, or a value it has not
+   *   heard of. The page says nothing rather than guessing, because "passed"
+   *   and "unknown" are different sentences and neither is safe to invent.
+   *
+   * "not_yet" never appears: a record whose window has not elapsed is not on
+   * this list at all.
+   */
+  due: string;
 }
 
 // Lenient by design: an installed client talks to whatever backend is
@@ -148,6 +163,13 @@ const pendingSchema = z.object({
   status: z.string().optional(),
   published_at: z.string().nullable().optional(),
   created_at: z.string().optional(),
+  // Optional AND `.catch`, which its siblings are not, because this field is
+  // the one specs/029 added: a list that worked before it existed must not
+  // start collapsing because one row's `due` came back the wrong shape. The
+  // row still names a real publication record waiting for numbers, and that
+  // is the part the workbench needs. Absent or unusable both read as "no
+  // answer" - never as "the window passed".
+  due: z.string().catch("").optional(),
 });
 
 const metricListSchema = z.object({ metrics: z.array(metricSchema).nullable().optional() });
@@ -217,6 +239,8 @@ function toPending(wire: z.infer<typeof pendingSchema>): PendingFeedback {
     status: wire.status ?? "",
     publishedAt: wire.published_at ?? null,
     createdAt: wire.created_at ?? "",
+    // `?? ""`, never `?? "passed"`. Absent means this build was not told.
+    due: wire.due ?? "",
   };
 }
 

@@ -371,7 +371,7 @@
     "reviewTeamLabel": "别人复核",
     "reviewTeamLater": "后续能力。现在还没有任何东西能指派复核人，所以这里也不放一个灰着的选择框。",
     "observationTitle": "什么时候去看数",
-    "observationHint": "发布后多久去把数抄回来。写给自己看的——不会有人催你。",
+    "observationHint": "发布后多久去把数抄回来。写给自己看的——不会有人催你，但今日工作台的「待补录的反馈」会照这个数字决定列谁。",
     "observationDefaultLabel": "所有渠道",
     "observationDefaultHint": "发布后第几天。留空就是「到没到期」没有答案——这比填一个没人定过的数好。",
     "observationPlaceholder": "例如 14",
@@ -920,12 +920,15 @@
     "aiUnavailable": "暂不可用（执行器禁用，EP-08 接入）。下面没有任何生成出来的结论。",
     "aiRun": "运行",
     "pendingTitle": "待补录的反馈",
-    "pendingHint": "发出去了，却一条数都没录。不是「到期」——现在还没有观察时点这回事。",
+    "pendingHint": "发出去了、一条数都没录，而且品牌设的观察天数已经过了。没设过天数的也留在这里——「到没到期」答不出来的时候，宁可摆出来让人看一眼。",
     "pendingScope": "本品牌全部，不只这一篇。",
+    "pendingWindowSource": "观察天数读自工作区设置的「什么时候去看数」，每次打开都重新读。",
     "pendingEmpty": "没有要补的",
     "pendingActive": "当前选中",
     "pendingOpen": "去补这一条",
     "pendingElsewhere": "在另一篇上——去那篇文档里补录。",
+    "pendingDuePassed": "观察天数已过",
+    "pendingDueUnknown": "没设观察天数——到没到期答不出来",
     "sources": {
       "comment": "评论",
       "private_message": "私信",
@@ -980,7 +983,7 @@
     },
     "feedback": {
       "title": "待补录的反馈",
-      "derivation": "发出去了，却一条数都没录。",
+      "derivation": "发出去了、一条数都没录，而且观察天数已经过了；没设过天数的也算在内。",
       "noMetrics": "还没有任何指标"
     },
     "accountGaps": {

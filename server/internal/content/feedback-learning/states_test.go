@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	workspacecore "github.com/multica-ai/multica/server/internal/content/workspace-core"
 )
 
 // The controlled sets, the validation and the two derivations. No database:
@@ -273,24 +275,72 @@ func TestTheExcerptLimitIsCountedInRunes(t *testing.T) {
 	}
 }
 
-// SOP 2's fifth workbench item, and no time logic anywhere in it.
+// SOP 2's fifth workbench item: published, nothing recorded, and - since
+// specs/029 - the brand's observation window has elapsed.
 func TestNeedsRegistrationIsPublishedAndNothingRecorded(t *testing.T) {
 	for _, item := range []struct {
 		name   string
 		status string
 		count  int
+		due    workspacecore.Due
 		want   bool
 	}{
-		{"reported, nothing recorded", "reported_published", 0, true},
-		{"verified, nothing recorded", "verified_published", 0, true},
-		{"reported, already recorded", "reported_published", 1, false},
-		{"failed", "failed", 0, false},
-		{"removed", "removed", 0, false},
-		{"unknown", "unknown", 0, false},
-		{"a status this build has not heard of", "escalated", 0, false},
+		{"reported, nothing recorded, window passed", "reported_published", 0, workspacecore.DuePassed, true},
+		{"verified, nothing recorded, window passed", "verified_published", 0, workspacecore.DuePassed, true},
+		{"reported, already recorded", "reported_published", 1, workspacecore.DuePassed, false},
+		{"failed", "failed", 0, workspacecore.DuePassed, false},
+		{"removed", "removed", 0, workspacecore.DuePassed, false},
+		{"unknown", "unknown", 0, workspacecore.DuePassed, false},
+		{"a status this build has not heard of", "escalated", 0, workspacecore.DuePassed, false},
 	} {
-		if got := NeedsRegistration(item.status, item.count); got != item.want {
+		if got := NeedsRegistration(item.status, item.count, item.due); got != item.want {
 			t.Errorf("%s: got %v, want %v", item.name, got, item.want)
+		}
+	}
+}
+
+// The three-valued window, and the one case that is easy to get backwards.
+//
+// DueUnknown behaves like DuePassed, NOT like DueNotYet. A brand that has set
+// no window, and a publication record with no publication time (025 allows
+// that), are exactly the pieces somebody should look at; answering "not yet"
+// for them would take them off the workbench with nothing to show it happened.
+func TestNeedsRegistrationTreatsAnUnknownWindowAsWorthLookingAt(t *testing.T) {
+	for _, item := range []struct {
+		name string
+		due  workspacecore.Due
+		want bool
+	}{
+		{"the window elapsed", workspacecore.DuePassed, true},
+		{"nobody knows whether it elapsed", workspacecore.DueUnknown, true},
+		{"too early to expect numbers", workspacecore.DueNotYet, false},
+	} {
+		if got := NeedsRegistration("verified_published", 0, item.due); got != item.want {
+			t.Errorf("%s: got %v, want %v", item.name, got, item.want)
+		}
+	}
+
+	// Stated as its own assertion rather than left to the table above: this is
+	// the line a future change is most likely to cross.
+	passed := NeedsRegistration("verified_published", 0, workspacecore.DuePassed)
+	unknown := NeedsRegistration("verified_published", 0, workspacecore.DueUnknown)
+	notYet := NeedsRegistration("verified_published", 0, workspacecore.DueNotYet)
+	if unknown != passed {
+		t.Error("an unknown window does not behave like an elapsed one")
+	}
+	if unknown == notYet {
+		t.Error("an unknown window behaves like 'not yet'; those records would vanish from the workbench")
+	}
+}
+
+// Nothing here decides how long to wait. The window arrives as an argument,
+// and a record with metrics is out regardless of what the window says.
+func TestNeedsRegistrationNeverOverridesTheMetricCount(t *testing.T) {
+	for _, due := range []workspacecore.Due{
+		workspacecore.DuePassed, workspacecore.DueNotYet, workspacecore.DueUnknown,
+	} {
+		if NeedsRegistration("verified_published", 1, due) {
+			t.Errorf("a record with metrics is pending when due=%q", due)
 		}
 	}
 }

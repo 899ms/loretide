@@ -241,6 +241,8 @@ workspace-core   review-delivery   diagnostics
 **待补录与 AI 复盘占位**
 
 - **FR-020**：「待补录」MUST 是**读时派生**：发布记录的 `status` 是 `reported_published` 或 `verified_published`、且该记录没有任何指标记录。MUST NOT 是存储里的状态值或列。**首版 MUST NOT 带任何时间逻辑**（裁决 Q5=A：品牌级「反馈观察时点」属 §3.2 另卡）。
+
+  > **2026-09-20 更新（specs/029 实施 PR 3，Issue #197）**：§3.2 的「反馈观察时点」已由 specs/029 落地，本条的时间条款随之生效为：判定 MUST 再加一条——**观察天数已过**。天数 MUST **读自品牌设置**，MUST NOT 是代码里的字面量；**没设过天数、或发布记录没有 `published_at`** 时答「无法判断」，此时该记录 **MUST 仍然在列**（与「已过」同一分支，MUST NOT 与「还没到」同一分支）。首版那句「MUST NOT 带任何时间逻辑」不删：它禁止的是**发明一个 SOP 没说的默认天数**，这条禁令今天一字未减，只是天数有了合法来源。守卫也不拆，改为「禁止**写死的**天数」（`TestThePendingDerivationReadsItsWindowFromSettings`）。
 - **FR-021**：「AI 复盘」的状态受控集 MUST 是 §7.1 原文的**七个值**：`pending_data` / `queued` / `generating` / `generated` / `failed` / `edited` / `superseded`。
 - **FR-022**：本卡 MUST 只产生 `pending_data`，界面显示「待运行」并写明「暂不可用（执行器禁用，EP-08 接入）」。MUST 有一条负例断言**本模块没有任何路径能产生其余六个值**（照 024 对 `generated` 的做法）。MUST NOT 隐藏该栏、MUST NOT 停在加载态、**MUST NOT 产生任何伪造的复盘结论**。
 - **FR-023**：本卡 MUST NOT 产生「待采纳 / 已采纳经营结论」（§10.3），也 MUST NOT 为它建表。

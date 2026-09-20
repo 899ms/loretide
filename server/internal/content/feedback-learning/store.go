@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
+	workspacecore "github.com/multica-ai/multica/server/internal/content/workspace-core"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -50,10 +51,29 @@ type Publications interface {
 	Resolve(ctx context.Context, workspaceID, publicationRecordID string) (workID, artifactID, versionID string, err error)
 }
 
+// Observation answers, for one publication record, whether the brand's
+// 反馈观察时点 has elapsed (specs/029, SOP 3.2).
+//
+// An interface answered by the adapter rather than a direct call into
+// workspace-core's store, for the same reason Publications is one: this module
+// reads its own tables and nobody else's. The Due type itself does come from
+// workspace-core - it is a declared dependency, and restating a three-valued
+// enum here would be a second definition waiting to drift.
+//
+// An error is NOT a reason to drop a record. The implementation answers
+// DueUnknown when it cannot tell, and DueUnknown keeps the record on the list.
+type Observation interface {
+	DueFor(ctx context.Context, workspaceID, channel string, publishedAt *time.Time) workspacecore.Due
+}
+
 type Store struct {
 	DB           Database
 	Diagnostics  DiagnosticStore
 	Publications Publications
+	// Observation is specs/029's window. A nil one means every record answers
+	// DueUnknown, which keeps the list exactly as it was before 029 - the
+	// behaviour a test fixture that has not wired it should get.
+	Observation Observation
 	// Guard is workspace-core's delete/write fence. Every write transaction
 	// takes it as its first statement, so a workspace deletion that has
 	// already committed cannot be followed by an orphan metric. The audit
@@ -66,6 +86,18 @@ type Store struct {
 }
 
 type scanner interface{ Scan(...any) error }
+
+// dueFor asks the brand's window, defaulting to DueUnknown.
+//
+// Unknown is the safe default in both directions: it is what a brand with no
+// window genuinely is, and it is the answer that KEEPS a record on the pending
+// list rather than hiding it.
+func (s *Store) dueFor(ctx context.Context, workspaceID, channel string, publishedAt *time.Time) workspacecore.Due {
+	if s == nil || s.Observation == nil {
+		return workspacecore.DueUnknown
+	}
+	return s.Observation.DueFor(ctx, workspaceID, channel, publishedAt)
+}
 
 func (s *Store) newID() string {
 	if s != nil && s.NewID != nil {

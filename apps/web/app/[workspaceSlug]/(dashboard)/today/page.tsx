@@ -32,6 +32,7 @@ import {
 } from "@multica/core/content/review-delivery";
 import {
   describePending,
+  pendingDueNote,
   pendingFeedbackSummary,
   usePendingFeedback,
   type PendingFeedback,
@@ -357,7 +358,10 @@ function FeedbackSection({ wsId, links }: SectionProps) {
         <SettingsRow
           key={entry.publicationRecordId}
           label={describePending(entry)}
-          description={t(($) => $.contentToday.feedback.noMetrics)}
+          // Why this row is here, not just that it is. An elapsed window and
+          // an absent one read differently, and a build that was told neither
+          // falls back to the plain "no numbers yet" rather than inventing one.
+          description={feedbackRowNote(t, entry.due)}
         >
           <Button variant="outline" onClick={() => navigation.push(links.topics)}>
             {t(($) => $.contentToday.open)}
@@ -366,6 +370,17 @@ function FeedbackSection({ wsId, links }: SectionProps) {
       )}
     />
   );
+}
+
+function feedbackRowNote(t: Translate, due: string): string {
+  switch (pendingDueNote(due)) {
+    case "passed":
+      return t(($) => $.contentFeedback.pendingDuePassed);
+    case "unknown":
+      return t(($) => $.contentFeedback.pendingDueUnknown);
+    default:
+      return t(($) => $.contentToday.feedback.noMetrics);
+  }
 }
 
 // ---------------------------------------------------------------- section 6

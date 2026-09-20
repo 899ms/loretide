@@ -99,21 +99,21 @@ description: "Task list for 029 operating rules — SOP §3.2 brand-level settin
 
 ## Phase 6: 接进 027（PR 3）
 
-- [ ] T035 **先写** `NeedsRegistration` 的新用例：`due = passed` 按原两条件；`due = not_yet` **不在**待补录里；**`due = unknown` 按原两条件**（SC-015）。确认失败。**`unknown` 走 `passed` 的分支，不是 `not_yet` 的**——这是整个 PR 3 最容易做反的一处：把「不知道到没到期」当成「还没到」，会让每一条没有发布时间的记录从工作台静悄悄消失，而它们恰恰最需要有人去看一眼
-- [ ] T036 改 `server/internal/content/feedback-learning/states.go` 的 `NeedsRegistration`，加第三个参数。`feedback-learning` 的依赖表里**有 `workspace-core`**，所以**直接 import**，不读源文件对表，**登记表不改**
-- [ ] T036a 改 `NeedsRegistration` 那段注释：它现在写的是「§3.2 的观察时点还不存在」，那句话已经过期。新注释要写清**为什么 `unknown` 走 `passed` 分支**
-- [ ] T037 改守卫 `TestThePendingDerivationHasNoTimeLogic`：从「禁止时间比较」改成「**天数必须读自参数或设置，不得是字面量**」。**不是删掉它**
-- [ ] T038 变异验证：把天数写成字面量 `14` → T037 变红（SC-014）。**这是唯一能证明守卫改写之后没变空的东西**
-- [ ] T039 读端接上：列待补录的查询要带上观察时点。确认 `GET /api/content-feedback/pending` 的既有用例仍绿，必要时补一条
+- [x] T035 **先写** `NeedsRegistration` 的新用例：`due = passed` 按原两条件；`due = not_yet` **不在**待补录里；**`due = unknown` 按原两条件**（SC-015）。确认失败。**`unknown` 走 `passed` 的分支，不是 `not_yet` 的**——这是整个 PR 3 最容易做反的一处：把「不知道到没到期」当成「还没到」，会让每一条没有发布时间的记录从工作台静悄悄消失，而它们恰恰最需要有人去看一眼
+- [x] T036 改 `server/internal/content/feedback-learning/states.go` 的 `NeedsRegistration`，加第三个参数。`feedback-learning` 的依赖表里**有 `workspace-core`**，所以**直接 import**，不读源文件对表，**登记表不改**
+- [x] T036a 改 `NeedsRegistration` 那段注释：它现在写的是「§3.2 的观察时点还不存在」，那句话已经过期。新注释要写清**为什么 `unknown` 走 `passed` 分支**
+- [x] T037 改守卫 `TestThePendingDerivationHasNoTimeLogic`：从「禁止时间比较」改成「**天数必须读自参数或设置，不得是字面量**」。**不是删掉它**
+- [x] T038 变异验证：把天数写成字面量 `14` → T037 变红（SC-014）。**这是唯一能证明守卫改写之后没变空的东西**
+- [x] T039 读端接上：列待补录的查询要带上观察时点。确认 `GET /api/content-feedback/pending` 的既有用例仍绿，必要时补一条
 
 ---
 
 ## Phase 7: Polish
 
-- [ ] T040 跑全部验证：`pnpm typecheck --force`、三项 check、`bash scripts/test-go.sh`、两套 db-suites、core vitest、`locales/parity.test.ts`、**views 的 `rich-content/package-exports.test.ts`**
-- [ ] T041 核对三个 PR 的上游提交都是既有行零删除（`git show --numstat` 应为 `N 0`）
-- [ ] T042 核对「未设 ≠ 零值」三处都在：Go 读写（T005）、core 解析（T021）、界面展示（T028）
-- [ ] T043 PR 3 正文：**为什么它单独一个 PR**（改的是另一个模块里一条刻意写下来的守卫）、守卫从什么改成什么、变异证据、`unknown` 为什么走 `passed` 分支
+- [x] T040 跑全部验证：`pnpm typecheck --force`、三项 check、`bash scripts/test-go.sh`、两套 db-suites、core vitest、`locales/parity.test.ts`、**views 的 `rich-content/package-exports.test.ts`**
+- [x] T041 核对三个 PR 的上游提交都是既有行零删除（`git show --numstat` 应为 `N 0`）
+- [x] T042 核对「未设 ≠ 零值」三处都在：Go 读写（T005）、core 解析（T021）、界面展示（T028）
+- [x] T043 PR 3 正文：**为什么它单独一个 PR**（改的是另一个模块里一条刻意写下来的守卫）、守卫从什么改成什么、变异证据、`unknown` 为什么走 `passed` 分支
 
 ---
 
@@ -178,3 +178,44 @@ T001 裁决回写 → T002 基线 → T003 读三处既有形状
 **一处顺手修掉的**：`SettingsSaveState` 的错误文案我原本写成 `contentAccounts.saveFailed`，那个键不存在——`contentAccounts` 里已有的是 `failed`。typecheck 当场报出来，改用既有键，没有新增一个同义的。
 
 **页面 PR 没有变异验证这一环**（宪法 II 不写 UI 单测），所以 22 条 node 用例是这一段唯一的自动化证据。其中「清空的框不能变成 0」「存进去的 0 不能显示成未设置」两组是照着已知会出错的地方写的，不是照着实现反推的。
+
+---
+
+## 实施记录（PR 3 接进 027，2026-09-20）
+
+分支 `claude/impl-029-feedback-observation`，base `app-main` @ `7c67e40`。T035–T043 全部落地。
+
+**为什么它单独一个 PR**：它改的不是本卡的模块，而是 027 里**一条刻意写下来的守卫**——`TestThePendingDerivationHasNoTimeLogic` 当初是为了挡住「发明一个默认天数」才写的。和设置页放同一个 PR，审的人就得同时判断「这个新设置对不对」和「那条守卫该不该动」，而后者才是真正要看清楚的地方。
+
+**守卫从什么改成什么**：`TestThePendingDerivationHasNoTimeLogic` → `TestThePendingDerivationReadsItsWindowFromSettings`。**没有删**，禁的东西一条没少，只是从「禁止时间比较」收紧成「禁止**写死的**时间比较」，现在查三件事：
+
+1. 派生用的那条 SQL 里没有时间比较（原样保留）；
+2. 整个模块的 Go 代码里没有写死的窗口——四条正则分别打 `N * 24 * time.Hour`、`N * time.Hour`、`time.Duration(N)`、`AddDate(0, 0, N)`；
+3. `NeedsRegistration` 的签名里仍然有 `workspacecore.Due`，且模块里仍然提到 `workspacecore.DueUnknown`。
+
+第 2 条先 `stripGoComments` 再扫。这是 PR 1 的教训（凭据守卫当初匹配到了我自己写的注释）：**一条会因为文件解释了自己而报警的守卫，方向是反的。**
+
+**变异证据（四次，全部先红后复原）：**
+
+| | 变异 | 结果 |
+|---|---|---|
+| M1 | 把天数写成字面量 `14*24*time.Hour` | 守卫红：`a hard-coded observation window appears in this module: "14*24*time.Hour"` |
+| M2 | 把 `unknown` 当 `not_yet` 处理 | `TestNeedsRegistrationTreatsAnUnknownWindowAsWorthLookingAt` 红：`an unknown window behaves like 'not yet'; those records would vanish from the workbench` |
+| M3 | 适配器不读设置，一律答 `unknown` | 四条真实 DB 用例红（列/不列/渠道覆盖/改设置生效） |
+| M4 | 去掉每请求一次的设置缓存 | `TestTheObservationAdapterReadsTheSettingsOncePerRequest` 红：`the settings were read 5 times for 5 rows, want 1` |
+
+**`unknown` 为什么走 `passed` 的分支**：不知道到没到期，不是「还没到」。没设过观察天数的品牌、以及 025 允许存在的「没有发布时间」的发布记录，恰恰是最需要有人去看一眼的那些；把它们归到「还没到」，它们会从工作台上**无声地消失**，而且没有任何地方会报警。这是本卡第三次遇到同一个坑（019 的布尔、027 的指标值、029 的天数），所以它在契约 §8、plan 风险表、T035、策略 5、函数注释、两条用例和 M2 里各钉了一遍。
+
+**三处与清单写的不一样：**
+
+1. **窗口在 Go 里过滤，不在 SQL 里。** T039 写的是「列待补录的查询要带上观察时点」。真放进 SQL，那个天数要么被拼进语句、要么在 SQL 里多一份同样的规则；而守卫第 1 条要查的恰恰是「SQL 里没有时间比较」。改成扫描后在 Go 里问一次 `NeedsRegistration`：**SQL 一个字没改**，第三个条件只在一个地方出现。
+
+2. **多了一个 `Observation` 端口，没有直接调 `workspacecore.Store`。** 照既有的 `Publications` 先例：这个模块只读自己的表，别人的表由适配器回答。`Due` 类型本身还是从 `workspace-core` 来的——依赖表里本来就有它，在这边重抄一个三态枚举就是等着走样的第二份定义。`Observation` 为 nil 时一律答 `DueUnknown`，所以没接线的测试夹具的行为和 029 之前完全一样。
+
+3. **适配器加了每请求一次的设置缓存（清单没写）。** 待补录是一行问一次窗口，照原样写下去，一个有两百条已发布记录的品牌就是两百次一模一样的设置查询。顺带把 `now` 也冻在请求开始——分散在扫描过程中的不同时刻去比，同一页里的两行可能对「这个窗口过没过」给出不同答案，而一份自相矛盾的列表比一份晚了一秒的更糟。缓存是**每请求**的：`feedbackStore()` 每次调用都新建一个，所以改了设置下一次请求就生效（`TestChangingTheWindowChangesTheList` 盯着这一点）。
+
+**前端顺手修掉一处会连累整张表的地方**：`due` 在 zod schema 里是 `z.string().catch("").optional()`，而它的同级字段都不是。理由写在注释里——**这个字段是本卡新加的，一张在它出现之前就能正常工作的列表，不该因为某一行的 `due` 回来的形状不对就整张塌掉**。行本身仍然指着一条真实的、等着补数的发布记录，那才是工作台要的东西。缺失或不可用都读成「没答案」，**绝不读成「已过」**。
+
+**文案更新**：027 页面「待补录」区块与今日工作台第五项都改了口径，并各自多说了一句天数从哪来；029 设置页的观察时点说明也补上了它现在的后果（改这个数字会改工作台列谁）。四语言同步，`locales/parity.test.ts` 160 条绿。旧口径的两条 spec 断言（026 FR-005b 的「没有到期概念」、027 FR-020 的「MUST NOT 带任何时间逻辑」）用 026 既有的「更新」块格式就地补注，**原文一行未删**——它们记的是当初为什么不发明一个默认天数，那条理由今天依然成立。
+
+**本 PR 没有 `upstream:` 提交**：改到的共享文件只有四个 `locales/*/common.json`，动的三个键（`contentFeedback.*`、`contentToday.feedback.derivation`、`operatingRules.observationHint`）全是 Loretide 在 027/029 里自己加的，没有触到上游 Multica 的任何一行。

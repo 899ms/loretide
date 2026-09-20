@@ -365,11 +365,29 @@ func TestThePublishedStatusesAgreeWithReviewDeliverys(t *testing.T) {
 	}
 }
 
-// SOP 3.2's brand-level 反馈观察时点 does not exist, so "is it due" has no
-// answer. A hard-coded number of days would be a rule the SOP never stated,
-// sitting where no operator can see or change it.
-func TestThePendingDerivationHasNoTimeLogic(t *testing.T) {
+// The pending derivation may compare times now - specs/029 gave the brand a
+// 反馈观察时点 to compare against - but the number of days must come from that
+// setting and never from a literal in this package.
+//
+// This guard used to forbid time comparison outright, because until 029 there
+// was nothing to compare against and any number here would have been a rule
+// the SOP never stated, sitting where no operator could see or change it. That
+// sentence is still the point; only the way to satisfy it changed. Deleting
+// the guard when the window landed would have thrown away the part that still
+// matters.
+//
+// Three things it checks, and the third is what makes the first two worth
+// keeping:
+//
+//  1. no SQL statement in this module does the comparison - the window is a Go
+//     value, and pushing it into SQL means interpolating it or copying the rule;
+//  2. no literal day count appears anywhere near the derivation;
+//  3. the derivation still takes the window as an argument, so the guard
+//     cannot be passing because the feature is gone.
+func TestThePendingDerivationReadsItsWindowFromSettings(t *testing.T) {
 	sources := moduleSources(t)
+
+	// (1) The SQL says what it always said: published, and no metrics.
 	for _, statement := range sqlLiterals(t, sources) {
 		upper := strings.ToUpper(statement)
 		if !strings.Contains(upper, "NOT EXISTS") {
@@ -377,11 +395,71 @@ func TestThePendingDerivationHasNoTimeLogic(t *testing.T) {
 		}
 		for _, forbidden := range []string{"INTERVAL", "NOW()", "PUBLISHED_AT <", "PUBLISHED_AT >", "AGE("} {
 			if strings.Contains(upper, forbidden) {
-				t.Errorf("the pending derivation compares times (%s):\n%s", forbidden, statement)
+				t.Errorf("the pending derivation compares times in SQL (%s):\n%s", forbidden, statement)
 			}
 		}
 	}
-	if !strings.Contains(sources, "NeedsRegistration") {
+
+	// (2) No written-down number of days. Anything multiplied into a duration,
+	// or added to a time, is what a hard-coded window looks like in Go.
+	code := stripGoComments(sources)
+	for _, pattern := range []string{
+		`\b\d+\s*\*\s*24\s*\*\s*time\.Hour`,
+		`\b\d+\s*\*\s*time\.Hour`,
+		`time\.Duration\(\s*\d+\s*\)`,
+		`AddDate\(\s*0\s*,\s*0\s*,\s*\d+\s*\)`,
+	} {
+		if match := regexp.MustCompile(pattern).FindString(code); match != "" {
+			t.Errorf("a hard-coded observation window appears in this module: %q", match)
+		}
+	}
+
+	// (3) ...and the derivation still asks for the window, so (1) and (2) are
+	// not passing because nobody compares anything any more.
+	if !strings.Contains(code, "func NeedsRegistration(") {
 		t.Fatal("NeedsRegistration is gone; this guard would pass vacuously")
 	}
+	signature := regexp.MustCompile(`func NeedsRegistration\([^)]*workspacecore\.Due[^)]*\)`)
+	if !signature.MatchString(code) {
+		t.Error("NeedsRegistration no longer takes the window as an argument; " +
+			"whatever decides 'is it due' is now somewhere this guard cannot see")
+	}
+	if !strings.Contains(code, "workspacecore.DueUnknown") {
+		t.Error("nothing in this module mentions DueUnknown; the case where the " +
+			"window cannot be answered has to be handled explicitly")
+	}
+}
+
+// stripGoComments blanks // and /* */ so the checks above cannot match prose.
+// Offsets are preserved so any reported match still lines up with the source.
+func stripGoComments(source string) string {
+	out := []rune(source)
+	n := len(out)
+	blank := func(from, to int) {
+		for i := from; i < to && i < n; i++ {
+			if out[i] != '\n' {
+				out[i] = ' '
+			}
+		}
+	}
+	for i := 0; i < n; i++ {
+		if out[i] == '/' && i+1 < n && out[i+1] == '/' {
+			j := i
+			for j < n && out[j] != '\n' {
+				j++
+			}
+			blank(i, j)
+			i = j
+			continue
+		}
+		if out[i] == '/' && i+1 < n && out[i+1] == '*' {
+			j := i + 2
+			for j+1 < n && !(out[j] == '*' && out[j+1] == '/') {
+				j++
+			}
+			blank(i, j+2)
+			i = j + 1
+		}
+	}
+	return string(out)
 }
