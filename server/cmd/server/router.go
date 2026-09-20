@@ -1898,6 +1898,9 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Get("/briefs", h.ListContentBriefs)
 				r.Post("/briefs", h.AppendContentBrief)
 				r.Get("/briefs/{revisionId}", h.GetContentBrief)
+				r.Post("/briefs/{revisionId}/start", h.StartContentBrief)
+				r.Get("/briefs/{revisionId}/snapshots", h.ListContentBriefStarts)
+				r.Get("/snapshots/{snapshotId}", h.GetContentStartSnapshot)
 			})
 		})
 

@@ -324,6 +324,9 @@ var concurrentIndexCleanups = map[string]string{
 	"487_content_brief_revision_workspace_idx":   "content_brief_revision_workspace_idx",
 	"488_content_topic_card_id_unique_idx":       "content_topic_card_id_unique_idx",
 	"489_content_brief_revision_id_unique_idx":   "content_brief_revision_id_unique_idx",
+	"491_content_start_snapshot_id_unique_idx":   "content_start_snapshot_id_unique_idx",
+	"492_content_start_snapshot_workspace_idx":   "content_start_snapshot_workspace_idx",
+	"493_content_start_snapshot_card_idx":        "content_start_snapshot_card_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction
