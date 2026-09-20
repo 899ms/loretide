@@ -568,11 +568,14 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      # Shared by every package this job runs. internal/handler and cmd/server
-      # are NOT among them: scripts/test-go.sh excludes those two package-wide
-      # database suites, and they refuse to read this variable at all — a
-      # generic URL reaching them would be an implicit opt-in to whatever
-      # database a job happens to have. They run in the db-suites job of
+      # Shared by every package this job runs. The two package-wide database
+      # suites do not read this variable at all — a generic URL reaching them
+      # would be an implicit opt-in to whatever database a job happens to have.
+      # internal/handler is in this job's package list now, but only its
+      # database-free half: the tests that reach a database carry the dbtest
+      # build tag and are not in this build. cmd/server stays excluded by
+      # scripts/test-go.sh until its files are classified the same way. Both
+      # suites' database halves run in the db-suites job of
       # loretide-content.yml, against a database provisioned for one run.
       DATABASE_URL: postgres://multica:multica@localhost:5432/multica?sslmode=disable
       # Wires up the RedisLocalSkill*_test.go suite. Distinct from REDIS_URL
