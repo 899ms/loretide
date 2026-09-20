@@ -321,6 +321,15 @@ deleted_content_topic_cards AS (
 deleted_content_start_snapshots AS (
     DELETE FROM content_start_snapshot WHERE workspace_id = $1::text
 ),
+deleted_content_artifact_versions AS (
+    DELETE FROM content_artifact_version WHERE workspace_id = $1::text
+),
+deleted_content_artifacts AS (
+    DELETE FROM content_artifact WHERE workspace_id = $1::text
+),
+deleted_content_works AS (
+    DELETE FROM content_work WHERE workspace_id = $1::text
+),
 deleted_content_accounts AS (
     DELETE FROM content_account WHERE workspace_id = $1::text
 ),
@@ -526,6 +535,12 @@ WHERE channel_media_pending_object.workspace_id = $1
 // table carries no foreign key (specs/023). Registered in the deletion
 // manifest test alongside this: doing only one of the two leaves either
 // orphaned rows or a drifting manifest.
+// Works, their documents and their version history. Versions are append-only
+// everywhere else; these three statements are the only ones that remove them,
+// and they are here rather than behind a cascade because the tables carry no
+// foreign key (specs/024). Registered in the deletion manifest test alongside
+// this: doing only one of the two leaves either orphaned rows or a drifting
+// manifest.
 // Brand content accounts go with the workspace. Registered in the deletion
 // manifest test alongside this, because only doing one of the two leaves
 // either orphaned rows (manifest only) or a drifting manifest (delete only).

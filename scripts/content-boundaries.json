@@ -100,6 +100,8 @@
     "server/internal/handler/content_account_scope.go",
     "server/internal/handler/content_topic.go",
     "server/internal/handler/content_topic_start.go",
+    "server/internal/handler/content_work.go",
+    "server/internal/handler/content_work_version.go",
     "server/internal/handler/handler.go",
     "server/cmd/server/router.go",
     "apps/web/app/[workspaceSlug]/(dashboard)/diagnostics/page.tsx",

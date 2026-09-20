@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_artifact_version_workspace_idx;

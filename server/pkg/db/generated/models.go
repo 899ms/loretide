@@ -611,6 +611,35 @@ type ContentAccountRevision struct {
 	Profile       []byte             `json:"profile"`
 }
 
+type ContentArtifact struct {
+	ArtifactID   string             `json:"artifact_id"`
+	WorkID       string             `json:"work_id"`
+	WorkspaceID  string             `json:"workspace_id"`
+	Kind         string             `json:"kind"`
+	Title        string             `json:"title"`
+	Position     int64              `json:"position"`
+	DraftBody    string             `json:"draft_body"`
+	DraftStatus  string             `json:"draft_status"`
+	DraftSavedAt pgtype.Timestamptz `json:"draft_saved_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ContentArtifactVersion struct {
+	VersionID    string             `json:"version_id"`
+	ArtifactID   string             `json:"artifact_id"`
+	WorkID       string             `json:"work_id"`
+	WorkspaceID  string             `json:"workspace_id"`
+	Revision     int64              `json:"revision"`
+	Source       string             `json:"source"`
+	Action       string             `json:"action"`
+	Body         string             `json:"body"`
+	RestoredFrom string             `json:"restored_from"`
+	AdoptedFrom  string             `json:"adopted_from"`
+	ActorID      string             `json:"actor_id"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContentBriefRevision struct {
 	BriefRevisionID      string             `json:"brief_revision_id"`
 	TopicCardID          string             `json:"topic_card_id"`
@@ -702,6 +731,16 @@ type ContentTopicCard struct {
 	StartedBriefRevisionID    pgtype.Text        `json:"started_brief_revision_id"`
 	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ContentWork struct {
+	WorkID      string             `json:"work_id"`
+	WorkspaceID string             `json:"workspace_id"`
+	TopicCardID string             `json:"topic_card_id"`
+	SnapshotID  string             `json:"snapshot_id"`
+	Title       string             `json:"title"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type DaemonConnection struct {

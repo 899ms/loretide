@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_work_card_idx;

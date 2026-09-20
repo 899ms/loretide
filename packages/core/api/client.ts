@@ -778,6 +778,59 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}/snapshots/${encodeURIComponent(snapshotId)}`);
   }
 
+  // Works, their documents and the append-only version history (specs/024).
+  // There is no delete and no version patch: nothing here can remove or
+  // rewrite a version, which is how SOP 7.1's "always kept" is kept.
+  async listContentWorks(topicCardId: string): Promise<unknown> {
+    const query = topicCardId ? `?topic_card_id=${encodeURIComponent(topicCardId)}` : "";
+    return this.fetch<unknown>(`/api/content-works${query}`);
+  }
+
+  async createContentWork(body: {topic_card_id: string; snapshot_id: string; title: string}): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-works", {method: "POST", body: JSON.stringify(body)});
+  }
+
+  async getContentWork(workId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}`);
+  }
+
+  async renameContentWork(workId: string, title: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}`, {method: "PATCH", body: JSON.stringify({title})});
+  }
+
+  async listContentArtifacts(workId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts`);
+  }
+
+  async createContentArtifact(workId: string, body: {kind: string; title: string; position: number}): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts`, {method: "POST", body: JSON.stringify(body)});
+  }
+
+  // Autosave. Produces no version; only the editing copy moves.
+  async patchContentArtifact(workId: string, artifactId: string, body: {title?: string; position?: number; draft_body?: string}): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts/${encodeURIComponent(artifactId)}`, {method: "PATCH", body: JSON.stringify(body)});
+  }
+
+  async listContentArtifactVersions(workId: string, artifactId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts/${encodeURIComponent(artifactId)}/versions`);
+  }
+
+  async saveContentArtifactVersion(workId: string, artifactId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts/${encodeURIComponent(artifactId)}/versions`, {method: "POST"});
+  }
+
+  async getContentArtifactVersion(workId: string, artifactId: string, versionId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts/${encodeURIComponent(artifactId)}/versions/${encodeURIComponent(versionId)}`);
+  }
+
+  async restoreContentArtifactVersion(workId: string, artifactId: string, versionId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts/${encodeURIComponent(artifactId)}/versions/${encodeURIComponent(versionId)}/restore`, {method: "POST"});
+  }
+
+  async adoptContentArtifactVersion(workId: string, artifactId: string, versionId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts/${encodeURIComponent(artifactId)}/versions/${encodeURIComponent(versionId)}/adopt`, {method: "POST"});
+  }
+
   async contentDiagnosticStream(query: string, signal: AbortSignal): Promise<Response> {
     return this.fetchRaw(`/api/content-diagnostics/stream?${query}`, {signal});
   }

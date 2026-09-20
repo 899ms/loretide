@@ -327,6 +327,13 @@ var concurrentIndexCleanups = map[string]string{
 	"491_content_start_snapshot_id_unique_idx":   "content_start_snapshot_id_unique_idx",
 	"492_content_start_snapshot_workspace_idx":   "content_start_snapshot_workspace_idx",
 	"493_content_start_snapshot_card_idx":        "content_start_snapshot_card_idx",
+	"495_content_work_id_unique_idx":             "content_work_id_unique_idx",
+	"496_content_work_card_idx":                  "content_work_card_idx",
+	"498_content_artifact_id_unique_idx":         "content_artifact_id_unique_idx",
+	"499_content_artifact_work_idx":              "content_artifact_work_idx",
+	"501_content_artifact_version_id_unique_idx": "content_artifact_version_id_unique_idx",
+	"502_content_artifact_version_unique_idx":    "content_artifact_version_unique_idx",
+	"503_content_artifact_version_workspace_idx": "content_artifact_version_workspace_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction
