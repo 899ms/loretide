@@ -520,5 +520,67 @@
         "uses_neutral_expression": "中立的な表現"
       }
     }
+  },
+  "contentWorks": {
+    "sectionTitle": "作品",
+    "sectionDescription": "この企画カードから生まれた作品です。モデルがなくても、執筆・編集・版の保存はできます。",
+    "empty": "まだ作品がありません。作成すると書き始められます。",
+    "create": "作品を作成",
+    "titleLabel": "タイトル",
+    "titlePlaceholder": "この成果物の名前",
+    "open": "開く",
+    "close": "閉じる",
+    "documentsTitle": "ドキュメント",
+    "documentsEmpty": "まだドキュメントがありません。本文かチャネル用原稿を追加してください。",
+    "addDocument": "ドキュメントを作成",
+    "kindLabel": "種類",
+    "kinds": {
+      "body": "本文",
+      "channel_draft": "チャネル用原稿"
+    },
+    "editorTitle": "編集",
+    "bodyLabel": "本文",
+    "bodyPlaceholder": "ここに書きます。入力が止まると自動保存されますが、自動保存では版は作られません。",
+    "draftStatus": {
+      "working": "版として未保存の変更があります",
+      "saved": "最新の版と一致しています"
+    },
+    "autosaving": "保存中",
+    "autosaveFailed": "自動保存に失敗しました。本文は編集欄に残っています",
+    "saveVersion": "版として保存",
+    "historyTitle": "版の履歴",
+    "historyEmpty": "まだ版がありません。区切りがついたら保存してください。",
+    "revision": "第 {{number}} 版",
+    "sourceLabel": "出どころ",
+    "actionLabel": "操作",
+    "sources": {
+      "generated": "モデル生成",
+      "edited": "人による執筆",
+      "adopted": "採用"
+    },
+    "actions": {
+      "saved": "版として保存",
+      "restored": "復元",
+      "adopted": "基準として採用"
+    },
+    "fromLabel": "元",
+    "restore": "この版に戻す",
+    "adopt": "基準として採用",
+    "restoreHint": "復元すると新しい版が作られます。既存の版は一切変わりません。",
+    "compareTitle": "版の比較",
+    "compareHint": "2 つの版の全文を並べて表示します。語単位の差分は本フェーズの対象外です。",
+    "compareAgainst": "比較する版",
+    "compareNone": "版が 1 つだけでは比較できません。",
+    "compareLeft": "古い版",
+    "compareRight": "新しい版",
+    "aiTitle": "AI 支援",
+    "aiUnavailable": "現在利用できません（実行機能は無効、EP-08 で対応）",
+    "ai": {
+      "rewriteSelection": "選択範囲の書き直し",
+      "polishWhole": "全文の推敲",
+      "candidateVersions": "候補版"
+    },
+    "failed": "操作に失敗しました",
+    "conflict": "同時に別の版が保存されました。もう一度保存してください"
   }
 }
