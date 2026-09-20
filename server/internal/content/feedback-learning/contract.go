@@ -259,6 +259,11 @@ type PendingRegistration struct {
 	Status              string    `json:"status"`
 	PublishedAt         *string   `json:"published_at"`
 	CreatedAt           time.Time `json:"created_at"`
+	// Due is workspace-core's three-valued answer (specs/029): passed, or
+	// unknown because the brand set no window or the record carries no
+	// publication time. not_yet never appears - a record in that state is not
+	// on this list at all.
+	Due string `json:"due"`
 }
 
 // oneOf accepts an exact match only: no trimming, no case folding. Tolerating

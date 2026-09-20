@@ -230,6 +230,20 @@ func (s *Store) PendingRegistrations(ctx context.Context, workspaceID, actor str
 			s.reportFailure(ctx, workspaceID, actor, "", "pending-registrations", scanErr)
 			return nil, ErrStorage
 		}
+		// The window is applied HERE and not in the statement above. The days
+		// come from the brand's settings, which is a Go value; pushing the
+		// comparison into SQL would mean either interpolating that number into
+		// the query or keeping a second copy of the rule in it. The SQL says
+		// what it has always said - published, and no metrics - and the third
+		// condition is asked once, out loud, where it can be read.
+		due := s.dueFor(ctx, workspaceID, item.Channel, publishedAt)
+		if !NeedsRegistration(item.Status, 0, due) {
+			continue
+		}
+		// Carried out so the page can say WHY a row is here: a window that
+		// elapsed and a window nobody has set read very differently to
+		// somebody deciding what to do next.
+		item.Due = string(due)
 		if publishedAt != nil {
 			formatted := publishedAt.UTC().Format(time.RFC3339)
 			item.PublishedAt = &formatted

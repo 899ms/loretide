@@ -1,6 +1,10 @@
 package feedbacklearning
 
-import "time"
+import (
+	"time"
+
+	workspacecore "github.com/multica-ai/multica/server/internal/content/workspace-core"
+)
 
 // The card's rules, away from the store and the handler.
 //
@@ -135,16 +139,31 @@ func ValidateExcerptInput(input ExcerptInput) error {
 // NeedsRegistration reports whether a publication record is still waiting for
 // its numbers.
 //
-// Two conditions and no third: the piece went out, and nobody has recorded a
-// single metric for it. There is NO time comparison, deliberately. SOP 3.2's
-// brand-level 反馈观察时点 does not exist yet, so "is it due" cannot be
-// answered; a hard-coded number of days would be a rule the SOP never stated,
-// sitting in code where no operator can see or change it.
+// Two conditions that have always been here - the piece went out, and nobody
+// has recorded a single metric for it - and a third that arrived with
+// specs/029: the brand's observation window has elapsed.
+//
+// The window comes from workspace-core, which reads it out of the brand's
+// settings. Nothing here decides how long to wait. The comment this replaces
+// said a hard-coded number of days "would be a rule the SOP never stated,
+// sitting in code where no operator can see or change it" - that is still
+// true, and it is why `due` is a parameter rather than a constant.
+//
+// DueUnknown takes the SAME branch as DuePassed, and that is the whole of this
+// function worth reading twice. Not knowing whether the window has elapsed is
+// not a reason to hide a record: a brand that has set no window, and a
+// publication record that carries no publication time (025 allows that), are
+// exactly the pieces somebody should go and look at. Treating unknown as
+// "not yet" would make them leave the workbench silently, which is the one
+// failure mode nobody would notice.
 //
 // failed / removed / unknown records are not waiting for anything: there are
 // no real results to copy down for a piece that did not go out.
-func NeedsRegistration(publicationStatus string, metricCount int) bool {
+func NeedsRegistration(publicationStatus string, metricCount int, due workspacecore.Due) bool {
 	if metricCount > 0 {
+		return false
+	}
+	if due == workspacecore.DueNotYet {
 		return false
 	}
 	return publicationStatus == "reported_published" || publicationStatus == "verified_published"
