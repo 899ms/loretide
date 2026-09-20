@@ -30,6 +30,13 @@ import {
   useContentReviews,
 } from "@multica/core/content/review-delivery";
 import {
+  describePending,
+  pendingFeedbackSummary,
+  usePendingFeedback,
+  type PendingFeedback,
+} from "@multica/core/content/feedback-learning";
+import {
+  SECTION_LIMIT,
   accountsMissingConfig,
   deliveriesNeedingAction,
   reviewsNeedingAttention,
@@ -83,7 +90,7 @@ function TodayPage({ wsId }: { wsId: string }) {
           <WorksSection wsId={wsId} />
           <ReviewsSection wsId={wsId} />
           <DeliveriesSection wsId={wsId} />
-          <FeedbackSection />
+          <FeedbackSection wsId={wsId} />
           <AccountGapsSection wsId={wsId} />
         </SettingsTab>
       </SettingsContent>
@@ -301,26 +308,50 @@ function DeliveriesSection({ wsId }: { wsId: string }) {
 // ---------------------------------------------------------------- section 5
 
 /**
- * SOP §2's fifth item. `feedback-learning` does not exist yet, so there is no
- * data source at all.
+ * SOP §2's fifth item, on its real data source since specs/027 landed.
  *
- * The section is still here, stating why. Hiding it would say the product does
- * not intend to do this; a blank would read as unfinished; a spinner would read
- * as nearly ready. Same treatment the three AI entry points got in 024.
+ * "Pending" is derived by the server and summarised by
+ * `packages/core/content/feedback-learning/pending.ts`; this renders what that
+ * returns. Two conditions and no third: the piece went out, and nobody has
+ * recorded a single number for it. There is no time comparison, because SOP
+ * §3.2's brand-level 反馈观察时点 does not exist yet - a default number of days
+ * would be a rule nobody agreed to, sitting where no operator can see it.
+ *
+ * Opening a row lands on the topics page, like sections 3 and 4: the block that
+ * takes the numbers lives inside a topic card's document, and no route
+ * addresses one publication record.
  */
-function FeedbackSection() {
+function FeedbackSection({ wsId }: { wsId: string }) {
   const { t } = useT("common");
+  const navigation = useNavigation();
+  const pending = usePendingFeedback(wsId);
+  const summary = pendingFeedbackSummary(pending.data ?? [], SECTION_LIMIT);
+  const section = {
+    shown: summary.items,
+    total: summary.count,
+    hidden: summary.count - summary.items.length,
+  };
+
   return (
-    <SettingsSection
+    <SectionShell
       title={t(($) => $.contentToday.feedback.title)}
-      description={t(($) => $.contentToday.feedback.unavailable)}
-    >
-      <SettingsCard>
-        <SettingsRow label={t(($) => $.contentToday.feedback.unavailableShort)}>
-          <span className="text-caption text-muted-foreground" />
+      description={t(($) => $.contentToday.feedback.derivation)}
+      state={queryState(pending.isPending, pending.isError)}
+      section={section}
+      t={t}
+      onSeeAll={() => navigation.push(`/${wsId}/topics`)}
+      renderRow={(entry: PendingFeedback) => (
+        <SettingsRow
+          key={entry.publicationRecordId}
+          label={describePending(entry)}
+          description={t(($) => $.contentToday.feedback.noMetrics)}
+        >
+          <Button variant="outline" onClick={() => navigation.push(`/${wsId}/topics`)}>
+            {t(($) => $.contentToday.open)}
+          </Button>
         </SettingsRow>
-      </SettingsCard>
-    </SettingsSection>
+      )}
+    />
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useT } from "@multica/views/i18n";
 import {
   APPROVE_AND_SCHEDULE_STEPS,
@@ -76,6 +76,16 @@ export interface DeliveryAccountOption {
   name: string;
 }
 
+/** What a block rendered after this module's sections is given. The records
+ *  come from the same query key PublicationSection reads, so the slot gets the
+ *  list without a second request and without either component reaching into
+ *  the other. */
+export interface PublicationExtrasContext {
+  wsId: string;
+  artifactId: string;
+  records: PublicationRecord[];
+}
+
 export interface ReviewDeliverySectionsProps {
   wsId: string;
   artifactId: string;
@@ -85,6 +95,13 @@ export interface ReviewDeliverySectionsProps {
   latestVersionId: string;
   versionCount: number;
   accounts: DeliveryAccountOption[];
+  /** Optional block rendered after this module's sections.
+   *
+   *  A slot rather than an import: the registry places feedback-learning
+   *  DOWNSTREAM of this module, so this file cannot reach it. The web adapter
+   *  composes the two, exactly the way work-editor's renderArtifactExtras lets
+   *  this module sit under the version history. */
+  renderPublicationExtras?: (context: PublicationExtrasContext) => ReactNode;
 }
 
 export function ReviewDeliverySections({
@@ -94,6 +111,7 @@ export function ReviewDeliverySections({
   latestVersionId,
   versionCount,
   accounts,
+  renderPublicationExtras,
 }: ReviewDeliverySectionsProps) {
   return (
     <>
@@ -108,8 +126,37 @@ export function ReviewDeliverySections({
       <DeliverySection wsId={wsId} artifactId={artifactId} />
       <PublicationSection wsId={wsId} artifactId={artifactId} />
       <ReviewAIEntryPoints />
+      <PublicationExtras
+        wsId={wsId}
+        artifactId={artifactId}
+        render={renderPublicationExtras}
+      />
     </>
   );
+}
+
+/**
+ * Whatever hangs off the publication records, rendered after this module's own
+ * sections.
+ *
+ * Same query key and same queryFn as PublicationSection's, deliberately:
+ * TanStack Query serves both observers from one fetch, and that is what lets
+ * the slot receive the records without either reaching into the other's state
+ * or issuing a second request. Two observers with DIFFERENT fetchers would be
+ * a race; two with the same one are not.
+ */
+function PublicationExtras({
+  wsId,
+  artifactId,
+  render,
+}: {
+  wsId: string;
+  artifactId: string;
+  render?: (context: PublicationExtrasContext) => ReactNode;
+}) {
+  const records = useContentPublications(wsId, artifactId);
+  if (!render) return null;
+  return <>{render({ wsId, artifactId, records: records.data ?? [] })}</>;
 }
 
 // ---------------------------------------------------------------- review ---
@@ -964,6 +1011,7 @@ function PublicationSection({ wsId, artifactId }: { wsId: string; artifactId: st
           )}
         </SettingsCard>
       </SettingsSection>
+
     </>
   );
 }
