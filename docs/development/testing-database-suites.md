@@ -104,13 +104,22 @@ bash scripts/test-go-db.sh --suite cmd-server
 
 证据是**逐测试**的 JSON 事件，不是包级的一行 `ok`：**零个 pass 直接判红**——「跑了零个用例」正是过去被读成成功的那个状态。
 
-## 默认路径现在缺了什么
+## 两种模式
 
-`scripts/test-go.sh` 把这两个包**排除**在常规包列表之外。
+这两个包的测试文件按 `dbtest` 构建约束分成两半：
 
-这是一个**真实的覆盖缺口**，不是「它们的无库用例照样在跑」：这两个包的 346 个测试文件尚未分类（Phase 2，另开 Issue），所以默认 wrapper **完全不执行**它们。
+- **无标签（默认）**：不触及数据库的测试。`go test ./...`、`scripts/test-go.sh` 与通用 CI 作业跑的就是这一半，**不需要任何 `LORETIDE_DB_TEST_*` 配置**，也不会连接任何数据库。两处 DB `TestMain` 都带 `dbtest` 标签，所以默认构建里根本没有它，包不会 fail-closed 退出。
+- **`-tags=dbtest`**：上面那一半，加上所有触及数据库的测试与 `TestMain`。只有 `scripts/test-go-db.sh` 会带这个标签，且必须先满足上面的完整配置契约。
 
-这个缺口是刻意的，而且比它替换掉的东西小——被替换掉的是**一个报绿而什么都没跑的套件**。Phase 2 给数据库相关的测试文件加 `dbtest` 构建标签、无库的文件保持无标签之后，默认 wrapper 才能重新包含它们并真的跑到无库子集。
+「触及数据库」= 可达 `TestMain` 初始化的那几个包级根符号（`testHandler` / `testPool` / `testUserID` / `testWorkspaceID` / `testRuntimeID` / `dbfx` 等）。判定是对整包求引用闭包，**由编译器兜底**：无标签构建里只要还剩一处引用了被标签挡掉的符号就编译不过。混合文件被拆成 `X_test.go`（无标签）与 `X_dbtest_test.go`（带标签），**不用整包 skip 做选择**。
+
+逐文件的分类与依据见 `records/issue-114-dbtest-classification-handler.md`。
+
+`scripts/test-go-db.sh` 固定带 `-tags=dbtest`：少了这个标签，一个数据库作业会建好库、连上、然后只跑无库那一半并报绿。
+
+### 现状
+
+`internal/handler` 已分类，默认路径会跑它的无库测试。**`cmd/server` 仍被 `scripts/test-go.sh` 排除**，它的 53 个测试文件是 Phase 2 的后半段；在那之前它的无库测试确实没有被默认路径执行——这是一个已知的、正在收口的缺口，不是「它们照样在跑」。
 
 ## 相关文件
 
@@ -119,6 +128,6 @@ bash scripts/test-go-db.sh --suite cmd-server
 | `server/internal/testutil/dbtest/guard.go` | 配置校验与连上后的身份核对 |
 | `server/internal/testutil/dbtest/scope.go` | 每次运行唯一的夹具名（清理仍按 id） |
 | `server/scripts/verify-db-test-target.sh` | Go 启动前的同一套检查 |
-| `scripts/test-go-db.sh` | 专用入口 |
-| `scripts/test-go.sh` | 通用入口，排除这两个包 |
+| `scripts/test-go-db.sh` | 专用入口，固定 `-tags=dbtest` |
+| `scripts/test-go.sh` | 通用入口，跑无标签（无库）那一半；仍排除 `cmd/server` |
 | `.github/workflows/loretide-content.yml` 的 `db-suites` | 两个隔离 DB 作业 |

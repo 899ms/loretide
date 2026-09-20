@@ -1,3 +1,5 @@
+//go:build dbtest
+
 package handler
 
 // chat_archive_cancel_test.go — archiving a chat session deletes its channel

@@ -78,22 +78,22 @@ expect_refusal() {
 
 # Exact command construction, and the suite the wrapper sets for the child.
 PATH="$BIN_DIR:$PATH" complete_env bash "$SCRIPT_DIR/test-go-db.sh" --suite handler
-expect_call "handler" "test -count=1 ./internal/handler|suite=handler"
+expect_call "handler" "test -tags=dbtest -count=1 ./internal/handler|suite=handler"
 
 PATH="$BIN_DIR:$PATH" complete_env bash "$SCRIPT_DIR/test-go-db.sh" --suite cmd-server
-expect_call "cmd-server" "test -count=1 ./cmd/server|suite=cmd-server"
+expect_call "cmd-server" "test -tags=dbtest -count=1 ./cmd/server|suite=cmd-server"
 
 PATH="$BIN_DIR:$PATH" complete_env bash "$SCRIPT_DIR/test-go-db.sh" --suite handler --json
-expect_call "handler --json" "test --json -count=1 ./internal/handler|suite=handler"
+expect_call "handler --json" "test -tags=dbtest --json -count=1 ./internal/handler|suite=handler"
 
 PATH="$BIN_DIR:$PATH" complete_env bash "$SCRIPT_DIR/test-go-db.sh" --suite handler -- -run TestOne
-expect_call "extra go args" "test -count=1 -run TestOne ./internal/handler|suite=handler"
+expect_call "extra go args" "test -tags=dbtest -count=1 -run TestOne ./internal/handler|suite=handler"
 
 # The suite is set by the wrapper, not inherited: an environment built for the
 # other suite must not steer this command at the other suite's database.
 PATH="$BIN_DIR:$PATH" LORETIDE_DB_TEST_SUITE=cmd-server complete_env \
   bash "$SCRIPT_DIR/test-go-db.sh" --suite handler
-expect_call "inherited suite is overridden" "test -count=1 ./internal/handler|suite=handler"
+expect_call "inherited suite is overridden" "test -tags=dbtest -count=1 ./internal/handler|suite=handler"
 
 # No opt-in, no run.
 expect_refusal "absent opt-in" 2 --suite handler

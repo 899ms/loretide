@@ -97,6 +97,11 @@ esac
 
 cd "$REPO_ROOT/server"
 
+# -tags=dbtest selects the database half of the suite. Without it the package
+# builds to its database-free tests only — which is exactly what the default
+# wrapper runs — so a database job that forgot the tag would provision a
+# database, connect to nothing, and still report green.
+#
 # -count=1 because a cached result is not evidence that anything ran, which is
 # the failure mode this whole change exists to remove.
-exec go test ${json:+$json} -count=1 "$@" "$package"
+exec go test -tags=dbtest ${json:+$json} -count=1 "$@" "$package"

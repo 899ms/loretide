@@ -190,7 +190,7 @@ type RuntimeRecoveryNotifier interface {
 }
 
 type Handler struct {
-	ContentDiagnostics *diagnostics.Service
+	ContentDiagnostics     *diagnostics.Service
 	Queries                *db.Queries
 	ReadSelector           *dbreader.Selector
 	DB                     dbExecutor
