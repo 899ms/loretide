@@ -167,7 +167,8 @@
     "./content/ip-profile": "./content/ip-profile/index.ts",
     "./content/topic-planning": "./content/topic-planning/index.ts",
     "./content/work-editor": "./content/work-editor/index.ts",
-    "./content/review-delivery": "./content/review-delivery/index.ts"
+    "./content/review-delivery": "./content/review-delivery/index.ts",
+    "./content/source-inbox": "./content/source-inbox/index.ts"
   },
   "dependencies": {
     "@formatjs/intl-localematcher": "catalog:",

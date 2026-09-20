@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_source_snapshot_workspace_hash_idx;
