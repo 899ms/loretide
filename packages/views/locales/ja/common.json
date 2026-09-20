@@ -724,5 +724,59 @@
       "removed": "削除された",
       "unknown": "不明"
     }
+  },
+  "contentToday": {
+    "title": "今日のワークベンチ",
+    "description": "書く価値のあるもの、進行中のもの、判断が要るもの、期限が来たもの。",
+    "open": "開く",
+    "seeAll": "すべて見る",
+    "loading": "読み込み中…",
+    "empty": "今日はここには何もありません",
+    "sectionFailed": "このセクションを読み込めませんでした",
+    "rowFailed": "この項目を読み込めませんでした",
+    "more": "他 {{hidden}} 件（全 {{total}} 件）",
+    "noPageYet": "これらの項目を開くページはまだありません——レビューと引き継ぎのページは未実装です。",
+    "noPageYetShort": "ページ未実装",
+    "listSeparator": "、",
+    "topics": {
+      "title": "書く価値のあるテーマ",
+      "unavailableHint": "候補の自動生成は利用できません（EP-04c 未実装）。ここに並ぶのは人が作成した下書きカードです。",
+      "noReason": "理由の記録なし",
+      "effortLabel": "想定工数",
+      "effortHours": "週 {{hours}} 時間",
+      "effortUnconfirmed": "未確認",
+      "effortNoAccount": "アカウント未紐付け"
+    },
+    "works": {
+      "title": "進行中の作品",
+      "working": "編集中"
+    },
+    "reviews": {
+      "title": "対応が必要なレビュー",
+      "status": {
+        "pending": "判断待ち",
+        "changesRequested": "修正依頼あり"
+      }
+    },
+    "deliveries": {
+      "title": "期限の来た引き継ぎと未登録の公開",
+      "due": "期限超過、未引き継ぎ",
+      "pendingRegistration": "引き継ぎ済み、結果未登録"
+    },
+    "feedback": {
+      "title": "未記録のフィードバック",
+      "unavailable": "現在利用できません（フィードバック記録の接続後）。",
+      "unavailableShort": "現在利用できません"
+    },
+    "accountGaps": {
+      "title": "アカウント設定の不足",
+      "missingLabel": "不足",
+      "fields": {
+        "audience": "対象読者",
+        "contentPillars": "コンテンツの方向性",
+        "primaryChannels": "主要チャネル",
+        "weeklyHours": "週あたりの投入時間"
+      }
+    }
   }
 }
