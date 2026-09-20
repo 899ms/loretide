@@ -334,6 +334,18 @@ var concurrentIndexCleanups = map[string]string{
 	"501_content_artifact_version_id_unique_idx": "content_artifact_version_id_unique_idx",
 	"502_content_artifact_version_unique_idx":    "content_artifact_version_unique_idx",
 	"503_content_artifact_version_workspace_idx": "content_artifact_version_workspace_idx",
+
+	// specs/025 review-delivery. Its own block on purpose: gofmt aligns a map
+	// literal in runs separated by blank lines, so these eight align among
+	// themselves and every line above stays exactly as it was.
+	"505_content_review_request_id_unique_idx":     "content_review_request_id_unique_idx",
+	"506_content_review_request_workspace_idx":     "content_review_request_workspace_idx",
+	"508_content_review_transition_id_unique_idx":  "content_review_transition_id_unique_idx",
+	"509_content_review_transition_subject_idx":    "content_review_transition_subject_idx",
+	"511_content_delivery_task_id_unique_idx":      "content_delivery_task_id_unique_idx",
+	"512_content_delivery_task_workspace_idx":      "content_delivery_task_workspace_idx",
+	"514_content_publication_record_id_unique_idx": "content_publication_record_id_unique_idx",
+	"515_content_publication_record_artifact_idx":  "content_publication_record_artifact_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction
