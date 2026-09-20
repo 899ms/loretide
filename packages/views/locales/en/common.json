@@ -944,6 +944,7 @@
   "contentToday": {
     "title": "Today",
     "description": "What is worth writing, what is in progress, what needs a decision, and what is due.",
+    "quickCapture": "Quick capture",
     "open": "Open",
     "seeAll": "See all",
     "loading": "Loading…",
@@ -991,6 +992,15 @@
         "contentPillars": "Content direction",
         "primaryChannels": "Primary channels",
         "weeklyHours": "Weekly hours"
+      }
+    },
+    "sources": {
+      "title": "Waiting to be organised",
+      "hint": "Collected and not yet dealt with. Opening one takes you to the material inbox.",
+      "waiting": "to organise",
+      "kinds": {
+        "pasted_text": "Pasted text",
+        "url": "Link"
       }
     }
   },

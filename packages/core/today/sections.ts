@@ -15,6 +15,8 @@ import type {
   ReviewEntry,
   ReviewRequestLike,
   Section,
+  SourceEntry,
+  SourceLike,
   TopicCardLike,
   TopicEntry,
   WorkEntry,
@@ -32,6 +34,9 @@ export const REVIEW_STATUSES_NEEDING_ATTENTION = ["pending", "changes_requested"
 
 /** The draft state that means a document is still being written (FR-008). */
 export const ARTIFACT_STATUS_IN_PROGRESS = "working";
+
+/** The inbox state: collected, nobody has dealt with it yet (FR-B-03). */
+export const SOURCE_STATUS_TO_ORGANISE = "inbox";
 
 /** ip-profile's confirmed field status. Anything else is not confirmed. */
 const FIELD_CONFIRMED = "confirmed";
@@ -237,4 +242,43 @@ function compareDesc(a: string, b: string): number {
 function compareAsc(a: string, b: string): number {
   if (a === b) return 0;
   return a < b ? -1 : 1;
+}
+
+/**
+ * Section 7 - material collected and not yet organised (SOP §11's 随时 row:
+ * "快速入口与待整理收件箱").
+ *
+ * Only `inbox`. `organized` is dealt with and `archived` is a decision already
+ * made; listing either would turn a to-do list into an everything list.
+ *
+ * Oldest first, which is the opposite of the topics section above: a clipping
+ * from three weeks ago is the one at risk of never being looked at again,
+ * while a card made today is the one someone just thought of.
+ */
+export function sourcesToOrganise(sources: SourceLike[]): Section<SourceEntry> {
+  const entries = sources
+    .filter((source) => source.status === SOURCE_STATUS_TO_ORGANISE)
+    .slice()
+    .sort((a, b) => compareAsc(a.capturedAt, b.capturedAt))
+    .map((source) => ({
+      sourceId: source.sourceId,
+      label: sourceLabel(source),
+      kind: source.kind,
+      capturedAt: source.capturedAt,
+    }));
+  return capSection(entries);
+}
+
+/**
+ * What to call a collected item.
+ *
+ * A link with no title falls back to the link itself rather than to the id: a
+ * URL tells someone what it is, and an id tells them nothing.
+ */
+export function sourceLabel(source: SourceLike): string {
+  const title = source.title.trim();
+  if (title !== "") return title;
+  const url = source.url.trim();
+  if (url !== "") return url;
+  return source.sourceId;
 }

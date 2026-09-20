@@ -13,6 +13,8 @@ import {
   reviewsNeedingAttention,
   SECTION_LIMIT,
   topicReason,
+  sourceLabel,
+  sourcesToOrganise,
   worksInProgress,
   worthWritingTopics,
 } from "./sections";
@@ -22,6 +24,7 @@ import type {
   DeliveryTaskLike,
   ProfileLike,
   ReviewRequestLike,
+  SourceLike,
   TopicCardLike,
   WorkLike,
 } from "./types";
@@ -305,5 +308,70 @@ describe("accountsMissingConfig", () => {
 
   it("drops an account whose profile is simply absent and did not fail", () => {
     expect(accountsMissingConfig([account()], new Map()).shown).toEqual([]);
+  });
+});
+
+function source(overrides: Partial<SourceLike> = {}): SourceLike {
+  return {
+    sourceId: "src-1",
+    kind: "pasted_text",
+    title: "a clipping",
+    url: "",
+    status: "inbox",
+    capturedAt: "2026-09-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+describe("sourcesToOrganise", () => {
+  it("lists an item waiting to be organised", () => {
+    const section = sourcesToOrganise([source()]);
+    expect(section.shown.map((entry) => entry.sourceId)).toEqual(["src-1"]);
+  });
+
+  // One negative per excluded status. `organized` is dealt with and `archived`
+  // is a decision already made; listing either turns a to-do list into an
+  // everything list.
+  it.each(["organized", "archived"])("excludes %s", (status) => {
+    const section = sourcesToOrganise([source({ status })]);
+    expect(section.shown).toEqual([]);
+    expect(section.total).toBe(0);
+  });
+
+  // The opposite order from the topics section, deliberately: a clipping from
+  // three weeks ago is the one at risk of never being looked at again.
+  it("puts the oldest first", () => {
+    const section = sourcesToOrganise([
+      source({ sourceId: "new", capturedAt: "2026-09-10T00:00:00Z" }),
+      source({ sourceId: "old", capturedAt: "2026-09-01T00:00:00Z" }),
+    ]);
+    expect(section.shown.map((entry) => entry.sourceId)).toEqual(["old", "new"]);
+  });
+
+  it("caps at ten and counts the total before truncating", () => {
+    const many = Array.from({ length: 12 }, (_, index) =>
+      source({ sourceId: `src-${index}`, capturedAt: `2026-09-${String(index + 1).padStart(2, "0")}T00:00:00Z` }),
+    );
+    const section = sourcesToOrganise(many);
+    expect(section.shown).toHaveLength(SECTION_LIMIT);
+    expect(section.total).toBe(12);
+    expect(section.hidden).toBe(2);
+  });
+});
+
+describe("sourceLabel", () => {
+  it("prefers the title someone gave it", () => {
+    expect(sourceLabel(source())).toBe("a clipping");
+  });
+
+  // A URL tells someone what it is; an id tells them nothing.
+  it("falls back to the link before the id", () => {
+    expect(sourceLabel(source({ title: "  ", url: "https://example.com/a" }))).toBe(
+      "https://example.com/a",
+    );
+  });
+
+  it("falls back to the id only when there is nothing else", () => {
+    expect(sourceLabel(source({ title: "", url: "" }))).toBe("src-1");
   });
 });
