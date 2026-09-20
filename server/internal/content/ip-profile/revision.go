@@ -55,10 +55,10 @@ var (
 	// never existed.
 	ErrWorkspaceGone = errors.New("workspace no longer exists")
 	// ErrNoWorkspaceFence is a wiring mistake, not a runtime condition: a
-	// Service that can write revisions was built without the fence. It is an
-	// error rather than a silent unfenced write, because the unfenced write is
-	// the bug.
-	ErrNoWorkspaceFence = errors.New("revision writes require a workspace fence")
+	// Service that can write accounts or revisions was built without the
+	// fence. It is an error rather than a silent unfenced write, because the
+	// unfenced write is the bug.
+	ErrNoWorkspaceFence = errors.New("content writes require a workspace fence")
 )
 
 // ValidatePersonaPrompt accepts blank.
@@ -109,6 +109,11 @@ type RevisionTx interface {
 // is the defect this closes.
 type WorkspaceFence interface {
 	WithWorkspaceFence(ctx context.Context, workspaceID string, fn func(RevisionTx) error) error
+	// WithAccountFence is the same protocol for the account row itself.
+	// content_account has the same text workspace id and the same absence of a
+	// foreign key, and creating, patching or re-scoping an account outside the
+	// fence leaves the same kind of orphan a revision would (Issue #104).
+	WithAccountFence(ctx context.Context, workspaceID string, fn func(AccountTx) error) error
 }
 
 // RevisionReader is the read half. Separate from RevisionStore so a test that

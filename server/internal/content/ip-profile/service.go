@@ -22,10 +22,23 @@ var ErrNotFound = errors.New("account not found")
 //
 // Every method takes workspaceID, including the ones that already have the
 // account id. Isolation belongs to the query, not to the caller's memory.
+//
+// This is the read half only. Creating, patching and re-scoping an account all
+// go through AccountTx instead, inside the workspace fence, so there is no
+// unfenced way to write an account left to reach for (Issue #104).
 type Store interface {
-	CreateAccount(ctx context.Context, account Account) (Account, error)
 	GetAccount(ctx context.Context, workspaceID, accountID string) (Account, error)
 	ListAccounts(ctx context.Context, workspaceID string) ([]Account, error)
+}
+
+// AccountTx is the write half, bound to one transaction that already holds the
+// workspace fence. GetAccount is here as well because SetScope has to read the
+// settings it merges into, and a read that decides what gets written belongs
+// inside the same transaction as the write: between an outside read and the
+// insert, DeleteWorkspace could commit.
+type AccountTx interface {
+	CreateAccount(ctx context.Context, account Account) (Account, error)
+	GetAccount(ctx context.Context, workspaceID, accountID string) (Account, error)
 	UpdateAccount(ctx context.Context, workspaceID, accountID string, patch Patch) (Account, error)
 }
 
@@ -88,12 +101,17 @@ func (s *Service) Create(ctx context.Context, workspaceID, actor, platform, disp
 	if err := validateScopeSetting(settings); err != nil {
 		return Account{}, err
 	}
-	account, err := s.Store.CreateAccount(ctx, Account{
-		AccountID:   s.newID(),
-		WorkspaceID: workspaceID,
-		Platform:    platform,
-		DisplayName: displayName,
-		Settings:    settings,
+	var account Account
+	err := s.withAccountFence(ctx, workspaceID, func(tx AccountTx) error {
+		created, createErr := tx.CreateAccount(ctx, Account{
+			AccountID:   s.newID(),
+			WorkspaceID: workspaceID,
+			Platform:    platform,
+			DisplayName: displayName,
+			Settings:    settings,
+		})
+		account = created
+		return createErr
 	})
 	if err != nil {
 		return Account{}, err
@@ -146,7 +164,12 @@ func (s *Service) Update(ctx context.Context, workspaceID, actor, accountID stri
 			return Account{}, err
 		}
 	}
-	account, err := s.Store.UpdateAccount(ctx, workspaceID, accountID, patch)
+	var account Account
+	err := s.withAccountFence(ctx, workspaceID, func(tx AccountTx) error {
+		updated, updateErr := tx.UpdateAccount(ctx, workspaceID, accountID, patch)
+		account = updated
+		return updateErr
+	})
 	if err != nil {
 		return Account{}, err
 	}
@@ -168,12 +191,17 @@ func (s *Service) SetScope(ctx context.Context, workspaceID, actor, accountID, s
 	if err := ValidateScope(scope); err != nil {
 		return Account{}, err
 	}
-	current, err := s.Store.GetAccount(ctx, workspaceID, accountID)
-	if err != nil {
-		return Account{}, err
-	}
-	merged := withScope(current.Settings, scope)
-	account, err := s.Store.UpdateAccount(ctx, workspaceID, accountID, Patch{Settings: merged})
+	var account Account
+	err := s.withAccountFence(ctx, workspaceID, func(tx AccountTx) error {
+		current, readErr := tx.GetAccount(ctx, workspaceID, accountID)
+		if readErr != nil {
+			return readErr
+		}
+		updated, updateErr := tx.UpdateAccount(ctx, workspaceID, accountID,
+			Patch{Settings: withScope(current.Settings, scope)})
+		account = updated
+		return updateErr
+	})
 	if err != nil {
 		return Account{}, err
 	}
@@ -182,6 +210,17 @@ func (s *Service) SetScope(ctx context.Context, workspaceID, actor, accountID, s
 	s.audit(ctx, workspaceID, actor, accountID, "update")
 	account.Settings = scopeFilled(account.Settings)
 	return account, nil
+}
+
+// withAccountFence runs an account write inside the workspace delete/write
+// protocol. A Service without a fence refuses rather than writing outside it:
+// content_account has no foreign key, so an unfenced write is how an account
+// outlives the brand it belongs to.
+func (s *Service) withAccountFence(ctx context.Context, workspaceID string, fn func(AccountTx) error) error {
+	if s.Fence == nil {
+		return ErrNoWorkspaceFence
+	}
+	return s.Fence.WithAccountFence(ctx, workspaceID, fn)
 }
 
 // audit records a change to an account. The event names the workspace and the

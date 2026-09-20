@@ -225,6 +225,23 @@ func (s contentRevisionStore) ListRevisions(ctx context.Context, workspaceID, ac
 type contentRevisionFence struct{ h *Handler }
 
 func (f contentRevisionFence) WithWorkspaceFence(ctx context.Context, workspaceID string, fn func(ipprofile.RevisionTx) error) error {
+	return f.fenced(ctx, workspaceID, func(queries *db.Queries) error {
+		return fn(contentRevisionStore{q: queries})
+	})
+}
+
+// WithAccountFence is the same transaction and the same lock, handing over the
+// account statements instead of the revision ones. One implementation for both:
+// a second copy would be a second place for the protocol to drift.
+func (f contentRevisionFence) WithAccountFence(ctx context.Context, workspaceID string, fn func(ipprofile.AccountTx) error) error {
+	return f.fenced(ctx, workspaceID, func(queries *db.Queries) error {
+		return fn(contentAccountStore{q: queries})
+	})
+}
+
+// fenced opens the transaction, takes the workspace row's FOR KEY SHARE lock as
+// its first statement, and commits only if the body succeeds.
+func (f contentRevisionFence) fenced(ctx context.Context, workspaceID string, body func(*db.Queries) error) error {
 	workspaceUUID, err := util.ParseUUID(workspaceID)
 	if err != nil {
 		// Not a workspace id, so there is no row to hold. Same answer as a
@@ -249,7 +266,7 @@ func (f contentRevisionFence) WithWorkspaceFence(ctx context.Context, workspaceI
 		return err
 	}
 
-	if err := fn(contentRevisionStore{q: queries}); err != nil {
+	if err := body(queries); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
