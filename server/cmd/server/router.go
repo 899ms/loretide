@@ -1974,6 +1974,29 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			})
 		})
 
+		// Manual metrics and feedback excerpts own their workspace
+		// authorization boundary for the same reason review delivery does:
+		// every decision has to reach workspace-core.Authorize, including
+		// refusals that must be recorded.
+		//
+		// Two POST routes for metrics, not one with a source field: which
+		// endpoint was called is what the server records as the data's origin,
+		// and a caller that could declare its own origin is not reporting one.
+		r.Route("/api/content-metrics", func(r chi.Router) {
+			r.Use(h.DiagnosticTrace)
+			r.Get("/", h.ListContentMetrics)
+			r.Post("/", h.RecordContentMetric)
+			r.Post("/import", h.ImportContentMetrics)
+		})
+		// Both tables are append-only, so there is no single-record path on
+		// either - and therefore no path parameter anywhere in this feature.
+		r.Route("/api/content-feedback", func(r chi.Router) {
+			r.Use(h.DiagnosticTrace)
+			r.Get("/", h.ListContentFeedback)
+			r.Post("/", h.RecordContentFeedback)
+			r.Get("/pending", h.ListContentFeedbackPending)
+		})
+
 		// --- Workspace-scoped routes (all require workspace membership) ---
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireWorkspaceMember(queries))

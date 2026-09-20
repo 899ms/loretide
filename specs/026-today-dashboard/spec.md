@@ -35,7 +35,7 @@ web-only、只读聚合已落地对象、不调模型、首版不新增表、不
 | `work-editor` | 有 | 有 | 有 |
 | `review-delivery` | 有 | 有 | **无**（025 的页面 PR 尚未落地） |
 
-未落地：`source-inbox`、`knowledge-base`、`agent-workflow`、`project-collab`、`feedback-learning`、`agent-gateway`。
+未落地：`source-inbox`、`knowledge-base`、`agent-workflow`、`project-collab`、`agent-gateway`。（**2026-09-20 更新**：`feedback-learning` 已由 specs/027 实施 PR 1 落地，从本清单移出；本节其余内容仍是 `9f1c75a` 时的快照。）
 
 **`project-collab` 目前是空的**——它在登记表里已有依赖（`workspace-core`、`topic-planning`、`work-editor`、`review-delivery`、`diagnostics`），但没有任何代码。这直接影响 Q1。
 
@@ -68,7 +68,7 @@ GET  /api/content-publications?artifact_id=         列发布记录
 | 2 | 正在推进的作品 | §2 原文② | `content-works` + 每个作品的 `artifacts.draft_status` | **需要 N+1**，见缺口 B |
 | 3 | 需要处理的审核 | §2 原文③ | `content-reviews?status=` | 能，一次请求 |
 | 4 | 到期交接与待登记发布 | §2 原文④ | `content-deliveries` 的派生 `due` / `pending_registration` | 能，一次请求 |
-| 5 | **待补录的反馈** | §2 原文⑤ | `feedback-learning` | **模块未落地**，见缺口 E |
+| 5 | **待补录的反馈** | §2 原文⑤ | `feedback-learning` | ~~**模块未落地**，见缺口 E~~ **已落地**（specs/027 PR 1，2026-09-20） |
 | 6 | 账号配置缺项（附加） | §11「经营底座」，021 就绪判定 | `content-accounts` + 每个账号的 `profile.readiness` | **需要 N+1**，见缺口 C |
 
 **缺口 A — 选题状态口径与 Issue 不符（已由 Q2 裁决）。**
@@ -99,6 +99,8 @@ StatusDropped  Status = "dropped"
 
 **缺口 E — 「待补录的反馈」的模块不存在。**
 `feedback-learning` 在 `scripts/content-boundaries.json` 里已登记，但 `server/internal/content/`、`packages/core/content/`、`packages/views/content/` 下**都没有该目录**。§2 原文的第五项今天**没有任何数据源**。裁决：该区块**存在但显示「暂不可用（反馈记录接入后）」**，与 024 的三个 AI 入口同一口径——不隐藏、不留白、不伪造。
+
+> **2026-09-20 更新（specs/027 实施 PR 1）：缺口 E 已关闭。** 模块的 server 与 core 两侧已落地，第五项的数据源是 `GET /api/content-feedback/pending`。上面这段保留为当时的事实记录。
 
 ### 页面现状
 
@@ -158,7 +160,7 @@ StatusDropped  Status = "dropped"
 **Acceptance Scenarios**:
 
 1. **Given** EP-04c 未落地，**When** 打开选题区块，**Then** 有一条说明写明「候选自动生成暂不可用」并说明现在列的是人工创建的 `draft` 卡，**且没有任何伪造的推荐条目**。
-2. **Given** `feedback-learning` 未落地，**When** 打开工作台，**Then** 「待补录的反馈」区块**存在**、显示「暂不可用（反馈记录接入后）」，**不隐藏该区块**、**不显示加载中**、**不伪造任何反馈条目**。
+2. ~~**Given** `feedback-learning` 未落地，**When** 打开工作台，**Then** 「待补录的反馈」区块**存在**、显示「暂不可用（反馈记录接入后）」~~ **（2026-09-20 起不再适用：模块已落地。）** 现行口径见 FR-005b：该区块列出已发布却一条指标都没录的发布记录，**不隐藏该区块**、**不显示加载中**、**不伪造任何反馈条目**。
 
 ---
 
@@ -182,13 +184,19 @@ StatusDropped  Status = "dropped"
 - **FR-001**: 工作台 MUST 是**只读聚合**：它不创建、不修改、不删除任何对象，所有动作都是跳转到对象原本所属的页面。
 - **FR-002**: 工作台 MUST NOT 调用任何 AI 执行器，MUST NOT 产生任何推断出来的内容（宪法 IX）。
 - **FR-003**: 首版 MUST NOT 新增数据库表。
-- **FR-004**: 工作台的数据 MUST 全部来自已落地模块的读端点；MUST NOT 读取未落地模块（`source-inbox`、`knowledge-base`、`agent-workflow`、`feedback-learning`、`project-collab`、`agent-gateway`）。§2 第五项「待补录的反馈」正属此列，因此它按 FR-005b 显示暂不可用，而不是去读一个不存在的模块。
+- **FR-004**: 工作台的数据 MUST 全部来自已落地模块的读端点；MUST NOT 读取未落地模块（`source-inbox`、`knowledge-base`、`agent-workflow`、`project-collab`、`agent-gateway`）。
+
+  > **2026-09-20 更新（specs/027 实施 PR 1）**：`feedback-learning` 已落地（Issue #166），从本名单移出。§2 第五项「待补录的反馈」因此有了数据源，FR-005b 随之改写。改动由 027 而不是 026 做，是主控对 027 Q6 的裁决：把它写成 027 PR 1 的交付要求，而不是留一句「希望有人记得」——两张卡都以为对方会处理，正是这条会掉的地方。
 
 **区块清单**
 
 - **FR-005**: 工作台 MUST 同时呈现 SOP §2 原文的五个区块，顺序与原文一致：①值得写的选题 ②正在推进的作品 ③需要处理的审核 ④到期交接与待登记发布 ⑤待补录的反馈。五项 MUST 同时可见，MUST NOT 默认折叠其中任何一项，**MUST NOT 因为某项没有数据源就把它从页面上去掉**。
 - **FR-005a**: 「账号配置缺项」MUST 作为**第六个附加区块**呈现，排在 §2 五项之后。它的标题 MUST 写其本义（账号配置缺项），MUST NOT 使用「待补录的反馈」或任何会让它被误读为 §2 第五项的标题。
-- **FR-005b**: 「待补录的反馈」区块 MUST 显示「暂不可用（反馈记录接入后）」并说明原因（`feedback-learning` 未落地）。MUST NOT 隐藏该区块、MUST NOT 停在加载态、MUST NOT 显示任何伪造的反馈条目。
+- **FR-005b**: 「待补录的反馈」区块 MUST 列出**已发布、却一条人工指标都没录**的发布记录，数据源是 `feedback-learning` 的 `GET /api/content-feedback/pending`，派生口径用 `packages/core/content/feedback-learning` 的 `pendingFeedbackSummary`。每条 MUST 写明是哪一条（渠道 + 发布时间），MUST NOT 只显示一个数字。MUST NOT 隐藏该区块、MUST NOT 停在加载态、MUST NOT 显示任何伪造的反馈条目。
+
+  **这个区块没有「到期」的概念**：判定只有「发了」和「一条都没录」两件事，不含任何时间比较。SOP §3.2 的品牌级「反馈观察时点」尚未落地（属 §3.2 那张卡），所以「过没过」今天无从判断；写一个默认天数等于发明一条 SOP 没说的规则，摆在运营者看不见也改不了的地方。
+
+  > **2026-09-20 更新（specs/027 实施 PR 1）**：本条从「暂不可用（反馈记录接入后）」改写而来。原文保留在此供对照：`feedback-learning` 未落地期间，该区块显示暂不可用并说明原因——不隐藏、不留白、不伪造，与 024 三个 AI 入口同一口径。
 - **FR-006**: 「需要处理的审核」MUST 列出状态为 `pending` 与 `changes_requested` 的审核请求。`approved` / `rejected` / `cancelled` 不列。
 - **FR-007**: 「到期交接与待登记发布」MUST 使用 `content-deliveries` 在读时派生的 `due` 与 `pending_registration`，MUST NOT 自行重算到期规则，也 MUST NOT 把「已交接」当成「已发布」。
 - **FR-008**: 「正在推进的作品」MUST 列出至少有一份文档处于 `working` 的作品，并显示是哪一份文档。
@@ -236,7 +244,7 @@ StatusDropped  Status = "dropped"
 - **审核请求**（`review-delivery`）：`status`。
 - **交付待办**（`review-delivery`）：`status`、`scheduled_at`，以及**读时派生**的 `due`、`pending_registration`——这两个不存库，按 SOP 9.2「不推断平台状态」。
 - **账号与表达配置**（`ip-profile`）：`readiness{can_start, missing[]}`，以及每周可投入时间（带「已确认 / 待补充」状态）——它是 §11「预计投入」今天唯一的来源。
-- **反馈记录**（`feedback-learning`）：**尚不存在**。§2 第五项今天没有数据源。
+- **反馈记录**（`feedback-learning`）：~~**尚不存在**~~ **已落地**（specs/027 PR 1，2026-09-20）：人工指标 `content_manual_metric` 与反馈摘录 `content_feedback_excerpt`，第五项读 `GET /api/content-feedback/pending`。
 
 唯一新增的概念是**「工作台读模型」**：把上述对象按六个区块组织起来的一个纯读结果。按裁决 Q1 = B，它**首版不是服务端对象**——它是 `packages/core` 里的一组纯函数（FR-021a），加上一个只做渲染的页面。
 
@@ -250,10 +258,14 @@ StatusDropped  Status = "dropped"
 - **SC-002**: 任意一个区块的数据源不可用时，其余区块仍然可用（逐个模拟失败验证，有数据源的 5 个区块 5 次中 5 次）。
 - **SC-003**: 工作台列出的每一条，其状态与理由都与该对象在原页面上显示的一致（逐条人工核对，0 处不一致）。
 - **SC-004**: 工作台不产生任何写操作——整页操作一遍后，五类对象的数据与操作前逐字节相同（除跳转外无副作用）。
-- **SC-005**: 两处「暂不可用」恒定可见且各写明原因：选题区块的「候选自动生成暂不可用」（0 条伪造推荐），以及「待补录的反馈」整块（0 条伪造反馈，且该区块**没有被隐藏**）。
+- **SC-005**: 选题区块的「候选自动生成暂不可用」恒定可见并写明原因（0 条伪造推荐）。
+
+  > **2026-09-20 更新（specs/027 实施 PR 1）**：原本是**两处**暂不可用，第二处是「待补录的反馈」整块。`feedback-learning` 落地后它有了真实数据源，只剩选题区块这一处。0 条伪造反馈这一条仍然成立，但它现在由「区块读真实端点」保证，不再由「区块显示暂不可用」保证。
 - **SC-007**: 所有派生口径（待处理审核 / 到期 / 待登记 / 就绪缺项 / 区块排序）都有 `packages/core` 的 node 测试覆盖；页面内 0 处内联判定（可通过读代码核对）。
 - **SC-008**: 任一区块条目超过 10 条时，显示的是「10 条 + 还有 N 条」而不是全部或截断无提示。
-- **SC-006**: 空工作区打开工作台：5 个有数据源的区块 5 个空态 + 第五项「暂不可用」，0 个加载态残留，0 个报错。
+- **SC-006**: 空工作区打开工作台：**六个区块六个空态**，0 个加载态残留，0 个报错。第五项的空态是「没有待补录的反馈」——**那是一个结果，不是一句抱歉**。
+
+  > **2026-09-20 更新（specs/027 实施 PR 1）**：原本是「5 个空态 + 第五项暂不可用」。
 
 ---
 

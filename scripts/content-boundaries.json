@@ -104,6 +104,8 @@
     "server/internal/handler/content_work_version.go",
     "server/internal/handler/content_review.go",
     "server/internal/handler/content_delivery.go",
+    "server/internal/handler/content_metric.go",
+    "server/internal/handler/content_feedback.go",
     "server/internal/handler/handler.go",
     "server/cmd/server/router.go",
     "apps/web/app/[workspaceSlug]/(dashboard)/diagnostics/page.tsx",

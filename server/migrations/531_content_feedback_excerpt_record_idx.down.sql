@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_feedback_excerpt_record_idx;

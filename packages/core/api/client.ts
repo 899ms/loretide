@@ -915,6 +915,42 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-sources/duplicates?content_hash=${encodeURIComponent(contentHash)}`);
   }
 
+  // Manual metrics and feedback excerpts (specs/027). Nothing here fetches a
+  // number from a platform: every one of them was typed in by a person.
+  // There is no update and no delete - a correction is a new row.
+  async listContentMetrics(publicationRecordId = "", metric = ""): Promise<unknown> {
+    const query = new URLSearchParams();
+    if (publicationRecordId) query.set("publication_record_id", publicationRecordId);
+    if (metric) query.set("metric", metric);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return this.fetch<unknown>(`/api/content-metrics${suffix}`);
+  }
+
+  // The form endpoint. Which endpoint is called is what the server records as
+  // the data's origin, so there is no source_type in the body.
+  async recordContentMetric(body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-metrics", {method: "POST", body: JSON.stringify(body)});
+  }
+
+  // The paste endpoint. All or nothing: a refusal names the row.
+  async importContentMetrics(metrics: Record<string, unknown>[]): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-metrics/import", {method: "POST", body: JSON.stringify({metrics})});
+  }
+
+  async listContentFeedback(publicationRecordId = ""): Promise<unknown> {
+    const query = publicationRecordId ? `?publication_record_id=${encodeURIComponent(publicationRecordId)}` : "";
+    return this.fetch<unknown>(`/api/content-feedback${query}`);
+  }
+
+  async recordContentFeedback(body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-feedback", {method: "POST", body: JSON.stringify(body)});
+  }
+
+  // SOP 2's fifth workbench item: published, and nobody has recorded numbers.
+  async listContentFeedbackPending(): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-feedback/pending");
+  }
+
   async contentDiagnosticStream(query: string, signal: AbortSignal): Promise<Response> {
     return this.fetchRaw(`/api/content-diagnostics/stream?${query}`, {signal});
   }
