@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_publication_record_id_unique_idx;

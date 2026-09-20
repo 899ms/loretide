@@ -831,6 +831,54 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts/${encodeURIComponent(artifactId)}/versions/${encodeURIComponent(versionId)}/adopt`, {method: "POST"});
   }
 
+  // Review requests, delivery tasks and publication records (specs/025).
+  // Nothing here publishes: there is no endpoint that reaches a platform, and
+  // no way to change or remove a publication record once it is written.
+  async listContentReviews(artifactId = "", status = ""): Promise<unknown> {
+    const query = new URLSearchParams();
+    if (artifactId) query.set("artifact_id", artifactId);
+    if (status) query.set("status", status);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return this.fetch<unknown>(`/api/content-reviews${suffix}`);
+  }
+
+  async submitContentReview(body: {artifact_id: string; version_id: string; account_id: string; channel: string; start_snapshot_id?: string}): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-reviews", {method: "POST", body: JSON.stringify(body)});
+  }
+
+  async getContentReview(reviewId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-reviews/${encodeURIComponent(reviewId)}`);
+  }
+
+  async decideContentReview(reviewId: string, body: {status: string; note: string}): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-reviews/${encodeURIComponent(reviewId)}/decision`, {method: "POST", body: JSON.stringify(body)});
+  }
+
+  async listContentDeliveries(artifactId = "", status = ""): Promise<unknown> {
+    const query = new URLSearchParams();
+    if (artifactId) query.set("artifact_id", artifactId);
+    if (status) query.set("status", status);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return this.fetch<unknown>(`/api/content-deliveries${suffix}`);
+  }
+
+  async createContentDelivery(body: {artifact_id: string; channel: string; review_request_id: string}): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-deliveries", {method: "POST", body: JSON.stringify(body)});
+  }
+
+  async advanceContentDelivery(deliveryId: string, body: {status?: string; scheduled_at?: string | null; handoff_method?: string; reason?: string; keep_approved_snapshot?: boolean}): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-deliveries/${encodeURIComponent(deliveryId)}/status`, {method: "POST", body: JSON.stringify(body)});
+  }
+
+  async listContentPublications(artifactId = ""): Promise<unknown> {
+    const query = artifactId ? `?artifact_id=${encodeURIComponent(artifactId)}` : "";
+    return this.fetch<unknown>(`/api/content-publications${query}`);
+  }
+
+  async recordContentPublication(body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-publications", {method: "POST", body: JSON.stringify(body)});
+  }
+
   async contentDiagnosticStream(query: string, signal: AbortSignal): Promise<Response> {
     return this.fetchRaw(`/api/content-diagnostics/stream?${query}`, {signal});
   }

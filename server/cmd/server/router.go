@@ -1925,6 +1925,34 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			})
 		})
 
+		// Review requests, delivery tasks and publication records own their
+		// workspace authorization boundary for the same reason the work editor
+		// does: every decision has to reach workspace-core.Authorize, including
+		// refusals that must be recorded.
+		r.Route("/api/content-reviews", func(r chi.Router) {
+			r.Use(h.DiagnosticTrace)
+			r.Get("/", h.ListContentReviews)
+			r.Post("/", h.SubmitContentReview)
+			r.Route("/{reviewId}", func(r chi.Router) {
+				r.Get("/", h.GetContentReview)
+				r.Post("/decision", h.DecideContentReview)
+			})
+		})
+		r.Route("/api/content-deliveries", func(r chi.Router) {
+			r.Use(h.DiagnosticTrace)
+			r.Get("/", h.ListContentDeliveries)
+			r.Post("/", h.CreateContentDelivery)
+			r.Post("/{deliveryId}/status", h.AdvanceContentDelivery)
+		})
+		// Publication records are append-only: a collection to list and a
+		// collection to add to, and no single-record path at all, because there
+		// is nothing about one that can be changed.
+		r.Route("/api/content-publications", func(r chi.Router) {
+			r.Use(h.DiagnosticTrace)
+			r.Get("/", h.ListContentPublications)
+			r.Post("/", h.RecordContentPublication)
+		})
+
 		// --- Workspace-scoped routes (all require workspace membership) ---
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireWorkspaceMember(queries))

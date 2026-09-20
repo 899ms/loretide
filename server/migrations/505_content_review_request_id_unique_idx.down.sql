@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_review_request_id_unique_idx;
