@@ -1904,6 +1904,27 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			})
 		})
 
+		// Work editor owns its workspace authorization boundary for the same
+		// reason topic planning does: every decision has to reach
+		// workspace-core.Authorize, including refusals that must be recorded.
+		r.Route("/api/content-works", func(r chi.Router) {
+			r.Use(h.DiagnosticTrace)
+			r.Get("/", h.ListContentWorks)
+			r.Post("/", h.CreateContentWork)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Get("/", h.GetContentWork)
+				r.Patch("/", h.UpdateContentWork)
+				r.Get("/artifacts", h.ListContentArtifacts)
+				r.Post("/artifacts", h.CreateContentArtifact)
+				r.Patch("/artifacts/{artifactId}", h.PatchContentArtifact)
+				r.Get("/artifacts/{artifactId}/versions", h.ListContentArtifactVersions)
+				r.Post("/artifacts/{artifactId}/versions", h.SaveContentArtifactVersion)
+				r.Get("/artifacts/{artifactId}/versions/{versionId}", h.GetContentArtifactVersion)
+				r.Post("/artifacts/{artifactId}/versions/{versionId}/restore", h.RestoreContentArtifactVersion)
+				r.Post("/artifacts/{artifactId}/versions/{versionId}/adopt", h.AdoptContentArtifactVersion)
+			})
+		})
+
 		// --- Workspace-scoped routes (all require workspace membership) ---
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireWorkspaceMember(queries))
