@@ -751,6 +751,15 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}/briefs/${encodeURIComponent(revisionId)}`);
   }
 
+  // The account's material scope preference (LT-014). Its own endpoint because
+  // PATCH replaces the settings blob wholesale; this one merges.
+  async setContentAccountScope(accountId: string, scope: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-accounts/${encodeURIComponent(accountId)}/scope`, {
+      method: "PUT",
+      body: JSON.stringify({scope}),
+    });
+  }
+
   // Starting a brief revision and reading back what a start fixed (EP-04b).
   // Not idempotent: the same revision may be started again with a different
   // material scope, and that produces a second snapshot.

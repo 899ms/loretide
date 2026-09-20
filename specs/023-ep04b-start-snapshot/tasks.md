@@ -72,14 +72,14 @@ description: "Task list for 023 EP-04b — start screen and input snapshot"
 ## Phase 6: 页面 PR
 
 - [x] T024 [P] `packages/core/content/topic-planning/snapshot.ts`：zod schema + 畸形响应降级；`snapshot.test.ts` 用 `// @vitest-environment node`
-- [x] T025 [P] `queries.ts`：`useStartReadiness`（读既有 profile 端点的 `readiness`）与 `useStartRun`。**非乐观**——写入会 409，且它会导航
-- [ ] T026 `packages/views/content/topic-planning/start.tsx`：**只挂既有组件**（SettingsSection / SettingsCard / SettingsRow / Select / Input / Button / SettingsSaveState）。缺项**逐项列出**；账号未选时要求先选；项目可选
-- [ ] T027 「暂不可用」半边（本地文件 / 素材包 / 知识卡）：**显示原因**，不是空白、不是加载中、**没有任何伪造条目**
-- [ ] T028 **入口（已裁决）**：开始界面挂在**选题卡详情页 EP-04a `start` 动作区块之后**的一个区块里；**选题卡列表不加入口**。该区块同时展示「这张卡一共开始过几次」（493 索引为它而建）。`manual-ui-todo.md` 里**不再**留待裁定项
-- [ ] T029 四语言文案（en / zh-Hans / ja / ko）并跑 `locales/parity.test.ts`
-- [ ] T030 新建 `manual-ui-todo.md`，界面项全部进去
-- [ ] T031 **不写 UI 单测**（宪法 II）。核对：`packages/views` 下没有本卡新增的 `.test.tsx`
-- [ ] T032 跑全部验证：`pnpm typecheck --force`、三项 check、Go 两套（含 `LORETIDE_DB_TEST_*` 的 handler 套件）、core 与 views vitest
+- [x] T025 [P] `queries.ts`：读既有 profile 端点的 `readiness` 与开始写入。**非乐观**。〔更正：原文「写入会 409，且它会导航」是 Q1=A 时代的残留——裁决后端点**没有 409**（重复开始合法），本卡也**没有导航去处**（无运行实体）。实到：不乐观、不导航，飞行中禁用按钮，成功后把新快照追加进开始记录。〕
+- [x] T026 `packages/views/content/topic-planning/start.tsx`：**只挂既有组件**（SettingsSection / SettingsCard / SettingsRow / Select / Input / Button / SettingsSaveState）。缺项**逐项列出**；账号未选时要求先选；项目可选
+- [x] T027 「暂不可用」半边（本地文件 / 素材包 / 知识卡）：**显示原因**，不是空白、不是加载中、**没有任何伪造条目**
+- [x] T028 **入口（已裁决）**：开始界面挂在**选题卡详情页 EP-04a `start` 动作区块之后**的一个区块里；**选题卡列表不加入口**。该区块同时展示「这张卡一共开始过几次」（493 索引为它而建）。`manual-ui-todo.md` 里**不再**留待裁定项。〔实到：后端今天只提供「某一版的全部开始」，所以展示的是**当前选中版本**的次数；按卡汇总待一条按卡列出的端点，已记入 `manual-ui-todo.md` 的「已知边界」〕
+- [x] T029 四语言文案（en / zh-Hans / ja / ko）并跑 `locales/parity.test.ts`
+- [x] T030 新建 `manual-ui-todo.md`，界面项全部进去
+- [x] T031 **不写 UI 单测**（宪法 II）。核对：`packages/views` 下没有本卡新增的 `.test.tsx`
+- [x] T032 跑全部验证：`pnpm typecheck --force`、三项 check、Go 两套（含 `LORETIDE_DB_TEST_*` 的 handler 套件）、core 与 views vitest
 
 ---
 

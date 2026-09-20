@@ -162,6 +162,25 @@ export function useSetAccountProfile(wsId: string) {
   });
 }
 
+/**
+ * Record the account's material scope preference ("what was chosen last time").
+ *
+ * Separate from a start: a start fixes the scope it used into its own snapshot
+ * and never reads this again, so failing to store the preference costs the next
+ * start's default and nothing else.
+ */
+export function useSetAccountScope(wsId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { accountId: string; scope: string }) =>
+      parseAccount(
+        await api.setContentAccountScope(input.accountId, input.scope),
+      ),
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: accountKeys.all(wsId) }),
+  });
+}
+
 export function useSetAccountPersona(wsId: string) {
   const client = useQueryClient();
   return useMutation({
