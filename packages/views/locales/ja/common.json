@@ -780,5 +780,81 @@
         "weeklyHours": "週あたりの投入時間"
       }
     }
+  },
+  "contentSources": {
+    "title": "素材インボックス",
+    "description": "残す価値のあるものをまず収集し、あとで整理します。ここでは取得も解析も行いません。",
+    "parseTitle": "素材の解析",
+    "parseUnavailable": "素材の解析は現在利用できません（解析器の導入時に入ります）。以下の内容はすべて人が入力したものです——要約・エンティティ・関連資料は生成しません。",
+    "collectTitle": "収集する",
+    "kindLabel": "種類",
+    "kinds": {
+      "pasted_text": "貼り付けテキスト",
+      "url": "リンク"
+    },
+    "urlLabel": "リンク",
+    "urlPlaceholder": "https://…",
+    "urlNotFetched": "リンクは保存するだけで開きません。内容は下のメモに書いてください。",
+    "contentLabel": "本文",
+    "contentPlaceholder": "ここにテキストを貼り付け",
+    "titleLabel": "タイトル",
+    "tagsLabel": "タグ",
+    "tagsPlaceholder": "カンマまたは空白で区切る",
+    "annotationLabel": "収集時のメモ",
+    "judgementLabel": "残す理由",
+    "historicalLabel": "過去データの取り込み",
+    "historicalHint": "今収集したものではなく、過去から取り込んだ素材です。収集時に決まり、以後変更できません。",
+    "collect": "収集",
+    "collected": "収集しました",
+    "problem": {
+      "kind": "種類を選んでください",
+      "url": "http:// または https:// で始まるリンクが必要です",
+      "content": "テキストを貼り付けてください"
+    },
+    "duplicateHint": "同じテキストがすでに {{count}} 件あります。どちらも残り、それぞれのメモは影響しません。",
+    "listTitle": "インボックス",
+    "empty": "まだ何も収集していません",
+    "loading": "読み込み中…",
+    "failed": "読み込めませんでした",
+    "rowFailed": "この項目を読み込めませんでした",
+    "filterStatus": "状態",
+    "filterTag": "タグ",
+    "filterAll": "すべて",
+    "statuses": {
+      "inbox": "未整理",
+      "organized": "整理済み",
+      "archived": "アーカイブ済み"
+    },
+    "selectRow": "選択",
+    "selected": "{{count}} 件選択中",
+    "bulkTitle": "選択した項目に対して",
+    "bulkAddTags": "タグを追加",
+    "bulkStatus": "状態を変更",
+    "bulkApply": "実行",
+    "bulkResult": "{{ok}} 件成功、{{failed}} 件失敗",
+    "bulkFailedIds": "失敗したもの：{{ids}}",
+    "open": "開く",
+    "close": "閉じる",
+    "detailTitle": "この項目",
+    "originalTitle": "原文",
+    "originalReadOnly": "収集したままの形で保存され、変わりません。",
+    "noOriginal": "リンクには本文が保存されていません——内容はメモにあります。",
+    "hashLabel": "コンテンツハッシュ",
+    "capturedAt": "収集日時",
+    "recordedBy": "収集者",
+    "organizeTitle": "整理",
+    "save": "保存",
+    "saved": "保存しました",
+    "historyTitle": "整理の記録",
+    "historyEmpty": "まだ整理していません",
+    "changedFields": "変更",
+    "fields": {
+      "title": "タイトル",
+      "tags": "タグ",
+      "annotation": "メモ",
+      "personal_judgement": "残す理由",
+      "status": "状態"
+    },
+    "noDelete": "削除はありません。アーカイブは残したまま一覧から外すだけです。"
   }
 }

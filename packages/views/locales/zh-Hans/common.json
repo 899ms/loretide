@@ -780,5 +780,81 @@
         "weeklyHours": "每周投入"
       }
     }
+  },
+  "contentSources": {
+    "title": "素材收件箱",
+    "description": "先把值得留的收下来，再整理。这里不替你抓取、也不替你解析。",
+    "parseTitle": "素材解析",
+    "parseUnavailable": "素材解析暂不可用（随解析器一起接入）。下面的内容全部由人填写——不生成摘要、实体或关联资料。",
+    "collectTitle": "收一条",
+    "kindLabel": "类型",
+    "kinds": {
+      "pasted_text": "粘贴文本",
+      "url": "链接"
+    },
+    "urlLabel": "链接",
+    "urlPlaceholder": "https://…",
+    "urlNotFetched": "链接只存不打开。它说了什么，请写在下面的批注里。",
+    "contentLabel": "正文",
+    "contentPlaceholder": "把文字粘贴到这里",
+    "titleLabel": "标题",
+    "tagsLabel": "标签",
+    "tagsPlaceholder": "用逗号或空格分隔",
+    "annotationLabel": "采集时的批注",
+    "judgementLabel": "为什么收藏",
+    "historicalLabel": "历史导入",
+    "historicalHint": "从过去补录进来的素材，不是当下采集的。采集时定，之后不可改。",
+    "collect": "收下",
+    "collected": "已收下",
+    "problem": {
+      "kind": "先选类型",
+      "url": "需要一个 http:// 或 https:// 开头的链接",
+      "content": "粘贴一段文字"
+    },
+    "duplicateHint": "同样的文字这里已经有 {{count}} 条。两边都留着，各自的批注互不影响。",
+    "listTitle": "收件箱",
+    "empty": "还没有收过东西",
+    "loading": "加载中…",
+    "failed": "读取失败",
+    "rowFailed": "这一条读取失败",
+    "filterStatus": "状态",
+    "filterTag": "标签",
+    "filterAll": "全部",
+    "statuses": {
+      "inbox": "待整理",
+      "organized": "已整理",
+      "archived": "已归档"
+    },
+    "selectRow": "选中",
+    "selected": "已选 {{count}} 条",
+    "bulkTitle": "对选中的做",
+    "bulkAddTags": "加标签",
+    "bulkStatus": "改状态",
+    "bulkApply": "执行",
+    "bulkResult": "{{ok}} 条成功，{{failed}} 条没成功",
+    "bulkFailedIds": "没成功的：{{ids}}",
+    "open": "打开",
+    "close": "收起",
+    "detailTitle": "这一条",
+    "originalTitle": "原文",
+    "originalReadOnly": "按收下来的样子存着，永不改变。",
+    "noOriginal": "链接没有存正文——它说了什么在批注里。",
+    "hashLabel": "内容哈希",
+    "capturedAt": "采集时间",
+    "recordedBy": "录入人",
+    "organizeTitle": "整理",
+    "save": "保存",
+    "saved": "已保存",
+    "historyTitle": "整理记录",
+    "historyEmpty": "还没整理过",
+    "changedFields": "改了",
+    "fields": {
+      "title": "标题",
+      "tags": "标签",
+      "annotation": "批注",
+      "personal_judgement": "为什么收藏",
+      "status": "状态"
+    },
+    "noDelete": "没有删除。归档是留着它，只是不在列表里了。"
   }
 }
