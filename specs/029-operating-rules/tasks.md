@@ -24,60 +24,60 @@ description: "Task list for 029 operating rules — SOP §3.2 brand-level settin
 
 ## Phase 1: Setup
 
-- [ ] T001 裁决已拿到并回写四个件：`spec.md`（新增「裁决记录」一节、FR-012a / FR-026 / FR-026a / FR-027 / FR-031 / FR-033 改写、SC-014 ～ SC-016 新增）、`plan.md`、`contracts/operating-rules.md`、本文件
-- [ ] T002 记录基线：`bash scripts/test-go.sh`、两套 db-suites（按 `docs/development/testing-database-suites.md` 配 `LORETIDE_DB_TEST_*`，**指向容器自带 PG 上新建的独立库与最小权限角色**）、三项 check、`pnpm typecheck --force`、`packages/views` 的 `rich-content/package-exports.test.ts`。**注意**：`packages/views/onboarding/steps/step-workspace.test.tsx` 的「submits the prefix the user was shown」在 `app-main` 上已有一条失败，与本卡无关，基线里记下即可
-- [ ] T003 读三处既有形状：`server/internal/handler/workspace.go` 的 `validateTimezoneSetting` / `timezoneFilled` / `validateAutoPrecheckSetting` / `autoPrecheckFilled`（写时校验 + 读时填默认且不回写）、`packages/core/workspace/auto-precheck.ts` 的四个函数（**尤其 `hasStoredAutoPrecheck` 为什么单独存在**）、`server/cmd/server/router.go` 的 `PUT /{id}/scope` 那条注释（LT-014 为什么不用 PATCH 上的字段）
+- [x] T001 裁决已拿到并回写四个件：`spec.md`（新增「裁决记录」一节、FR-012a / FR-026 / FR-026a / FR-027 / FR-031 / FR-033 改写、SC-014 ～ SC-016 新增）、`plan.md`、`contracts/operating-rules.md`、本文件
+- [x] T002 记录基线：`bash scripts/test-go.sh`、两套 db-suites（按 `docs/development/testing-database-suites.md` 配 `LORETIDE_DB_TEST_*`，**指向容器自带 PG 上新建的独立库与最小权限角色**）、三项 check、`pnpm typecheck --force`、`packages/views` 的 `rich-content/package-exports.test.ts`。**注意**：`packages/views/onboarding/steps/step-workspace.test.tsx` 的「submits the prefix the user was shown」在 `app-main` 上已有一条失败，与本卡无关，基线里记下即可
+- [x] T003 读三处既有形状：`server/internal/handler/workspace.go` 的 `validateTimezoneSetting` / `timezoneFilled` / `validateAutoPrecheckSetting` / `autoPrecheckFilled`（写时校验 + 读时填默认且不回写）、`packages/core/workspace/auto-precheck.ts` 的四个函数（**尤其 `hasStoredAutoPrecheck` 为什么单独存在**）、`server/cmd/server/router.go` 的 `PUT /{id}/scope` 那条注释（LT-014 为什么不用 PATCH 上的字段）
 
 ---
 
 ## Phase 2: 模块（PR 1，先写测试）
 
-- [ ] T004 [P] **先写** 受控集矩阵（纯函数）：`platform` **恰好八项**且与 `ip-profile` 的 Go 源文件**逐字相同**（读源文件对表，**不 import**——`workspace-core` 的依赖表里没有 `ip-profile`）；`review_rule` **恰好一项** `self`。多一个少一个即红。确认失败
-- [ ] T004a [P] **先写** 「没有第三个受控集」的负例：模块里除这两个之外不存在别的枚举——`note` / `homepage` 等必须还是 `string`。确认失败
-- [ ] T005 [P] **先写** **「未设 ≠ 零值」**的用例（SC-002）：`ReadCadence` 对「键缺席」与「值为 0」返回**不同的 `stored`**；`ReadObservation` 同理。确认失败。**这是本卡最容易悄悄发生的数据损坏，所以它先写**——019 已经在布尔上踩过一次
-- [ ] T005a [P] **先写** `ReadObservation` 的 `source` 三态用例：渠道自己设了 → `"channel"`；渠道没设走全局 → `"global"`；都没设 → `"none"`。**不是布尔**：界面要能说出是哪一种
-- [ ] T006 [P] **先写** 观察时点派生的**三态**用例（SC-009）：没设 → `unknown`；`published_at` 为空 → `unknown`；已过 → `passed`；未到 → `not_yet`。另一条负例扫源码确认**不存在任何写死的天数常量**。确认失败
-- [ ] T007 [P] **先写** 校验用例：负的目标条数 / 负的观察天数 / 越界 `platform` / 非 `self` 的 `review_rule`，各一条，**各自点名字段**（合同第 5 节的表）。确认失败
-- [ ] T008 [P] **先写** 合并语义用例：写 `loretide.operating_rules` 之后，同一个工作区的 `loretide.timezone` 与 `loretide.auto_precheck` **逐字节不变**（SC-003）。确认失败
-- [ ] T009 [P] **先写** 不存凭据守卫（SC-004）：扫模块源码与接口定义，无 password / token / cookie / secret 类字段；**且 MUST 断言模块确实有写入路径**，否则空模块也绿（照 022 的原版，别省这半条）。确认失败
-- [ ] T009a [P] **先写** 不外发守卫（SC-005）：模块里不存在 HTTP 客户端调用。确认失败
-- [ ] T009b [P] **先写** 不调度守卫（SC-007）：不存在定时器、cron、通知发送路径。确认失败
-- [ ] T009c [P] **先写** 无成员选择守卫（SC-008）：不存在任何成员查询或选择路径——**包括禁用的控件**。确认失败
-- [ ] T010 新建 `server/internal/content/workspace-core/operating_rules.go`：键名常量、两个受控集、`ReadCadence` / `ReadObservation`（**各返回两个值**）、`TemplateNoteFor`、校验与合并
-- [ ] T011 新建 `server/internal/content/workspace-core/observation.go`：`ObservationDue` 三态
-- [ ] T012 新建 `guards_test.go`，把 T009 ～ T009c 落进去
+- [x] T004 [P] **先写** 受控集矩阵（纯函数）：`platform` **恰好八项**且与 `ip-profile` 的 Go 源文件**逐字相同**（读源文件对表，**不 import**——`workspace-core` 的依赖表里没有 `ip-profile`）；`review_rule` **恰好一项** `self`。多一个少一个即红。确认失败
+- [x] T004a [P] **先写** 「没有第三个受控集」的负例：模块里除这两个之外不存在别的枚举——`note` / `homepage` 等必须还是 `string`。确认失败
+- [x] T005 [P] **先写** **「未设 ≠ 零值」**的用例（SC-002）：`ReadCadence` 对「键缺席」与「值为 0」返回**不同的 `stored`**；`ReadObservation` 同理。确认失败。**这是本卡最容易悄悄发生的数据损坏，所以它先写**——019 已经在布尔上踩过一次
+- [x] T005a [P] **先写** `ReadObservation` 的 `source` 三态用例：渠道自己设了 → `"channel"`；渠道没设走全局 → `"global"`；都没设 → `"none"`。**不是布尔**：界面要能说出是哪一种
+- [x] T006 [P] **先写** 观察时点派生的**三态**用例（SC-009）：没设 → `unknown`；`published_at` 为空 → `unknown`；已过 → `passed`；未到 → `not_yet`。另一条负例扫源码确认**不存在任何写死的天数常量**。确认失败
+- [x] T007 [P] **先写** 校验用例：负的目标条数 / 负的观察天数 / 越界 `platform` / 非 `self` 的 `review_rule`，各一条，**各自点名字段**（合同第 5 节的表）。确认失败
+- [x] T008 [P] **先写** 合并语义用例：写 `loretide.operating_rules` 之后，同一个工作区的 `loretide.timezone` 与 `loretide.auto_precheck` **逐字节不变**（SC-003）。确认失败
+- [x] T009 [P] **先写** 不存凭据守卫（SC-004）：扫模块源码与接口定义，无 password / token / cookie / secret 类字段；**且 MUST 断言模块确实有写入路径**，否则空模块也绿（照 022 的原版，别省这半条）。确认失败
+- [x] T009a [P] **先写** 不外发守卫（SC-005）：模块里不存在 HTTP 客户端调用。确认失败
+- [x] T009b [P] **先写** 不调度守卫（SC-007）：不存在定时器、cron、通知发送路径。确认失败
+- [x] T009c [P] **先写** 无成员选择守卫（SC-008）：不存在任何成员查询或选择路径——**包括禁用的控件**。确认失败
+- [x] T010 新建 `server/internal/content/workspace-core/operating_rules.go`：键名常量、两个受控集、`ReadCadence` / `ReadObservation`（**各返回两个值**）、`TemplateNoteFor`、校验与合并
+- [x] T011 新建 `server/internal/content/workspace-core/observation.go`：`ObservationDue` 三态
+- [x] T012 新建 `guards_test.go`，把 T009 ～ T009c 落进去
 
 ---
 
 ## Phase 3: HTTP（PR 1，先写测试）
 
-- [ ] T013 **先写** 决策顺序用例：越权与不存在**逐字节相同**（除 `trace_id`）；400 是诊断错误对象且点名字段。确认失败
-- [ ] T014 **先写** **服务端合并**的用例：`PUT /api/operating-rules` 只带 `cadence` 时，`templates` / `review_rule` / `observation` 与**其余 settings 键**都不变。确认失败。**这是本卡不照抄 LT-009 / 019 的那一处**——它们在前端合并，中间隔一次网络往返
-- [ ] T015 **先写** 读时填默认且**不回写**的用例：`GET` 之后工作区那一行的 `updated_at` 与 `settings` 逐字节不变。确认失败
-- [ ] T016 **先写** `PUT /api/content-accounts/{id}/homepage` 的用例：只放行 `http` / `https`，`javascript:` / `file:` / `data:` 各一条负例；写入之后账号的 `loretide.scope` **不变**。确认失败
-- [ ] T016a **先写**（**工作流第 12 步**）`/homepage` 的**参数 ≠ 上下文**用例：穿过**真实 router 与中间件**，路径里的账号 id 与上下文里的不是同一个 → 与「不存在」同形的 404。只用 `chi.URLParam`，不自己解析路径（LT-011/012/013 的教训）。确认失败
-- [ ] T017 新建 `server/internal/handler/content_operating_rules.go`：`GET` / `PUT /api/operating-rules`。**没有路径参数**（品牌由 `X-Workspace-ID` 决定）——第 12 步对这两条没有对象，**这件事要在 PR 正文写明，不是默默跳过**
-- [ ] T018 新建 `server/internal/handler/content_account_homepage.go`：`PUT /api/content-accounts/{id}/homepage`
-- [ ] T019 `scripts/content-boundaries.json`：两个新 handler 文件加入 `adapters`，跑 `pnpm check:content-boundaries`。**`modules` 依赖表一个字不改**
-- [ ] T020 **一个上游文件，一个 `upstream:` 提交**，PR 正文单列「上游改动」一节（第 13 步）：`server/cmd/server/router.go` 挂三条路由。**新增条目放进自己的块**（前空行 + 一行注释）；`git diff -w` 必须只有新增行——025 因 gofmt 重排返工过一次
+- [x] T013 **先写** 决策顺序用例：越权与不存在**逐字节相同**（除 `trace_id`）；400 是诊断错误对象且点名字段。确认失败
+- [x] T014 **先写** **服务端合并**的用例：`PUT /api/operating-rules` 只带 `cadence` 时，`templates` / `review_rule` / `observation` 与**其余 settings 键**都不变。确认失败。**这是本卡不照抄 LT-009 / 019 的那一处**——它们在前端合并，中间隔一次网络往返
+- [x] T015 **先写** 读时填默认且**不回写**的用例：`GET` 之后工作区那一行的 `updated_at` 与 `settings` 逐字节不变。确认失败
+- [x] T016 **先写** `PUT /api/content-accounts/{id}/homepage` 的用例：只放行 `http` / `https`，`javascript:` / `file:` / `data:` 各一条负例；写入之后账号的 `loretide.scope` **不变**。确认失败
+- [x] T016a **先写**（**工作流第 12 步**）`/homepage` 的**参数 ≠ 上下文**用例：穿过**真实 router 与中间件**，路径里的账号 id 与上下文里的不是同一个 → 与「不存在」同形的 404。只用 `chi.URLParam`，不自己解析路径（LT-011/012/013 的教训）。确认失败
+- [x] T017 新建 `server/internal/handler/content_operating_rules.go`：`GET` / `PUT /api/operating-rules`。**没有路径参数**（品牌由 `X-Workspace-ID` 决定）——第 12 步对这两条没有对象，**这件事要在 PR 正文写明，不是默默跳过**
+- [x] T018 新建 `server/internal/handler/content_account_homepage.go`：`PUT /api/content-accounts/{id}/homepage`
+- [x] T019 `scripts/content-boundaries.json`：两个新 handler 文件加入 `adapters`，跑 `pnpm check:content-boundaries`。**`modules` 依赖表一个字不改**
+- [x] T020 **一个上游文件，一个 `upstream:` 提交**，PR 正文单列「上游改动」一节（第 13 步）：`server/cmd/server/router.go` 挂三条路由。**新增条目放进自己的块**（前空行 + 一行注释）；`git diff -w` 必须只有新增行——025 因 gofmt 重排返工过一次
 
 ---
 
 ## Phase 4: core（PR 1）
 
-- [ ] T021 [P] `packages/core/workspace/operating-rules.ts` + `operating-rules.test.ts`（**首行 `// @vitest-environment node`**）：zod schema、`parseWithFallback`、**`number | undefined` 加一个 `stored` 判定，绝不 `?? 0`**；受控集**读 Go 源文件比对**（八个平台、一个 `review_rule`）
-- [ ] T021a [P] `packages/core/workspace/homepage.ts` + 测试：`loretide.homepage` 的读写与 URL 判定（只放行 `http` / `https`）
-- [ ] T021b [P] `packages/core/package.json` 加 `./workspace/operating-rules` 与 `./workspace/homepage` 两条导出，与既有的 `./workspace/auto-precheck` 并列
-- [ ] T022 [P] 读写 hooks（放在既有 `packages/core/workspace/` 下，与 `mutations.ts` 并列）。**全部非乐观**——设置会改变别人看到的东西
-- [ ] T023 跑 `pnpm check:content-boundaries` 与 `pnpm check:diagnostics-contract`，确认**落地模块数仍是 8**（本卡不新建 Go 模块目录，只给 `workspace-core` 加文件）且两项都退出 0
-- [ ] T024 变异验证**五处**，每处确认对应用例变红、**改完即还原**。变异必须**可编译**：
+- [x] T021 [P] `packages/core/workspace/operating-rules.ts` + `operating-rules.test.ts`（**首行 `// @vitest-environment node`**）：zod schema、`parseWithFallback`、**`number | undefined` 加一个 `stored` 判定，绝不 `?? 0`**；受控集**读 Go 源文件比对**（八个平台、一个 `review_rule`）
+- [x] T021a [P] `packages/core/workspace/homepage.ts` + 测试：`loretide.homepage` 的读写与 URL 判定（只放行 `http` / `https`）
+- [x] T021b [P] `packages/core/package.json` 加 `./workspace/operating-rules` 与 `./workspace/homepage` 两条导出，与既有的 `./workspace/auto-precheck` 并列
+- [x] T022 [P] 读写 hooks（放在既有 `packages/core/workspace/` 下，与 `mutations.ts` 并列）。**全部非乐观**——设置会改变别人看到的东西
+- [x] T023 跑 `pnpm check:content-boundaries` 与 `pnpm check:diagnostics-contract`，确认**落地模块数仍是 8**（本卡不新建 Go 模块目录，只给 `workspace-core` 加文件）且两项都退出 0
+- [x] T024 变异验证**五处**，每处确认对应用例变红、**改完即还原**。变异必须**可编译**：
       (M1) 把 `ReadCadence` 的「键缺席」读成 `0` → T005 变红（**这一处最要紧**）；
       (M2) 让 `ObservationDue` 在没设天数时返回 `not_yet` → T006 变红；
       (M3) 在模块里加一个 `platform_password` 字段 → T009 变红；
       (M4) 在模块里加一个 `http.Get` → T009a 变红；
       (M5) 让 `PUT` 整体替换而不是合并 → T014 变红
-- [ ] T025 核对改动文件全部落在 plan.md 清单内；清单外的在 PR 正文单列
-- [ ] T026 PR 1 正文：**「为什么没有迁移」一节**（裁决 Q1=A；R1–R6 / 删除清单 / 删除链 / 索引各条为何不适用——「没改」和「忘了改」在 diff 上长得一样）、**上游改动一节**、**「`/api/operating-rules` 没有路径参数」的说明**、「§3.2 对应」逐句写明现在可操作到什么程度。**两件本卡验不了的事如实写**：「系统永远不需要平台凭据」只有结构保证；「渠道说明进模型上下文之后不会带上别的」只覆盖了本卡的组装函数
+- [x] T025 核对改动文件全部落在 plan.md 清单内；清单外的在 PR 正文单列
+- [x] T026 PR 1 正文：**「为什么没有迁移」一节**（裁决 Q1=A；R1–R6 / 删除清单 / 删除链 / 索引各条为何不适用——「没改」和「忘了改」在 diff 上长得一样）、**上游改动一节**、**「`/api/operating-rules` 没有路径参数」的说明**、「§3.2 对应」逐句写明现在可操作到什么程度。**两件本卡验不了的事如实写**：「系统永远不需要平台凭据」只有结构保证；「渠道说明进模型上下文之后不会带上别的」只覆盖了本卡的组装函数
 
 ---
 
@@ -140,3 +140,23 @@ T001 裁决回写 → T002 基线 → T003 读三处既有形状
 5. **`unknown` 走 `passed` 的分支**（T035 + T036a）。判断不出到期，不等于这条不用补录。反过来做会让没有发布时间的记录从工作台消失——它们恰恰是最需要有人看一眼的那些。
 6. **PR 3 单列**。它改的是另一个模块里一条刻意写下来的守卫。合进 PR 1 会让这次越界混在四十个文件里看不见，而裁决把它单列出来正是为了让它看得见。
 7. **能注入优先，代价是两个上游文件而不是一个**（T032）。把四个区块直接写进 `workspace-tab.tsx` 只动一个文件，但那意味着两百行 Loretide UI 长在上游文件里。两个 prop 加起来约六行，全是新增。
+
+---
+
+## 实施记录（PR 1 存储与接口，2026-09-20）
+
+分支 `claude/impl-029-operating-rules-api`，base `app-main` @ `76ce3d0`。T001–T026 全部落地。**零迁移、零新表、登记表 `modules` 一个字未动**，只有 `adapters` 多了两行。
+
+**四处与清单写的不一样，都在 PR 正文单列：**
+
+1. **`workspace-core` 多了一个 `store.go`。** analyze 时我报过这条：FR-028/029 要求每条写入取栅栏并同事务审计，而 plan 给这个包的只有两个纯函数文件，它历史上也没有任何存储。我当时提了 (a)/(b)/(c) 三条出路、倾向 (a)，主控派活时没有改口，所以按 (a) 做了，并把包注释补准——它原本那句「不替调用方查对象」说的是不读**别人的**表，而运营规则就在工作区那一行上。**这是我自己拍的板，请复核时看一眼。**
+
+2. **端点按 LT-014 做成服务端合并，不是 LT-009/019 的前端合并。** 合同第 4 节写了理由：前端合并要先读完整 settings 再整体写回，中间隔一次网络往返，两个人同时改会互相抹掉。`PUT /api/operating-rules` 与 `PUT /api/content-accounts/{id}/homepage` 都在服务端用 `jsonb_set` 只写一个键。
+
+3. **`workspace.id` 是 uuid，不是 text。** 每张内容表的 `workspace_id` 都是 text，我照着写了 `$1::text`，三条用例当场红在 `operator does not exist: uuid = text`。改成 `$1::uuid`，并在读路径先 `uuid.Parse` 一次——不是一个 uuid 就答 404，与写路径的栅栏给出的答案一致，而不是让类型转换失败变成 500。
+
+4. **hooks 放 `packages/core/workspace/operating-rules-queries.ts`。** 清单说「与 `mutations.ts` 并列」，但塞进既有 `mutations.ts` 会让一个上游文件长出 Loretide 的内容，单开一个文件更干净。
+
+**一处守卫第一版是漏的，变异把它抓出来了：**
+
+**M5（把 `PUT` 改成整体替换）第一次只被真实 DB 用例抓到，静态守卫放过了它。** 守卫问的是「包里有没有出现过 `jsonb_set(`」，而变异只改了两条语句中的一条，另一条还在，包级检索就满足了。已改成**逐条检查每一处 `SET settings =` 的右侧表达式**，并断言至少有两处（规则一处、主页一处）。重跑 M5b，静态守卫也变红。**这是 027 的 M6/M8 同一个教训第三次出现：一条放过了变异的守卫，就是一条没在工作的守卫。**
