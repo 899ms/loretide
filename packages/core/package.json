@@ -34,6 +34,7 @@
     "./workspace/operating-rules": "./workspace/operating-rules.ts",
     "./workspace/homepage": "./workspace/homepage.ts",
     "./workspace/operating-rules-queries": "./workspace/operating-rules-queries.ts",
+    "./workspace/rules-form": "./workspace/rules-form.ts",
     "./issue-statuses": "./issue-statuses/index.ts",
     "./issue-statuses/queries": "./issue-statuses/queries.ts",
     "./issue-statuses/hooks": "./issue-statuses/hooks.ts",
