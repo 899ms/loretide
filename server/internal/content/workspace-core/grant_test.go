@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/multica-ai/multica/server/internal/content/diagnostics"
 )
 
 // Contract: specs/020-lt016-material-grant-contract/contracts/material-grant.md
@@ -299,5 +301,48 @@ func TestAnAllowedReadRecordsNothing(t *testing.T) {
 
 	if len(recorder.events) != 0 {
 		t.Errorf("an allowed read recorded %d events", len(recorder.events))
+	}
+}
+
+// Issue #108, the grant half. Both timestamps were zero, so a refused read
+// rendered in the panel as having happened at the epoch, and the component was
+// not on the sanitizer's allowlist, so it rendered as "unknown" besides.
+//
+// `Now` in the request is the clock the DECISION uses (expiry); the event's own
+// timestamps are when it was recorded, which is why this asserts against the
+// wall clock rather than against `now`.
+func TestARefusalRecordsWhenItHappenedAndFromWhere(t *testing.T) {
+	before := time.Now().UTC().Add(-time.Second)
+	recorder := &recordingRecorder{}
+
+	CanRead(context.Background(), recorder, ReadRequest{
+		Principal: taskOne, Workspace: brandW,
+		Resource: materialIn(brandW, accountA), Now: now,
+	})
+
+	if len(recorder.events) != 1 {
+		t.Fatalf("recorded %d events, want 1", len(recorder.events))
+	}
+	after := time.Now().UTC().Add(time.Second)
+	event := recorder.events[0]
+
+	for _, stamp := range []struct {
+		name string
+		at   time.Time
+	}{
+		{"occurred_at", event.Occurred},
+		{"received_at", event.Received},
+	} {
+		if stamp.at.IsZero() {
+			t.Errorf("%s is the zero time; the refusal reads as if it never happened", stamp.name)
+			continue
+		}
+		if stamp.at.Before(before) || stamp.at.After(after) {
+			t.Errorf("%s = %s, outside [%s, %s]", stamp.name, stamp.at, before, after)
+		}
+	}
+
+	if got := diagnostics.Sanitize(event).Component; got != "workspace-core" {
+		t.Errorf("sanitized component = %q, want workspace-core", got)
 	}
 }
