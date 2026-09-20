@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useT } from "@multica/views/i18n";
 import {
   AI_ENTRY_POINTS,
@@ -58,7 +58,35 @@ type Translate = ReturnType<typeof useT<"common">>["t"];
  *  its own" is true rather than aspirational. */
 const AUTOSAVE_IDLE_MS = 800;
 
-export function WorkSections({ wsId, topicCardId }: { wsId: string; topicCardId: string }) {
+/**
+ * What an injected block underneath the editor is told about the open document.
+ *
+ * It exists so another module's block - review-delivery's "submit for review",
+ * for one - can sit under the version history without this module importing it.
+ * work-editor's declared dependencies do not include review-delivery, and the
+ * direction is deliberate: the reviewer depends on the writer, not the reverse.
+ * The adapter is what puts the two together.
+ */
+export interface ArtifactExtrasContext {
+  wsId: string;
+  workId: string;
+  artifactId: string;
+  artifactKind: string;
+  /** The version a reviewer would be given: the newest saved one. "" when the
+   *  document has none yet. */
+  latestVersionId: string;
+  versionCount: number;
+}
+
+export function WorkSections({
+  wsId,
+  topicCardId,
+  renderArtifactExtras,
+}: {
+  wsId: string;
+  topicCardId: string;
+  renderArtifactExtras?: (context: ArtifactExtrasContext) => ReactNode;
+}) {
   const { t } = useT("common");
   const works = useContentWorks(wsId, topicCardId);
   const [openWorkId, setOpenWorkId] = useState("");
@@ -91,7 +119,14 @@ export function WorkSections({ wsId, topicCardId }: { wsId: string; topicCardId:
         </SettingsCard>
       </SettingsSection>
 
-      {open ? <WorkDocuments key={open.workId} wsId={wsId} work={open} /> : null}
+      {open ? (
+        <WorkDocuments
+          key={open.workId}
+          wsId={wsId}
+          work={open}
+          renderArtifactExtras={renderArtifactExtras}
+        />
+      ) : null}
     </>
   );
 }
@@ -165,7 +200,15 @@ function CreateWorkRow({
   );
 }
 
-function WorkDocuments({ wsId, work }: { wsId: string; work: Work }) {
+function WorkDocuments({
+  wsId,
+  work,
+  renderArtifactExtras,
+}: {
+  wsId: string;
+  work: Work;
+  renderArtifactExtras?: (context: ArtifactExtrasContext) => ReactNode;
+}) {
   const { t } = useT("common");
   const artifacts = useContentArtifacts(wsId, work.workId);
   const create = useCreateContentArtifact(wsId, work.workId);
@@ -258,7 +301,13 @@ function WorkDocuments({ wsId, work }: { wsId: string; work: Work }) {
       </SettingsSection>
 
       {open ? (
-        <ArtifactEditor key={open.artifactId} wsId={wsId} work={work} artifact={open} />
+        <ArtifactEditor
+          key={open.artifactId}
+          wsId={wsId}
+          work={work}
+          artifact={open}
+          renderArtifactExtras={renderArtifactExtras}
+        />
       ) : null}
     </>
   );
@@ -268,10 +317,12 @@ function ArtifactEditor({
   wsId,
   work,
   artifact,
+  renderArtifactExtras,
 }: {
   wsId: string;
   work: Work;
   artifact: Artifact;
+  renderArtifactExtras?: (context: ArtifactExtrasContext) => ReactNode;
 }) {
   const { t } = useT("common");
   const autosave = useAutosaveArtifact(wsId, work.workId);
@@ -372,6 +423,19 @@ function ArtifactEditor({
         onRestore={(versionId) => versionAction.mutate({ action: "restore", versionId })}
         onAdopt={(versionId) => versionAction.mutate({ action: "adopt", versionId })}
       />
+
+      {/* Injected by the adapter, underneath the history: what a reviewer is
+          asked to look at is a version, so the blocks that act on one belong
+          after the list of them. Nothing is rendered when nobody injected. */}
+      {renderArtifactExtras?.({
+        wsId,
+        workId: work.workId,
+        artifactId: artifact.artifactId,
+        artifactKind: artifact.kind,
+        // history arrives newest first.
+        latestVersionId: history[0]?.versionId ?? "",
+        versionCount: history.length,
+      })}
     </>
   );
 }
