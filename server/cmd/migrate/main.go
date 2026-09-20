@@ -303,6 +303,27 @@ var concurrentIndexCleanups = map[string]string{
 	"460_agent_task_queue_autopilot_run_created_at_index":       "idx_agent_task_queue_autopilot_run_created_at",
 	"465_agent_task_queue_chat_with_session_index":              "idx_agent_task_queue_chat_with_session_created_at",
 	"466_activity_log_member_assignee_frequency_index":          "idx_activity_log_member_assignee_frequency",
+
+	// Migrations 468 and above are the content module's. The numbers are not
+	// contiguous because the module splits every concurrent index into a file of
+	// its own, so the table migrations in between build no index and need no
+	// entry. They were missing here until MUL-6288's check was first run against
+	// this branch, which is the same opt-in failure that check exists to stop.
+	"469_content_diagnostic_run_id":              "content_diagnostic_run_id",
+	"470_content_audit_id":                       "content_audit_event_id",
+	"471_content_log_id":                         "content_log_event_id",
+	"472_content_audit_scope":                    "content_audit_scope",
+	"473_content_log_scope":                      "content_log_scope",
+	"475_content_dispatch_outbox_idempotency":    "content_dispatch_outbox_idempotency",
+	"476_content_dispatch_outbox_due":            "content_dispatch_outbox_due",
+	"478_content_account_workspace_idx":          "content_account_workspace_idx",
+	"480_content_account_revision_unique_idx":    "content_account_revision_account_revision_idx",
+	"481_content_account_revision_workspace_idx": "content_account_revision_workspace_idx",
+	"484_content_topic_card_workspace_idx":       "content_topic_card_workspace_idx",
+	"486_content_brief_revision_unique_idx":      "content_brief_revision_topic_revision_idx",
+	"487_content_brief_revision_workspace_idx":   "content_brief_revision_workspace_idx",
+	"488_content_topic_card_id_unique_idx":       "content_topic_card_id_unique_idx",
+	"489_content_brief_revision_id_unique_idx":   "content_brief_revision_id_unique_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction
