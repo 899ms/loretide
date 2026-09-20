@@ -284,5 +284,102 @@
       "kuaishou": "Kuaishou",
       "shipinhao": "Channels"
     }
+  },
+  "contentTopics": {
+    "title": "Topics",
+    "description": "Manually written topic cards for this brand, and the frozen briefs their work starts from.",
+    "listTitle": "Topic cards",
+    "empty": "No topic cards yet. Write one below to record who it is for and what it decides.",
+    "loadFailed": "Could not load topic cards",
+    "createTitle": "New topic card",
+    "createDescription": "Seven items, from docs/01 §5.2. Writing “none” is a complete answer — leaving a box empty is not.",
+    "create": "Create topic card",
+    "detailTitle": "Topic card",
+    "statusLabel": "Status",
+    "blank": "Not written",
+    "channelsHint": "Separate several channels with commas.",
+    "revision": "Version {{number}}",
+    "firstRevision": "The version this card started with",
+    "saving": "Saving",
+    "saved": "Saved",
+    "failed": "Could not save",
+    "nextAction": "Next: {{action}}",
+    "fields": {
+      "audienceProblemJudgment": "Who it is for, the problem, the judgement",
+      "ipFit": "Why it fits this IP",
+      "timing": "Why now",
+      "existingContentRelation": "Relation to existing work",
+      "evidenceGapsAndInvestment": "Evidence gaps and effort",
+      "channels": "Channels",
+      "recommendedAction": "Recommended action"
+    },
+    "placeholders": {
+      "audienceProblemJudgment": "Who reads it, what it solves, what it claims",
+      "ipFit": "Why this IP is the one to say it — or that it is not a fit",
+      "timing": "The timing basis, or “no timing basis”",
+      "existingContentRelation": "What it follows on from, or “no existing work”",
+      "evidenceGapsAndInvestment": "What evidence is missing and what it will take",
+      "channels": "Zhihu, WeChat",
+      "recommendedAction": "Start, save, defer or drop — and why"
+    },
+    "status": {
+      "draft": "Draft",
+      "started": "Started",
+      "saved": "Saved",
+      "deferred": "Deferred",
+      "dropped": "Dropped",
+      "unknown": "Unknown state"
+    },
+    "actions": {
+      "start": "Start",
+      "save": "Save for later",
+      "defer": "Defer",
+      "drop": "Drop"
+    },
+    "reasons": {
+      "no_evidence": "Not enough evidence",
+      "no_timing": "No timing basis",
+      "duplicate": "Covered already",
+      "low_fit": "Poor fit for this IP",
+      "no_capacity": "No capacity right now"
+    },
+    "decisionTitle": "Decision",
+    "decisionDescription": "Start creates the first frozen brief. Starting again keeps the same first version.",
+    "decisionRun": "Record decision",
+    "decisionReason": "Reason",
+    "decisionReasonHint": "Kept for defer and drop; a start or a save does not store it.",
+    "decisionReasonPlaceholder": "Choose a reason",
+    "decisionNote": "Note",
+    "decisionNotePlaceholder": "Anything the reason does not say",
+    "briefTitle": "Brief versions",
+    "briefDescription": "Versions are appended, never edited. Open one to read what it said.",
+    "briefEmpty": "No versions yet.",
+    "briefLoadFailed": "Could not load versions",
+    "briefReadOnly": "Read-only — a change is saved as a new version.",
+    "appendTitle": "New version",
+    "appendDescription": "Eleven items, from docs/01 §5.3. Saving appends a version and leaves the older ones as they are.",
+    "appendRun": "Save as new version",
+    "appendHint": "Available once something differs from the latest version.",
+    "brief": {
+      "audience": "Audience",
+      "coreProblem": "Core problem",
+      "claimAndBoundaries": "Claim and boundaries",
+      "channels": "Channels",
+      "format": "Format",
+      "structure": "Structure",
+      "citationRequirements": "Citation requirements",
+      "sourceScope": "Source scope",
+      "deliverable": "Deliverable",
+      "timeLimit": "Time limit",
+      "costLimit": "Cost limit"
+    },
+    "unavailable": {
+      "title": "Not available yet",
+      "description": "Later cards in this series. Named here so “not built” does not read as “broken”.",
+      "badge": "Not available yet",
+      "candidates": "Generated candidate topics",
+      "mustUse": "Must-use and excluded material",
+      "files": "File and material input"
+    }
   }
 }
