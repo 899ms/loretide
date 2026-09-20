@@ -214,6 +214,13 @@ func (f directFence) WithWorkspaceFence(_ context.Context, _ string, fn func(Rev
 	return fn(directTx{store: f.store})
 }
 
+// The revision fakes carry no account storage. A test that reached this was
+// exercising a path it did not mean to, so it says so instead of inventing a
+// result. Account writes have their own fake in account_fence_test.go.
+func (directFence) WithAccountFence(context.Context, string, func(AccountTx) error) error {
+	return errors.New("directFence has no account storage")
+}
+
 // directTx adapts a write-only fake to the transaction interface. A fake that
 // can also answer CurrentRevision is used as-is; one that cannot reports "no
 // current revision", which is what an account with no history looks like.
@@ -243,6 +250,10 @@ func (goneFence) WithWorkspaceFence(context.Context, string, func(RevisionTx) er
 	return ErrWorkspaceGone
 }
 
+func (goneFence) WithAccountFence(context.Context, string, func(AccountTx) error) error {
+	return ErrWorkspaceGone
+}
+
 // A workspace that disappeared mid-write is refused, and the caller sees the
 // error that maps to 404 rather than a revision belonging to nothing.
 func TestAWriteIsRefusedWhenTheWorkspaceIsGone(t *testing.T) {
@@ -253,6 +264,17 @@ func TestAWriteIsRefusedWhenTheWorkspaceIsGone(t *testing.T) {
 	}
 	if _, err := service.SetProfile(context.Background(), "ws", "actor", "acct", ExpressionProfile{}); !errors.Is(err, ErrWorkspaceGone) {
 		t.Errorf("SetProfile got %v, want ErrWorkspaceGone", err)
+	}
+	// The account writes answer the same way, for the same reason: an account
+	// written into a deleted workspace has nothing to belong to either.
+	if _, err := service.Create(context.Background(), "ws", "actor", "zhihu", "名字", nil); !errors.Is(err, ErrWorkspaceGone) {
+		t.Errorf("Create got %v, want ErrWorkspaceGone", err)
+	}
+	if _, err := service.Update(context.Background(), "ws", "actor", "acct", Patch{}); !errors.Is(err, ErrWorkspaceGone) {
+		t.Errorf("Update got %v, want ErrWorkspaceGone", err)
+	}
+	if _, err := service.SetScope(context.Background(), "ws", "actor", "acct", string(ScopeLocal)); !errors.Is(err, ErrWorkspaceGone) {
+		t.Errorf("SetScope got %v, want ErrWorkspaceGone", err)
 	}
 }
 
@@ -268,6 +290,15 @@ func TestAServiceWithoutAFenceRefusesToWrite(t *testing.T) {
 	}
 	if _, err := service.SetProfile(context.Background(), "ws", "actor", "acct", ExpressionProfile{}); !errors.Is(err, ErrNoWorkspaceFence) {
 		t.Errorf("SetProfile got %v, want ErrNoWorkspaceFence", err)
+	}
+	if _, err := service.Create(context.Background(), "ws", "actor", "zhihu", "名字", nil); !errors.Is(err, ErrNoWorkspaceFence) {
+		t.Errorf("Create got %v, want ErrNoWorkspaceFence", err)
+	}
+	if _, err := service.Update(context.Background(), "ws", "actor", "acct", Patch{}); !errors.Is(err, ErrNoWorkspaceFence) {
+		t.Errorf("Update got %v, want ErrNoWorkspaceFence", err)
+	}
+	if _, err := service.SetScope(context.Background(), "ws", "actor", "acct", string(ScopeLocal)); !errors.Is(err, ErrNoWorkspaceFence) {
+		t.Errorf("SetScope got %v, want ErrNoWorkspaceFence", err)
 	}
 	if store.inserts != 0 {
 		t.Errorf("a fenceless service inserted %d revisions", store.inserts)

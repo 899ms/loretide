@@ -177,6 +177,13 @@ func (h *Handler) accountWriteError(w http.ResponseWriter, err error) {
 	// 404, which says "no such account" about a request that named a real one.
 	case ipprofile.ErrPlatform, ipprofile.ErrDisplayName, ipprofile.ErrScope:
 		h.accountInputError(w, err)
+	// The workspace was deleted while this write was in flight. 404, byte for
+	// byte what a missing account produces: a refusal must not teach a caller
+	// that a workspace used to exist. Spelled out rather than left to the
+	// default below so it stays a decision (Issue #104).
+	case ipprofile.ErrWorkspaceGone:
+		writeJSON(w, workspacecore.RefusalStatus(workspacecore.ReasonNotMember),
+			workspacecore.RefusalBody(w.Header().Get("X-Diagnostic-Trace")))
 	default:
 		writeJSON(w, workspacecore.RefusalStatus(workspacecore.ReasonNotMember),
 			workspacecore.RefusalBody(w.Header().Get("X-Diagnostic-Trace")))
