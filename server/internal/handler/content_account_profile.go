@@ -114,6 +114,13 @@ func (h *Handler) profileWriteError(w http.ResponseWriter, err error) {
 			"error": err.Error(), "code": event.Code, "trace_id": event.Trace,
 			"component": event.Component, "retryable": true, "next_action": event.Next,
 		})
+	case errors.Is(err, ipprofile.ErrWorkspaceGone):
+		// The workspace was deleted while this write was in flight. Answered as
+		// 404 and byte-identical to "no such account": a caller must not learn
+		// from a refusal that a workspace used to exist. Spelled out rather
+		// than left to the default so it stays a decision.
+		writeJSON(w, workspacecore.RefusalStatus(workspacecore.ReasonNotMember),
+			workspacecore.RefusalBody(w.Header().Get("X-Diagnostic-Trace")))
 	default:
 		writeJSON(w, workspacecore.RefusalStatus(workspacecore.ReasonNotMember),
 			workspacecore.RefusalBody(w.Header().Get("X-Diagnostic-Trace")))

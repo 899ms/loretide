@@ -55,9 +55,13 @@ type Service struct {
 	// own interface because it has no update and no delete; folding it into
 	// Store would suggest otherwise.
 	RevisionStore RevisionStore
-	Audit         Auditor
-	Build         string
-	NewID         func() string
+	// Fence is the workspace delete/write protocol every revision write holds.
+	// Required: a Service without it refuses to write rather than writing
+	// outside the fence.
+	Fence WorkspaceFence
+	Audit Auditor
+	Build string
+	NewID func() string
 }
 
 func (s *Service) newID() string {

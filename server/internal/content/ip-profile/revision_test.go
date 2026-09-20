@@ -62,7 +62,7 @@ func (s *conflictingStore) InsertRevision(context.Context, Revision) (Revision, 
 // so rather than spin: an unbounded loop turns one write into an unbounded wait.
 func TestSettingThePromptGivesUpAfterABoundedNumberOfRetries(t *testing.T) {
 	store := &conflictingStore{}
-	service := &Service{RevisionStore: store, NewID: func() string { return "rev-1" }}
+	service := &Service{RevisionStore: store, Fence: directFence{store}, NewID: func() string { return "rev-1" }}
 
 	_, err := service.SetPersonaPrompt(context.Background(), "ws", "actor", "acct", "人设")
 	if !errors.Is(err, ErrRevisionConflict) {
@@ -98,7 +98,7 @@ func (s *succeedsOnAttempt) InsertRevision(_ context.Context, r Revision) (Revis
 // happened, so both belong in the history.
 func TestALosingWriterRetriesAndLands(t *testing.T) {
 	store := &succeedsOnAttempt{succeedAt: 2}
-	service := &Service{RevisionStore: store, NewID: func() string { return "rev-2" }}
+	service := &Service{RevisionStore: store, Fence: directFence{store}, NewID: func() string { return "rev-2" }}
 
 	revision, err := service.SetPersonaPrompt(context.Background(), "ws", "actor", "acct", "人设")
 	if err != nil {
@@ -202,4 +202,89 @@ func TestNoQueryEverMutatesARevision(t *testing.T) {
 				"removes rows belongs in workspace_delete.sql.", strings.TrimSpace(forbidden))
 		}
 	}
+}
+
+// directFence runs the write without a database, so the module's own cases can
+// exercise retry and carry-forward logic. It is deliberately defined in the
+// test package: production builds the real fence in the handler, and there is
+// no exported pass-through for anyone to reach for by mistake.
+type directFence struct{ store RevisionStore }
+
+func (f directFence) WithWorkspaceFence(_ context.Context, _ string, fn func(RevisionTx) error) error {
+	return fn(directTx{store: f.store})
+}
+
+// directTx adapts a write-only fake to the transaction interface. A fake that
+// can also answer CurrentRevision is used as-is; one that cannot reports "no
+// current revision", which is what an account with no history looks like.
+type directTx struct{ store RevisionStore }
+
+func (t directTx) NextRevision(ctx context.Context, workspaceID, accountID string) (int64, error) {
+	return t.store.NextRevision(ctx, workspaceID, accountID)
+}
+
+func (t directTx) CurrentRevision(ctx context.Context, workspaceID, accountID string) (Revision, error) {
+	if reader, ok := t.store.(interface {
+		CurrentRevision(context.Context, string, string) (Revision, error)
+	}); ok {
+		return reader.CurrentRevision(ctx, workspaceID, accountID)
+	}
+	return Revision{}, ErrNotFound
+}
+
+func (t directTx) InsertRevision(ctx context.Context, revision Revision) (Revision, error) {
+	return t.store.InsertRevision(ctx, revision)
+}
+
+// goneFence is a workspace that was deleted before the write reached it.
+type goneFence struct{}
+
+func (goneFence) WithWorkspaceFence(context.Context, string, func(RevisionTx) error) error {
+	return ErrWorkspaceGone
+}
+
+// A workspace that disappeared mid-write is refused, and the caller sees the
+// error that maps to 404 rather than a revision belonging to nothing.
+func TestAWriteIsRefusedWhenTheWorkspaceIsGone(t *testing.T) {
+	service := &Service{Fence: goneFence{}, NewID: func() string { return "rev-gone" }}
+
+	if _, err := service.SetPersonaPrompt(context.Background(), "ws", "actor", "acct", "人设"); !errors.Is(err, ErrWorkspaceGone) {
+		t.Errorf("SetPersonaPrompt got %v, want ErrWorkspaceGone", err)
+	}
+	if _, err := service.SetProfile(context.Background(), "ws", "actor", "acct", ExpressionProfile{}); !errors.Is(err, ErrWorkspaceGone) {
+		t.Errorf("SetProfile got %v, want ErrWorkspaceGone", err)
+	}
+}
+
+// A Service assembled without a fence refuses to write. The alternative —
+// writing anyway — is the defect this change closes, so it must not be
+// reachable by forgetting a field.
+func TestAServiceWithoutAFenceRefusesToWrite(t *testing.T) {
+	store := &recordingRevisionStore{}
+	service := &Service{RevisionStore: store, NewID: func() string { return "rev-nofence" }}
+
+	if _, err := service.SetPersonaPrompt(context.Background(), "ws", "actor", "acct", "人设"); !errors.Is(err, ErrNoWorkspaceFence) {
+		t.Errorf("SetPersonaPrompt got %v, want ErrNoWorkspaceFence", err)
+	}
+	if _, err := service.SetProfile(context.Background(), "ws", "actor", "acct", ExpressionProfile{}); !errors.Is(err, ErrNoWorkspaceFence) {
+		t.Errorf("SetProfile got %v, want ErrNoWorkspaceFence", err)
+	}
+	if store.inserts != 0 {
+		t.Errorf("a fenceless service inserted %d revisions", store.inserts)
+	}
+}
+
+// recordingRevisionStore counts inserts so a refusal can be shown to have
+// written nothing.
+type recordingRevisionStore struct{ inserts int }
+
+func (s *recordingRevisionStore) NextRevision(context.Context, string, string) (int64, error) {
+	return 1, nil
+}
+func (s *recordingRevisionStore) CurrentRevision(context.Context, string, string) (Revision, error) {
+	return Revision{}, ErrNotFound
+}
+func (s *recordingRevisionStore) InsertRevision(_ context.Context, r Revision) (Revision, error) {
+	s.inserts++
+	return r, nil
 }

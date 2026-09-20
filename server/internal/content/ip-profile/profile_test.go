@@ -312,7 +312,7 @@ func (s *profileRevisionStore) ListRevisions(context.Context, string, string) ([
 
 func TestSetProfileNormalizesValidBlankContentBeforeValidation(t *testing.T) {
 	store := &profileRevisionStore{}
-	service := &Service{RevisionStore: store, NewID: func() string { return "rev-profile" }}
+	service := &Service{RevisionStore: store, Fence: directFence{store}, NewID: func() string { return "rev-profile" }}
 
 	written, err := service.SetProfile(t.Context(), "ws", "actor", "acct", ExpressionProfile{
 		Audience:        TextField{Value: "   ", Status: FieldConfirmed},
@@ -352,7 +352,7 @@ func TestSetProfileRejectsInvalidRawShapeBeforeNormalization(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			store := &profileRevisionStore{}
-			service := &Service{RevisionStore: store, NewID: func() string { return "rev-profile" }}
+			service := &Service{RevisionStore: store, Fence: directFence{store}, NewID: func() string { return "rev-profile" }}
 
 			_, err := service.SetProfile(t.Context(), "ws", "actor", "acct", profile)
 			if !errors.Is(err, ErrProfile) {
@@ -380,7 +380,7 @@ func TestRevisionWritesCarryTheOtherHalfForward(t *testing.T) {
 		Profile:       ExpressionProfile{Audience: confirmed("designers")},
 	}
 	store := &profileRevisionStore{current: original}
-	service := &Service{RevisionStore: store, NewID: func() string { return "rev-next" }}
+	service := &Service{RevisionStore: store, Fence: directFence{store}, NewID: func() string { return "rev-next" }}
 
 	profileWrite, err := service.SetProfile(t.Context(), "ws", "actor", "acct",
 		ExpressionProfile{ContentPillars: confirmed("tools")})
@@ -418,7 +418,7 @@ func TestRevisionWritesPropagateHistoryReadErrorsWithoutInserting(t *testing.T) 
 	} {
 		t.Run(name, func(t *testing.T) {
 			store := &profileRevisionStore{currentErr: readErr}
-			service := &Service{RevisionStore: store, NewID: func() string { return "rev-next" }}
+			service := &Service{RevisionStore: store, Fence: directFence{store}, NewID: func() string { return "rev-next" }}
 
 			if err := write(service); !errors.Is(err, readErr) {
 				t.Fatalf("error = %v, want history read error", err)
@@ -444,7 +444,7 @@ func TestRevisionWritesRefreshTheCarriedHalfAfterChoosingTheNextNumber(t *testin
 				store.current = latest
 			},
 		}
-		service := &Service{RevisionStore: store, NewID: func() string { return "rev-3" }}
+		service := &Service{RevisionStore: store, Fence: directFence{store}, NewID: func() string { return "rev-3" }}
 
 		written, err := service.SetProfile(t.Context(), "ws", "actor", "acct", ExpressionProfile{})
 		if err != nil {
@@ -465,7 +465,7 @@ func TestRevisionWritesRefreshTheCarriedHalfAfterChoosingTheNextNumber(t *testin
 				store.current = latest
 			},
 		}
-		service := &Service{RevisionStore: store, NewID: func() string { return "rev-3" }}
+		service := &Service{RevisionStore: store, Fence: directFence{store}, NewID: func() string { return "rev-3" }}
 
 		written, err := service.SetPersonaPrompt(t.Context(), "ws", "actor", "acct", "new persona")
 		if err != nil {
