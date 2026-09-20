@@ -140,6 +140,11 @@ jobs:
               - 'docker/entrypoint.sh'
               - 'scripts/test-go.sh'
               - 'scripts/test-go.test.sh'
+              # The dedicated database-suite wrapper and its contract test.
+              # backend-tests runs the contract test, so a change to either
+              # file has to run this job.
+              - 'scripts/test-go-db.sh'
+              - 'scripts/test-go-db.test.sh'
               # makefile-build.test.sh asserts how `make build` names its
               # output binaries, so a change to either side must run it.
               - 'scripts/makefile-build.test.sh'
@@ -563,6 +568,12 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      # Shared by every package this job runs. internal/handler and cmd/server
+      # are NOT among them: scripts/test-go.sh excludes those two package-wide
+      # database suites, and they refuse to read this variable at all — a
+      # generic URL reaching them would be an implicit opt-in to whatever
+      # database a job happens to have. They run in the db-suites job of
+      # loretide-content.yml, against a database provisioned for one run.
       DATABASE_URL: postgres://multica:multica@localhost:5432/multica?sslmode=disable
       # Wires up the RedisLocalSkill*_test.go suite. Distinct from REDIS_URL
       # (which would flip the server binary itself onto the Redis-backed
@@ -645,6 +656,12 @@ jobs:
       - name: Verify Go test wrapper
         if: ${{ needs.changes.outputs.backend == 'true' }}
         run: bash scripts/test-go.test.sh
+
+      # The database-suite wrapper must refuse to invent configuration. Its
+      # contract test uses a fake go, so it needs no database of its own.
+      - name: Verify database-suite test wrapper
+        if: ${{ needs.changes.outputs.backend == 'true' }}
+        run: bash scripts/test-go-db.test.sh
 
       - name: Test
         if: ${{ needs.changes.outputs.backend == 'true' }}
