@@ -659,6 +659,20 @@ type ContentBriefRevision struct {
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentDeliveryTask struct {
+	DeliveryTaskID  string             `json:"delivery_task_id"`
+	WorkspaceID     string             `json:"workspace_id"`
+	WorkID          string             `json:"work_id"`
+	ArtifactID      string             `json:"artifact_id"`
+	ReviewRequestID string             `json:"review_request_id"`
+	Channel         string             `json:"channel"`
+	Status          string             `json:"status"`
+	ScheduledAt     pgtype.Timestamptz `json:"scheduled_at"`
+	HandoffMethod   string             `json:"handoff_method"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ContentDiagnosticRun struct {
 	RunID       string             `json:"run_id"`
 	WorkspaceID string             `json:"workspace_id"`
@@ -691,6 +705,58 @@ type ContentOperationAudit struct {
 	AccountID   string             `json:"account_id"`
 	ReceivedAt  pgtype.Timestamptz `json:"received_at"`
 	Payload     []byte             `json:"payload"`
+}
+
+type ContentPublicationRecord struct {
+	PublicationRecordID string             `json:"publication_record_id"`
+	WorkspaceID         string             `json:"workspace_id"`
+	WorkID              string             `json:"work_id"`
+	ArtifactID          string             `json:"artifact_id"`
+	DeliveryTaskID      string             `json:"delivery_task_id"`
+	Channel             string             `json:"channel"`
+	Status              string             `json:"status"`
+	ActorID             string             `json:"actor_id"`
+	DeclaredBy          string             `json:"declared_by"`
+	PageUrlOrContentID  string             `json:"page_url_or_content_id"`
+	ReceiptNote         string             `json:"receipt_note"`
+	VerificationNote    string             `json:"verification_note"`
+	PublishedAt         pgtype.Timestamptz `json:"published_at"`
+	PlatformAccount     string             `json:"platform_account"`
+	PlatformEdited      bool               `json:"platform_edited"`
+	EditNote            string             `json:"edit_note"`
+	VersionMatch        string             `json:"version_match"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentReviewRequest struct {
+	ReviewRequestID string             `json:"review_request_id"`
+	WorkspaceID     string             `json:"workspace_id"`
+	WorkID          string             `json:"work_id"`
+	ArtifactID      string             `json:"artifact_id"`
+	VersionID       string             `json:"version_id"`
+	AccountID       string             `json:"account_id"`
+	Channel         string             `json:"channel"`
+	Snapshot        []byte             `json:"snapshot"`
+	Status          string             `json:"status"`
+	RequestedBy     string             `json:"requested_by"`
+	RequestedAt     pgtype.Timestamptz `json:"requested_at"`
+	DecidedBy       string             `json:"decided_by"`
+	DecidedAt       pgtype.Timestamptz `json:"decided_at"`
+	DecisionNote    string             `json:"decision_note"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ContentReviewTransition struct {
+	TransitionID string             `json:"transition_id"`
+	WorkspaceID  string             `json:"workspace_id"`
+	SubjectKind  string             `json:"subject_kind"`
+	SubjectID    string             `json:"subject_id"`
+	FromStatus   string             `json:"from_status"`
+	ToStatus     string             `json:"to_status"`
+	Reason       string             `json:"reason"`
+	ActorID      string             `json:"actor_id"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type ContentStartSnapshot struct {
