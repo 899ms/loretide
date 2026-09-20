@@ -698,6 +698,36 @@ type ContentDispatchOutbox struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ContentFeedbackExcerpt struct {
+	FeedbackExcerptID   string             `json:"feedback_excerpt_id"`
+	WorkspaceID         string             `json:"workspace_id"`
+	PublicationRecordID string             `json:"publication_record_id"`
+	SourceType          string             `json:"source_type"`
+	RedactedExcerpt     string             `json:"redacted_excerpt"`
+	Interpretation      string             `json:"interpretation"`
+	Tags                []string           `json:"tags"`
+	OccurredAt          pgtype.Timestamptz `json:"occurred_at"`
+	RecordedBy          string             `json:"recorded_by"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentManualMetric struct {
+	ManualMetricID      string             `json:"manual_metric_id"`
+	WorkspaceID         string             `json:"workspace_id"`
+	PublicationRecordID string             `json:"publication_record_id"`
+	Platform            string             `json:"platform"`
+	AccountID           string             `json:"account_id"`
+	Metric              string             `json:"metric"`
+	Value               pgtype.Int8        `json:"value"`
+	Unit                string             `json:"unit"`
+	StatWindow          string             `json:"stat_window"`
+	SampledAt           pgtype.Timestamptz `json:"sampled_at"`
+	RecordedBy          string             `json:"recorded_by"`
+	EvidenceNote        string             `json:"evidence_note"`
+	SourceType          string             `json:"source_type"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContentOperationAudit struct {
 	Sequence    pgtype.Int8        `json:"sequence"`
 	EventID     string             `json:"event_id"`
