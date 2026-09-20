@@ -41,30 +41,103 @@
 - `.github/workflows/loretide-content.yml`、`scripts/test-local-windows.ps1`：工作区中已有独立测试入口改动，但不属于 Issue #99 交付，必须从本次 review/提交中排除。
 - `specs/022-ep04-topic-brief/manual-ui-todo.md`：PR 1 无页面的手验边界。
 
-## 当前验证状态
+## 验证状态（会话 002，2026-09-20，本容器自带 PostgreSQL）
 
-- 当前最终静态差异上**没有执行**测试、迁移、数据库连接、服务操作、CI、提交或推送；因此本节没有任何“通过”结论。
-- 仅完成非执行性整理：对本轮修改的 Go 文件运行了 `gofmt`，`git diff --check` 退出 0。
-- 尝试调用仓库本地 `prettier` 只为格式化三个 topic-planning TS 文件，但当前环境没有该命令（`prettier is not recognized`）；未产生格式化工具证据，也未触发测试。
-- Windows 换行转换使 `git status` 显示多份 `server/pkg/db/generated/*.go` 已修改；按 Git 语义差异核对，生成目录中只有 `models.go` 与 `workspace_delete.sql.go` 有内容变化，其余是状态噪声。本轮未重置、清理或覆盖这些用户工作区文件。
-- 较早阶段曾运行 core/静态检查及 sqlc 生成，但它们早于本轮权限、迁移和 camelCase 修正，只能视为历史过程记录，不能作为当前差异的验收证据。
-- 较早阶段的 Go 目标命令触发了不安全的 TestMain 本机数据库回退；详见 `records/issue-99-local-database-incident.md`。这些结果全部作废，不得计入验收。
+隔离库 `loretide_issue99`，`DATABASE_URL` / `LORETIDE_TOPIC_TEST_DATABASE_URL` /
+`LORETIDE_DIAG_TEST_DATABASE_URL` 三个变量都指向它；不接触开发库或业务库。
+下面每一条都是本轮实跑结果，`rebase 到 9d468905c 之后`重跑确认。
 
-## 未执行测试与检查（当前差异）
+### 迁移与生成
 
-- DB-free Go 用例：`TestReadFailureProducesSanitizedTechnicalEvent`、`TestAuditTxFailsClosedWithMissingDependencies`、`TestBriefStoreHasNoUpdateOrDeletePath`、`TestFixtureSchemaNameIsSafe`、`TestContentTopicEndpointsAreMounted`、`TestContentTopicEndpointsRejectUnauthenticatedCallers`。现有包级 TestMain 是否会在选中这些测试前连接数据库尚未被 fail-closed 改造，故本轮未执行。
-- 专用 diagnostics PostgreSQL 用例：`TestAuditTxSharesTheCallersCommitAndRollback`、`TestAuditTxRefusesUnauthorizedScopeWithoutWriting`。
-- 专用 topic PostgreSQL 用例：`TestTopicCardsActionsAndBriefsRoundTrip`、`TestTopicCardFieldsAllowHonestNoneValues`、`TestAppendBriefRequiresTheStartAction`、`TestConcurrentBriefAppendsReceiveDistinctRevisions`、`TestDecisionActionsDoNotTouchAccountConfiguration`、`TestCreateRejectsAnAccountFromAnotherWorkspace`、`TestAuditFailureRollsBackTheTopicWrite`。
-- 常规 backend PostgreSQL/真实路由用例：`TestContentTopicEndpointsHideTheWorkspaceFromNonMembers`、`TestContentTopicPathIDSurvivesTheRealMiddleware`、`TestDeleteWorkspace_PurgesContentDiagnosticsAtomically`、`TestWorkspaceDeletionManifestCoversPublicSchema`。
-- core 契约用例 5 条：缺字段回退、错类型回退、未来状态保留、状态标签默认分支、畸形简报版本回退。
-- 迁移与生成：483～489 全量 up、重复 up 幂等、down、迁移约束检查、sqlc 重新生成/差异核对均未在当前差异上执行。
-- 静态/类型检查：core 指定测试、core typecheck、全仓 `pnpm typecheck --force`、`check:content-boundaries`、`check:diagnostics-contract`、`check:diagnostics-no-upload` 均未在当前差异上执行。
+| 项 | 结果 |
+|---|---|
+| 483～489 全量 up | 7 个文件全部 applied |
+| 重复 up | 全部 `skip … already applied`，无副作用 |
+| down 489→483 | 两张表 + 五个索引 → 0/0；清空 `schema_migrations` 后再 up 成功 |
+| 索引状态 | 五个索引 `indisvalid AND indisready` 均为 true |
+| `sqlc generate`（v1.31.1） | 生成后 `git status` 干净，生成物与分支内容一致 |
+| `go build ./...` / `go vet` | 退出 0 |
+
+### Go 用例（逐条）
+
+DB-free：`TestReadFailureProducesSanitizedTechnicalEvent` PASS（先 FAIL，见下）、
+`TestAuditTxFailsClosedWithMissingDependencies` PASS、`TestBriefStoreHasNoUpdateOrDeletePath` PASS、
+`TestFixtureSchemaNameIsSafe` PASS、`TestContentTopicEndpointsAreMounted` PASS、
+`TestContentTopicEndpointsRejectUnauthenticatedCallers` PASS、
+`TestWritesFailClosedWithoutTheWorkspaceFence` PASS（本轮新增）。
+
+diagnostics 真实库：`TestAuditTxSharesTheCallersCommitAndRollback` PASS、
+`TestAuditTxRefusesUnauthorizedScopeWithoutWriting` PASS。
+
+topic 真实库：`TestTopicCardsActionsAndBriefsRoundTrip`、`TestTopicCardFieldsAllowHonestNoneValues`、
+`TestAppendBriefRequiresTheStartAction`、`TestConcurrentBriefAppendsReceiveDistinctRevisions`、
+`TestDecisionActionsDoNotTouchAccountConfiguration`、`TestCreateRejectsAnAccountFromAnotherWorkspace`、
+`TestAuditFailureRollsBackTheTopicWrite` 七条全部 PASS。
+
+后端/真实路由：`TestContentTopicEndpointsHideTheWorkspaceFromNonMembers` PASS（先 FAIL，见下）、
+`TestContentTopicPathIDSurvivesTheRealMiddleware` PASS、
+`TestDeleteWorkspace_PurgesContentDiagnosticsAtomically` PASS、
+`TestWorkspaceDeletionManifestCoversPublicSchema` PASS、
+`TestContentTopicWritesAreFencedByWorkspaceDeletion` PASS（本轮新增，六个子用例）。
+
+包级计数（`./internal/handler ./cmd/server ./internal/content/...`）：
+**4716 PASS / 47 SKIP / 0 FAIL**。47 条 SKIP 全部是 `REDIS_URL` 未配置的既有 Redis 用例，
+与本改动无关。`./internal/migrations`：26 PASS / 0 SKIP / 0 FAIL。
+
+### TS 与静态检查
+
+- `pnpm --filter @multica/core exec vitest run content/topic-planning/contract.test.ts`：5 passed（缺字段回退、错类型回退、未来状态保留、状态标签默认分支、畸形简报版本回退）。
+- `pnpm typecheck --force`：9 个任务全部成功，**0 cached**。
+- `pnpm check:content-boundaries` 退出 0（3610 文件 / 12 登记模块）。
+- `pnpm check:diagnostics-contract` 退出 0，落地模块由 3 变 **4**。
+- `pnpm check:diagnostics-no-upload` 退出 0。
+
+## 本轮修复的三处
+
+1. **技术事件的 component 被自己抹掉**：`topic-planning` 在构造事件时就调用了
+   `diagnostics.Sanitize`，而它的 component 白名单里没有任何内容模块名，于是
+   `topic-planning` 被改写成 `unknown`；同时 `Message` / `Next` / `Retryable` 是从
+   `reportFailure` 还没写入的 `Code` 推出来的。脱敏是 sink 的职责（`AuditTx` 与
+   `Store.Technical` 各自会做），`ip-profile`、`workspace-core` 同样不预先脱敏。
+   删掉模块内的两处 `Sanitize` 后 `TestReadFailureProducesSanitizedTechnicalEvent` 由 FAIL 转 PASS。
+2. **路由拒绝用例按 component 名匹配**：`TestContentTopicEndpointsHideTheWorkspaceFromNonMembers`
+   用 `payload->>'component'='workspace-core'` 找拒绝记录，而 sink 必然把它写成 `unknown`，
+   于是 7 条拒绝一条也数不到。改为匹配脱敏后仍然存在、且只有 workspace-core 会同时出现的字段组合
+   （`object_type=account` + `action=query` + `step=not_member` + `error_code=AUTHORIZATION_DENIED` + `severity=warn`）。
+   变异验证：把 `topicScope` 的 recorder 换成 nil，用例报 `recorded 0 … want 7`。
+3. **删除栅栏改为模块自己取**（Issue #104 第 3 项）：见下。
+
+## Issue #104 第 3 项自查
+
+结论：**原实现的四类写入确实都在持锁事务内，但那是审计的副作用，不是模块自己的保证**——
+`Create`、`Act`（`start` / `save` / `defer` / `drop`）、`AppendBrief` 都先 `AuditTx`，
+而 `AuditTx` 会在调用方事务里取 `LockWorkspaceForContentDiagnosticWrite`。
+按裁决「`AuditTx` 经 diagnostics store 持锁只覆盖有审计的路径，不能替代」，本轮把栅栏改为
+`topic-planning` 自己持有：`Store.Guard`（`diagnostics.WorkspaceWriteGuard`）在
+`begin()` 里、任何选题语句之前取锁；无行 → `ErrNotFound`（边界 404，与外部工作区同形）；
+无 guard 则在开事务之前就失败关闭。handler 注入的就是 diagnostics 用的同一个 guard。
+
+新用例 `TestContentTopicWritesAreFencedByWorkspaceDeletion`（`internal/handler`，真实库真实 schema）：
+工作区删除提交之后，建卡 / start / save / defer / drop / 追加简报六条写入全部返回 `ErrNotFound`，
+且 `content_topic_card`、`content_brief_revision`、`content_operation_audit` 行数一行不增。
+变异验证：去掉 `begin()` 里的取锁调用，六个子用例全部 FAIL。
 
 ## 未完成与诚实边界
 
-- `LORETIDE_TOPIC_TEST_DATABASE_URL`、`LORETIDE_DIAG_TEST_DATABASE_URL` 与隔离的 `DATABASE_URL` 均未获准用于本轮验证，因此迁移、事务、删除链和真实路由只能标记为未执行。
-- 后续验证必须先落实 `records/issue-99-test-entry-fail-closed-proposal.md` 的隔离入口，并逐条保留实际执行/通过/跳过证据；不能再把包级命令的汇总输出代替逐测试证据。
-- GitHub-hosted 的四库四角色、迁移生命周期与 JSON 无-skip 门禁方案见 `records/issue-99-github-hosted-isolated-validation-plan.md`；它仅待审，不构成运行或 CI 改动授权。
-- 条件迁移恢复：部署前按 483～489 顺序核对两张表、全部列与五个 `indisvalid AND indisready` 索引。若 `schema_migrations` 已记录版本但对象缺失，先备份并停止相关写入；对缺表按原编号顺序手工执行对应建表 SQL，对无效/缺失索引先 `DROP INDEX CONCURRENTLY IF EXISTS` 再执行对应 `.up.sql`，复核对象与唯一性后才恢复写入。此恢复流程本轮未执行。
-- FR-018 只交付结构保证：旧简报只插不改且有稳定 `brief_revision_id`。某次运行继续读取其钉住版本的行为，须等 `agent-workflow` 落地后再断言。
+- `records/issue-99-test-entry-fail-closed-proposal.md` 提的失败封闭测试入口**本轮未实施**：
+  `handler` / `cmd/server` 的 `TestMain` 仍带 `localhost:5432/multica` 回退（Issue #102 由另一会话处理）。
+  本轮靠显式导出三个环境变量指向隔离库来规避，不依赖回退。
+- `.github/workflows/loretide-content.yml` 与 `scripts/test-local-windows.ps1` 的超范围 diff 不在本分支，
+  也未新增；CI 文件本轮一行未动。
+- **脱敏白名单的既有信息损失（不在本 PR 修）**：`Sanitize` 的 component 白名单里没有任何内容模块名，
+  因此 `ip-profile`、`workspace-core`、`topic-planning` 的事件在真实 sink 里一律记为 `unknown`。
+  放宽白名单会改动 `TestSanitizeEnumAllowlistsAreUnchanged` 钉住的枚举，影响诊断面板的筛选与导出，
+  属于跨模块决定，另行裁决。
+- `workspace-core` 的拒绝事件没有填 `Occurred`，落库是零值时间。既有行为，非本 PR 引入，未改。
+- FR-018 只交付结构保证：旧简报只插不改且有稳定 `brief_revision_id`。某次运行继续读取其钉住版本的
+  行为，须等 `agent-workflow` 落地后再断言。
+- 条件迁移恢复：部署前按 483～489 顺序核对两张表、全部列与五个 `indisvalid AND indisready` 索引。
+  若 `schema_migrations` 已记录版本但对象缺失，先备份并停止相关写入；对缺表按原编号顺序手工执行对应
+  建表 SQL，对无效/缺失索引先 `DROP INDEX CONCURRENTLY IF EXISTS` 再执行对应 `.up.sql`，复核对象与
+  唯一性后才恢复写入。此恢复流程本轮未执行。
 - UI 验收留到 PR 2。

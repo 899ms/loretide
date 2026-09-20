@@ -57,6 +57,7 @@
 新模块目录从创建那一刻起受 `docs/development/diagnostics-onboarding-contract.md` 第 2 节约束，落地模块数由 **3** 变 **4**。至少四面：
 
 - **审计**：改变状态的操作在**同一个事务内**调 `Store.AuditTx`；审计写失败即整体回滚；
+- **删除栅栏**：每条写入在自己的事务里**先取** `LockWorkspaceForContentDiagnosticWrite`（FOR KEY SHARE），无行即工作区已删、按 404 语义拒绝。`AuditTx` 也取同一把锁，但那只覆盖有审计的路径，不作数（Issue #104）；
 - **技术日志**：失败路径产出 `Event`，填 `Component` / `Severity` / `Action` / `Outcome` / `Code`；写失败只计数不拖垮业务；
 - **trace**：跨步骤用 `Child(ctx)`，**不自己造 trace id**；
 - **脱敏**：进日志或审计的 `Event` 一律过 `Sanitize`；HTTP 边界只用 `RequestIdentity`。
