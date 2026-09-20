@@ -364,6 +364,25 @@ deleted_content_artifacts AS (
 deleted_content_works AS (
     DELETE FROM content_work WHERE workspace_id = $1::text
 ),
+-- Review requests, their frozen delivery snapshots, the append-only transition
+-- log, delivery tasks and publication records. The transition log and the
+-- publication records are append-only everywhere else; these statements are the
+-- only ones that remove them, and they are here rather than behind a cascade
+-- because the tables carry no foreign key (specs/025). Registered in the
+-- deletion manifest test alongside this: doing only one of the two leaves
+-- either orphaned rows or a drifting manifest.
+deleted_content_publication_records AS (
+    DELETE FROM content_publication_record WHERE workspace_id = $1::text
+),
+deleted_content_delivery_tasks AS (
+    DELETE FROM content_delivery_task WHERE workspace_id = $1::text
+),
+deleted_content_review_transitions AS (
+    DELETE FROM content_review_transition WHERE workspace_id = $1::text
+),
+deleted_content_review_requests AS (
+    DELETE FROM content_review_request WHERE workspace_id = $1::text
+),
 -- Brand content accounts go with the workspace. Registered in the deletion
 -- manifest test alongside this, because only doing one of the two leaves
 -- either orphaned rows (manifest only) or a drifting manifest (delete only).
