@@ -15,6 +15,13 @@ import {
   type TopicCard,
   type TopicCardInput,
 } from "./contract";
+import {
+  parseStartSnapshot,
+  parseStartSnapshots,
+  startInputToWire,
+  type StartInput,
+  type StartSnapshot,
+} from "./snapshot";
 
 export const topicPlanningKeys = {
   all: (workspaceId: string) => ["contentTopics", workspaceId] as const,
@@ -35,7 +42,69 @@ export const topicPlanningKeys = {
       "detail",
       revisionId,
     ] as const,
+  starts: (workspaceId: string, topicCardId: string, revisionId: string) =>
+    [
+      "contentTopics",
+      workspaceId,
+      "briefs",
+      topicCardId,
+      "starts",
+      revisionId,
+    ] as const,
+  snapshot: (workspaceId: string, topicCardId: string, snapshotId: string) =>
+    ["contentTopics", workspaceId, "snapshots", topicCardId, snapshotId] as const,
 };
+
+/** Every start of one brief revision, newest first. */
+export function useBriefStarts(
+  workspaceId: string,
+  topicCardId: string,
+  revisionId: string,
+) {
+  return useQuery<StartSnapshot[]>({
+    queryKey: topicPlanningKeys.starts(workspaceId, topicCardId, revisionId),
+    enabled: !!topicCardId && !!revisionId,
+    queryFn: async () =>
+      parseStartSnapshots(await api.listContentBriefStarts(topicCardId, revisionId)),
+  });
+}
+
+/** One start by its stable key. */
+export function useStartSnapshot(
+  workspaceId: string,
+  topicCardId: string,
+  snapshotId: string,
+) {
+  return useQuery<StartSnapshot>({
+    queryKey: topicPlanningKeys.snapshot(workspaceId, topicCardId, snapshotId),
+    enabled: !!topicCardId && !!snapshotId,
+    queryFn: async () =>
+      parseStartSnapshot(await api.getContentStartSnapshot(topicCardId, snapshotId)),
+  });
+}
+
+/**
+ * Start a brief revision.
+ *
+ * Not optimistic, and not treated as idempotent: the write can be refused for
+ * a readiness gap, and starting the same revision again is a legitimate second
+ * start rather than a retry of the first. Callers disable the control while it
+ * is in flight; they must not suppress a second start on the grounds that one
+ * already exists.
+ */
+export function useStartBrief(workspaceId: string, topicCardId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: StartInput & { revisionId: string }) =>
+      parseStartSnapshot(
+        await api.startContentBrief(topicCardId, input.revisionId, startInputToWire(input)),
+      ),
+    onSuccess: (_snapshot, input) =>
+      client.invalidateQueries({
+        queryKey: topicPlanningKeys.starts(workspaceId, topicCardId, input.revisionId),
+      }),
+  });
+}
 
 export function useContentTopics(workspaceId: string, accountFilter = "") {
   return useQuery<TopicCard[]>({
