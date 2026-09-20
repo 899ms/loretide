@@ -383,6 +383,21 @@ deleted_content_review_transitions AS (
 deleted_content_review_requests AS (
     DELETE FROM content_review_request WHERE workspace_id = $1::text
 ),
+-- The material inbox goes with the workspace: collected sources, the snapshots
+-- holding their bodies and hashes, and the log of how each was organised. No
+-- foreign key ties them (R1), so these three DELETEs are the only ones that
+-- remove them. Registered in the deletion manifest test alongside this; doing
+-- only one of the two leaves either orphaned rows or a drifting manifest
+-- (specs/028).
+deleted_content_source_revisions AS (
+    DELETE FROM content_source_revision WHERE workspace_id = $1::text
+),
+deleted_content_source_snapshots AS (
+    DELETE FROM content_source_snapshot WHERE workspace_id = $1::text
+),
+deleted_content_sources AS (
+    DELETE FROM content_source WHERE workspace_id = $1::text
+),
 -- Brand content accounts go with the workspace. Registered in the deletion
 -- manifest test alongside this, because only doing one of the two leaves
 -- either orphaned rows (manifest only) or a drifting manifest (delete only).

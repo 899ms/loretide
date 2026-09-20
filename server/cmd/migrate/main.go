@@ -346,6 +346,22 @@ var concurrentIndexCleanups = map[string]string{
 	"512_content_delivery_task_workspace_idx":      "content_delivery_task_workspace_idx",
 	"514_content_publication_record_id_unique_idx": "content_publication_record_id_unique_idx",
 	"515_content_publication_record_artifact_idx":  "content_publication_record_artifact_idx",
+
+	// specs/028 source-inbox. Its own block for the same reason the one above
+	// has one: gofmt aligns a map literal in runs separated by blank lines, so
+	// these seven align among themselves and every line above stays byte for
+	// byte as it was.
+	//
+	// The three table migrations (516, 519, 523) are deliberately absent: they
+	// build no index, and registering one would name an index that does not
+	// exist - a silent no-op, which is the failure this map exists to prevent.
+	"517_content_source_id_unique_idx":               "content_source_id_unique_idx",
+	"518_content_source_workspace_idx":               "content_source_workspace_idx",
+	"520_content_source_snapshot_id_unique_idx":      "content_source_snapshot_id_unique_idx",
+	"521_content_source_snapshot_workspace_hash_idx": "content_source_snapshot_workspace_hash_idx",
+	"522_content_source_snapshot_source_idx":         "content_source_snapshot_source_idx",
+	"524_content_source_revision_id_unique_idx":      "content_source_revision_id_unique_idx",
+	"525_content_source_revision_source_idx":         "content_source_revision_source_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction
