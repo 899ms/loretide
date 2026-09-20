@@ -283,6 +283,58 @@
       "weibo": "웨이보",
       "kuaishou": "콰이쇼우",
       "shipinhao": "채널스"
+    },
+    "expressionProfile": {
+      "sectionTitle": "표현 프로필",
+      "sectionDescription": "이 계정이 누구에게, 어떤 어조로 쓰는지와 주당 투입 가능한 시간입니다. 각 항목은 미입력으로 두어도 됩니다. 미입력은 오류가 아닙니다.",
+      "statusConfirmed": "확인됨",
+      "statusPending": "미입력",
+      "statusPendingEdited": "입력함, 확인 전",
+      "confirm": "이 그룹 확인",
+      "listHint": "한 줄에 하나",
+      "hoursPlaceholder": "주당 시간",
+      "readyTitle": "시작에 필요한 최소 조건",
+      "readyYes": "충족했습니다. 시작할 수 있습니다",
+      "readyNo": "부족함: {{fields}}",
+      "neutralTitle": "표현 스타일의 출처",
+      "neutralOn": "중립 표현",
+      "neutralOnHint": "확인된 스타일 샘플이 없어 이 계정은 중립적인 어조로 쓰고 원고에 그 사실을 표시합니다. 소재 기록이나 직접 작성은 막지 않습니다.",
+      "neutralOff": "확인된 스타일 샘플에 따라 작성합니다",
+      "extractTitle": "소재에서 추출",
+      "extractUnavailable": "아직 사용할 수 없습니다(실행기 비활성화, EP-08에서 연결)",
+      "groups": {
+        "audience": "독자와 질문",
+        "identity": "경험과 포지셔닝",
+        "direction": "방향과 목표",
+        "style": "표현 스타일",
+        "capacity": "채널과 투입 시간"
+      },
+      "fields": {
+        "audience": "대상 독자",
+        "common_questions": "자주 받는 질문",
+        "experience": "관련 경험",
+        "positioning": "계정 포지셔닝",
+        "content_pillars": "콘텐츠 방향",
+        "expression_style": "표현 스타일",
+        "forbidden_expressions": "피할 표현",
+        "content_goals": "콘텐츠 목표",
+        "primary_channels": "주요 채널",
+        "weekly_hours": "주당 투입 시간",
+        "style_samples": "스타일 샘플"
+      },
+      "placeholders": {
+        "audience": "이 계정이 누구를 위해 쓰는지",
+        "common_questions": "반복해서 받는 질문",
+        "experience": "이 주제를 말할 수 있는 근거가 되는 경험",
+        "positioning": "이 계정이 무엇인지 한 문장으로",
+        "content_pillars": "꾸준히 다룰 방향",
+        "expression_style": "어조, 문장 형태, 예시를 드는 방식",
+        "forbidden_expressions": "쓰고 싶지 않은 표현, 과장, 약속",
+        "content_goals": "이 글로 이루려는 것",
+        "primary_channels": "한 줄에 채널 하나",
+        "style_samples": "직접 쓴 글을 한 줄에 하나씩 붙여 넣기"
+      },
+      "fieldSeparator": ", "
     }
   }
 }
