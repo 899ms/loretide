@@ -362,6 +362,18 @@ var concurrentIndexCleanups = map[string]string{
 	"522_content_source_snapshot_source_idx":         "content_source_snapshot_source_idx",
 	"524_content_source_revision_id_unique_idx":      "content_source_revision_id_unique_idx",
 	"525_content_source_revision_source_idx":         "content_source_revision_source_idx",
+
+	// specs/027 feedback-learning. Its own block on purpose: gofmt aligns a
+	// map literal in runs separated by blank lines, so these four align among
+	// themselves and every line above stays exactly as it was.
+	//
+	// The two table migrations (526, 529) are deliberately absent: they build
+	// no index, and registering one would name an index that does not exist -
+	// a silent no-op, which is the failure this map exists to prevent.
+	"527_content_manual_metric_id_unique_idx":    "content_manual_metric_id_unique_idx",
+	"528_content_manual_metric_record_idx":       "content_manual_metric_record_idx",
+	"530_content_feedback_excerpt_id_unique_idx": "content_feedback_excerpt_id_unique_idx",
+	"531_content_feedback_excerpt_record_idx":    "content_feedback_excerpt_record_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction
