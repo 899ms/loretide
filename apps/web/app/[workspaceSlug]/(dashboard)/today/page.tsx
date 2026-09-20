@@ -14,6 +14,7 @@
 import { useQueries } from "@tanstack/react-query";
 import { api } from "@multica/core/api";
 import { useWorkspaceId } from "@multica/core/hooks";
+import { useRequiredWorkspaceSlug } from "@multica/core/paths";
 import {
   accountKeys,
   parseProfileRead,
@@ -40,6 +41,7 @@ import {
   accountsMissingConfig,
   deliveriesNeedingAction,
   reviewsNeedingAttention,
+  todayLinks,
   worksInProgress,
   worthWritingTopics,
 } from "@multica/core/today";
@@ -50,6 +52,7 @@ import type {
   ProfileLike,
   ReviewEntry,
   Section,
+  TodayLinks,
   TopicEntry,
   WorkEntry,
 } from "@multica/core/today";
@@ -73,8 +76,18 @@ export default function Page() {
   return <TodayPage key={wsId} wsId={wsId} />;
 }
 
+interface SectionProps {
+  wsId: string;
+  links: TodayLinks;
+}
+
 function TodayPage({ wsId }: { wsId: string }) {
   const { t } = useT("common");
+  // The SLUG, not the id. useWorkspaceId() returns the workspace's UUID, and
+  // the route segment is [workspaceSlug]; building a link from the id gives a
+  // URL that parses fine and resolves to no workspace (Issue #191).
+  const slug = useRequiredWorkspaceSlug();
+  const links = todayLinks(slug);
   return (
     <>
       <PageHeader className="xl:hidden">
@@ -86,12 +99,12 @@ function TodayPage({ wsId }: { wsId: string }) {
           description={t(($) => $.contentToday.description)}
         >
           {/* SOP §2's five, in the sentence's own order, then the sixth. */}
-          <TopicsSection wsId={wsId} />
-          <WorksSection wsId={wsId} />
-          <ReviewsSection wsId={wsId} />
-          <DeliveriesSection wsId={wsId} />
-          <FeedbackSection wsId={wsId} />
-          <AccountGapsSection wsId={wsId} />
+          <TopicsSection wsId={wsId} links={links} />
+          <WorksSection wsId={wsId} links={links} />
+          <ReviewsSection wsId={wsId} links={links} />
+          <DeliveriesSection wsId={wsId} links={links} />
+          <FeedbackSection wsId={wsId} links={links} />
+          <AccountGapsSection wsId={wsId} links={links} />
         </SettingsTab>
       </SettingsContent>
     </>
@@ -132,7 +145,7 @@ function useAccountProfiles(wsId: string, accountIds: string[]) {
 
 // ---------------------------------------------------------------- section 1
 
-function TopicsSection({ wsId }: { wsId: string }) {
+function TopicsSection({ wsId, links }: SectionProps) {
   const { t } = useT("common");
   const navigation = useNavigation();
   const topics = useContentTopics(wsId);
@@ -152,7 +165,7 @@ function TopicsSection({ wsId }: { wsId: string }) {
       state={queryState(topics.isPending || pending, topics.isError)}
       section={section}
       t={t}
-      onSeeAll={() => navigation.push(`/${wsId}/topics`)}
+      onSeeAll={() => navigation.push(links.topics)}
       renderRow={(entry: TopicEntry) => (
         <SettingsRow
           key={entry.topicCardId}
@@ -161,7 +174,7 @@ function TopicsSection({ wsId }: { wsId: string }) {
             entry.failed ? t(($) => $.contentToday.rowFailed) : effortLabel(t, entry.effort)
           }
         >
-          <Button variant="outline" onClick={() => navigation.push(`/${wsId}/topics`)}>
+          <Button variant="outline" onClick={() => navigation.push(links.topics)}>
             {t(($) => $.contentToday.open)}
           </Button>
         </SettingsRow>
@@ -183,7 +196,7 @@ function effortLabel(t: Translate, effort: EstimatedEffort): string {
 
 // ---------------------------------------------------------------- section 2
 
-function WorksSection({ wsId }: { wsId: string }) {
+function WorksSection({ wsId, links }: SectionProps) {
   const { t } = useT("common");
   const navigation = useNavigation();
   const works = useContentWorks(wsId);
@@ -213,7 +226,7 @@ function WorksSection({ wsId }: { wsId: string }) {
       state={queryState(works.isPending || results.some((r) => r.isPending), works.isError)}
       section={section}
       t={t}
-      onSeeAll={() => navigation.push(`/${wsId}/topics`)}
+      onSeeAll={() => navigation.push(links.topics)}
       renderRow={(entry: WorkEntry) => (
         <SettingsRow
           key={entry.workId}
@@ -224,7 +237,7 @@ function WorksSection({ wsId }: { wsId: string }) {
               : `${t(($) => $.contentToday.works.working)}: ${entry.artifactTitle}`
           }
         >
-          <Button variant="outline" onClick={() => navigation.push(`/${wsId}/topics`)}>
+          <Button variant="outline" onClick={() => navigation.push(links.topics)}>
             {t(($) => $.contentToday.open)}
           </Button>
         </SettingsRow>
@@ -235,7 +248,7 @@ function WorksSection({ wsId }: { wsId: string }) {
 
 // ---------------------------------------------------------------- section 3
 
-function ReviewsSection({ wsId }: { wsId: string }) {
+function ReviewsSection({ wsId, links }: SectionProps) {
   const { t } = useT("common");
   const navigation = useNavigation();
   const reviews = useContentReviews(wsId);
@@ -251,14 +264,14 @@ function ReviewsSection({ wsId }: { wsId: string }) {
       state={queryState(reviews.isPending, reviews.isError)}
       section={section}
       t={t}
-      onSeeAll={() => navigation.push(`/${wsId}/topics`)}
+      onSeeAll={() => navigation.push(links.topics)}
       renderRow={(entry: ReviewEntry) => (
         <SettingsRow
           key={entry.reviewRequestId}
           label={entry.channel}
           description={t(($) => $.contentToday.reviews.status[statusKey(entry.status)])}
         >
-          <Button variant="outline" onClick={() => navigation.push(`/${wsId}/topics`)}>
+          <Button variant="outline" onClick={() => navigation.push(links.topics)}>
             {t(($) => $.contentToday.open)}
           </Button>
         </SettingsRow>
@@ -273,7 +286,7 @@ function statusKey(status: string): "pending" | "changesRequested" {
 
 // ---------------------------------------------------------------- section 4
 
-function DeliveriesSection({ wsId }: { wsId: string }) {
+function DeliveriesSection({ wsId, links }: SectionProps) {
   const { t } = useT("common");
   const navigation = useNavigation();
   const deliveries = useContentDeliveries(wsId);
@@ -285,7 +298,7 @@ function DeliveriesSection({ wsId }: { wsId: string }) {
       state={queryState(deliveries.isPending, deliveries.isError)}
       section={section}
       t={t}
-      onSeeAll={() => navigation.push(`/${wsId}/topics`)}
+      onSeeAll={() => navigation.push(links.topics)}
       renderRow={(entry: DeliveryEntry) => (
         <SettingsRow
           key={entry.deliveryTaskId}
@@ -296,7 +309,7 @@ function DeliveriesSection({ wsId }: { wsId: string }) {
               : t(($) => $.contentToday.deliveries.pendingRegistration)
           }
         >
-          <Button variant="outline" onClick={() => navigation.push(`/${wsId}/topics`)}>
+          <Button variant="outline" onClick={() => navigation.push(links.topics)}>
             {t(($) => $.contentToday.open)}
           </Button>
         </SettingsRow>
@@ -321,7 +334,7 @@ function DeliveriesSection({ wsId }: { wsId: string }) {
  * takes the numbers lives inside a topic card's document, and no route
  * addresses one publication record.
  */
-function FeedbackSection({ wsId }: { wsId: string }) {
+function FeedbackSection({ wsId, links }: SectionProps) {
   const { t } = useT("common");
   const navigation = useNavigation();
   const pending = usePendingFeedback(wsId);
@@ -339,14 +352,14 @@ function FeedbackSection({ wsId }: { wsId: string }) {
       state={queryState(pending.isPending, pending.isError)}
       section={section}
       t={t}
-      onSeeAll={() => navigation.push(`/${wsId}/topics`)}
+      onSeeAll={() => navigation.push(links.topics)}
       renderRow={(entry: PendingFeedback) => (
         <SettingsRow
           key={entry.publicationRecordId}
           label={describePending(entry)}
           description={t(($) => $.contentToday.feedback.noMetrics)}
         >
-          <Button variant="outline" onClick={() => navigation.push(`/${wsId}/topics`)}>
+          <Button variant="outline" onClick={() => navigation.push(links.topics)}>
             {t(($) => $.contentToday.open)}
           </Button>
         </SettingsRow>
@@ -357,7 +370,7 @@ function FeedbackSection({ wsId }: { wsId: string }) {
 
 // ---------------------------------------------------------------- section 6
 
-function AccountGapsSection({ wsId }: { wsId: string }) {
+function AccountGapsSection({ wsId, links }: SectionProps) {
   const { t } = useT("common");
   const navigation = useNavigation();
   const accounts = useContentAccounts(wsId);
@@ -376,7 +389,7 @@ function AccountGapsSection({ wsId }: { wsId: string }) {
       state={queryState(accounts.isPending || pending, accounts.isError)}
       section={section}
       t={t}
-      onSeeAll={() => navigation.push(`/${wsId}/accounts`)}
+      onSeeAll={() => navigation.push(links.accounts)}
       renderRow={(entry: AccountGapEntry) => (
         <SettingsRow
           key={entry.accountId}
@@ -389,7 +402,7 @@ function AccountGapsSection({ wsId }: { wsId: string }) {
                   .join(t(($) => $.contentToday.listSeparator))}`
           }
         >
-          <Button variant="outline" onClick={() => navigation.push(`/${wsId}/accounts`)}>
+          <Button variant="outline" onClick={() => navigation.push(links.accounts)}>
             {t(($) => $.contentToday.open)}
           </Button>
         </SettingsRow>
