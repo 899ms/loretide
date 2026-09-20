@@ -691,6 +691,16 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-accounts/${encodeURIComponent(accountId)}/persona`, {method: "POST", body: JSON.stringify({persona_prompt: personaPrompt})});
   }
 
+  async getContentAccountProfile(accountId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-accounts/${encodeURIComponent(accountId)}/profile`);
+  }
+
+  // The body is the profile itself, matching the server's decoder. It rejects
+  // unknown fields, so callers send the parsed shape and not a superset.
+  async setContentAccountProfile(accountId: string, profile: unknown): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-accounts/${encodeURIComponent(accountId)}/profile`, {method: "POST", body: JSON.stringify(profile)});
+  }
+
   async listContentTopics(): Promise<unknown> {
     return this.fetch<unknown>("/api/content-topics");
   }

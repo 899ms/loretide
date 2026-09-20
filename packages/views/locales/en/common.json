@@ -283,6 +283,58 @@
       "weibo": "Weibo",
       "kuaishou": "Kuaishou",
       "shipinhao": "Channels"
+    },
+    "expressionProfile": {
+      "sectionTitle": "Expression profile",
+      "sectionDescription": "How this account speaks, who it speaks to, and how much time there is each week. Any item may stay pending — pending is not an error.",
+      "statusConfirmed": "Confirmed",
+      "statusPending": "Pending",
+      "statusPendingEdited": "Filled in, not confirmed",
+      "confirm": "Confirm this group",
+      "listHint": "One per line",
+      "hoursPlaceholder": "Hours per week",
+      "readyTitle": "Minimum condition to start",
+      "readyYes": "Met — this account can start",
+      "readyNo": "Still missing: {{fields}}",
+      "neutralTitle": "Where the style comes from",
+      "neutralOn": "Neutral expression",
+      "neutralOnHint": "There is no confirmed style sample, so this account writes in a neutral voice and says so on the draft. It does not stop material being recorded or written by hand.",
+      "neutralOff": "Writes from the confirmed style samples",
+      "extractTitle": "Extract from material",
+      "extractUnavailable": "Not available yet (executors disabled, arriving with EP-08)",
+      "groups": {
+        "audience": "Audience and questions",
+        "identity": "Experience and positioning",
+        "direction": "Direction and goals",
+        "style": "Expression style",
+        "capacity": "Channels and capacity"
+      },
+      "fields": {
+        "audience": "Audience",
+        "common_questions": "What they keep asking",
+        "experience": "Relevant experience",
+        "positioning": "Positioning",
+        "content_pillars": "Content direction",
+        "expression_style": "Expression style",
+        "forbidden_expressions": "Forbidden expressions",
+        "content_goals": "Content goals",
+        "primary_channels": "Primary channels",
+        "weekly_hours": "Weekly hours",
+        "style_samples": "Style samples"
+      },
+      "placeholders": {
+        "audience": "Who this account writes for",
+        "common_questions": "The questions they ask again and again",
+        "experience": "What you have done that earns this subject",
+        "positioning": "What this account is, in one sentence",
+        "content_pillars": "The few directions you write around",
+        "expression_style": "Tone, sentence shape, how you give examples",
+        "forbidden_expressions": "Wording, overstatement and promises to avoid",
+        "content_goals": "What these posts are meant to achieve",
+        "primary_channels": "One channel per line",
+        "style_samples": "Paste passages you wrote yourself, one per line"
+      },
+      "fieldSeparator": ", "
     }
   }
 }

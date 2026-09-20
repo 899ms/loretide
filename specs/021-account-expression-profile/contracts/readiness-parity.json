@@ -1,0 +1,907 @@
+{
+  "_comment": [
+    "Decision matrix for SOP 3.1's minimum-start condition and neutral-expression marker.",
+    "Both implementations assert against this file: Go in",
+    "server/internal/content/ip-profile/profile_parity_test.go and TypeScript in",
+    "packages/core/content/ip-profile/profile.test.ts.",
+    "It compares DECISIONS, not names: a rule that changes on one side without the",
+    "other turns one of the two red. Edit it only together with both.",
+    "missing[] order is part of the contract - a page renders it in order."
+  ],
+  "cases": [
+    {
+      "name": "all four confirmed",
+      "profile": {
+        "audience": {
+          "value": "刚开始做副业的设计师",
+          "status": "confirmed"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "工具评测、接单经验",
+          "status": "confirmed"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [
+            "xiaohongshu"
+          ],
+          "status": "confirmed"
+        },
+        "weekly_hours": {
+          "value": 6,
+          "status": "confirmed"
+        },
+        "style_samples": {
+          "values": [],
+          "status": "pending"
+        }
+      },
+      "can_start": true,
+      "missing": [],
+      "neutral": true
+    },
+    {
+      "name": "nothing at all",
+      "profile": {
+        "audience": {
+          "value": "",
+          "status": "pending"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "",
+          "status": "pending"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [],
+          "status": "pending"
+        },
+        "weekly_hours": {
+          "value": 0,
+          "status": "pending"
+        },
+        "style_samples": {
+          "values": [],
+          "status": "pending"
+        }
+      },
+      "can_start": false,
+      "missing": [
+        "audience",
+        "content_pillars",
+        "primary_channels",
+        "weekly_hours"
+      ],
+      "neutral": true
+    },
+    {
+      "name": "no audience",
+      "profile": {
+        "audience": {
+          "value": "",
+          "status": "pending"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "工具评测、接单经验",
+          "status": "confirmed"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [
+            "xiaohongshu"
+          ],
+          "status": "confirmed"
+        },
+        "weekly_hours": {
+          "value": 6,
+          "status": "confirmed"
+        },
+        "style_samples": {
+          "values": [],
+          "status": "pending"
+        }
+      },
+      "can_start": false,
+      "missing": [
+        "audience"
+      ],
+      "neutral": true
+    },
+    {
+      "name": "no content direction",
+      "profile": {
+        "audience": {
+          "value": "刚开始做副业的设计师",
+          "status": "confirmed"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "",
+          "status": "pending"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [
+            "xiaohongshu"
+          ],
+          "status": "confirmed"
+        },
+        "weekly_hours": {
+          "value": 6,
+          "status": "confirmed"
+        },
+        "style_samples": {
+          "values": [],
+          "status": "pending"
+        }
+      },
+      "can_start": false,
+      "missing": [
+        "content_pillars"
+      ],
+      "neutral": true
+    },
+    {
+      "name": "no channel",
+      "profile": {
+        "audience": {
+          "value": "刚开始做副业的设计师",
+          "status": "confirmed"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "工具评测、接单经验",
+          "status": "confirmed"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [],
+          "status": "pending"
+        },
+        "weekly_hours": {
+          "value": 6,
+          "status": "confirmed"
+        },
+        "style_samples": {
+          "values": [],
+          "status": "pending"
+        }
+      },
+      "can_start": false,
+      "missing": [
+        "primary_channels"
+      ],
+      "neutral": true
+    },
+    {
+      "name": "no time budget",
+      "profile": {
+        "audience": {
+          "value": "刚开始做副业的设计师",
+          "status": "confirmed"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "工具评测、接单经验",
+          "status": "confirmed"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [
+            "xiaohongshu"
+          ],
+          "status": "confirmed"
+        },
+        "weekly_hours": {
+          "value": 0,
+          "status": "pending"
+        },
+        "style_samples": {
+          "values": [],
+          "status": "pending"
+        }
+      },
+      "can_start": false,
+      "missing": [
+        "weekly_hours"
+      ],
+      "neutral": true
+    },
+    {
+      "name": "zero hours confirmed",
+      "profile": {
+        "audience": {
+          "value": "刚开始做副业的设计师",
+          "status": "confirmed"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "工具评测、接单经验",
+          "status": "confirmed"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [
+            "xiaohongshu"
+          ],
+          "status": "confirmed"
+        },
+        "weekly_hours": {
+          "value": 0,
+          "status": "confirmed"
+        },
+        "style_samples": {
+          "values": [],
+          "status": "pending"
+        }
+      },
+      "can_start": false,
+      "missing": [
+        "weekly_hours"
+      ],
+      "neutral": true
+    },
+    {
+      "name": "negative hours confirmed",
+      "profile": {
+        "audience": {
+          "value": "刚开始做副业的设计师",
+          "status": "confirmed"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "工具评测、接单经验",
+          "status": "confirmed"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [
+            "xiaohongshu"
+          ],
+          "status": "confirmed"
+        },
+        "weekly_hours": {
+          "value": -1,
+          "status": "confirmed"
+        },
+        "style_samples": {
+          "values": [],
+          "status": "pending"
+        }
+      },
+      "can_start": false,
+      "missing": [
+        "weekly_hours"
+      ],
+      "neutral": true
+    },
+    {
+      "name": "everything typed nothing confirmed",
+      "profile": {
+        "audience": {
+          "value": "设计师",
+          "status": "pending"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "工具评测",
+          "status": "pending"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [
+            "xiaohongshu"
+          ],
+          "status": "pending"
+        },
+        "weekly_hours": {
+          "value": 6,
+          "status": "pending"
+        },
+        "style_samples": {
+          "values": [],
+          "status": "pending"
+        }
+      },
+      "can_start": false,
+      "missing": [
+        "audience",
+        "content_pillars",
+        "primary_channels",
+        "weekly_hours"
+      ],
+      "neutral": true
+    },
+    {
+      "name": "whitespace-only audience confirmed",
+      "profile": {
+        "audience": {
+          "value": "   ",
+          "status": "confirmed"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "工具评测、接单经验",
+          "status": "confirmed"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [
+            "xiaohongshu"
+          ],
+          "status": "confirmed"
+        },
+        "weekly_hours": {
+          "value": 6,
+          "status": "confirmed"
+        },
+        "style_samples": {
+          "values": [],
+          "status": "pending"
+        }
+      },
+      "can_start": false,
+      "missing": [
+        "audience"
+      ],
+      "neutral": true
+    },
+    {
+      "name": "channel list of blanks confirmed",
+      "profile": {
+        "audience": {
+          "value": "刚开始做副业的设计师",
+          "status": "confirmed"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "工具评测、接单经验",
+          "status": "confirmed"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [
+            "",
+            "  "
+          ],
+          "status": "confirmed"
+        },
+        "weekly_hours": {
+          "value": 6,
+          "status": "confirmed"
+        },
+        "style_samples": {
+          "values": [],
+          "status": "pending"
+        }
+      },
+      "can_start": false,
+      "missing": [
+        "primary_channels"
+      ],
+      "neutral": true
+    },
+    {
+      "name": "the other seven empty",
+      "profile": {
+        "audience": {
+          "value": "刚开始做副业的设计师",
+          "status": "confirmed"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "工具评测、接单经验",
+          "status": "confirmed"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [
+            "xiaohongshu"
+          ],
+          "status": "confirmed"
+        },
+        "weekly_hours": {
+          "value": 6,
+          "status": "confirmed"
+        },
+        "style_samples": {
+          "values": [],
+          "status": "pending"
+        }
+      },
+      "can_start": true,
+      "missing": [],
+      "neutral": true
+    },
+    {
+      "name": "confirmed style sample",
+      "profile": {
+        "audience": {
+          "value": "刚开始做副业的设计师",
+          "status": "confirmed"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "工具评测、接单经验",
+          "status": "confirmed"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [
+            "xiaohongshu"
+          ],
+          "status": "confirmed"
+        },
+        "weekly_hours": {
+          "value": 6,
+          "status": "confirmed"
+        },
+        "style_samples": {
+          "values": [
+            "一段我写过的开头"
+          ],
+          "status": "confirmed"
+        }
+      },
+      "can_start": true,
+      "missing": [],
+      "neutral": false
+    },
+    {
+      "name": "style sample typed not confirmed",
+      "profile": {
+        "audience": {
+          "value": "刚开始做副业的设计师",
+          "status": "confirmed"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "工具评测、接单经验",
+          "status": "confirmed"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [
+            "xiaohongshu"
+          ],
+          "status": "confirmed"
+        },
+        "weekly_hours": {
+          "value": 6,
+          "status": "confirmed"
+        },
+        "style_samples": {
+          "values": [
+            "草稿"
+          ],
+          "status": "pending"
+        }
+      },
+      "can_start": true,
+      "missing": [],
+      "neutral": true
+    },
+    {
+      "name": "style sample confirmed but blank",
+      "profile": {
+        "audience": {
+          "value": "刚开始做副业的设计师",
+          "status": "confirmed"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "工具评测、接单经验",
+          "status": "confirmed"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [
+            "xiaohongshu"
+          ],
+          "status": "confirmed"
+        },
+        "weekly_hours": {
+          "value": 6,
+          "status": "confirmed"
+        },
+        "style_samples": {
+          "values": [
+            "  "
+          ],
+          "status": "confirmed"
+        }
+      },
+      "can_start": true,
+      "missing": [],
+      "neutral": true
+    },
+    {
+      "name": "several channels confirmed",
+      "profile": {
+        "audience": {
+          "value": "刚开始做副业的设计师",
+          "status": "confirmed"
+        },
+        "common_questions": {
+          "value": "",
+          "status": "pending"
+        },
+        "experience": {
+          "value": "",
+          "status": "pending"
+        },
+        "positioning": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_pillars": {
+          "value": "工具评测、接单经验",
+          "status": "confirmed"
+        },
+        "expression_style": {
+          "value": "",
+          "status": "pending"
+        },
+        "forbidden_expressions": {
+          "value": "",
+          "status": "pending"
+        },
+        "content_goals": {
+          "value": "",
+          "status": "pending"
+        },
+        "primary_channels": {
+          "values": [
+            "xiaohongshu",
+            "weibo"
+          ],
+          "status": "confirmed"
+        },
+        "weekly_hours": {
+          "value": 6,
+          "status": "confirmed"
+        },
+        "style_samples": {
+          "values": [],
+          "status": "pending"
+        }
+      },
+      "can_start": true,
+      "missing": [],
+      "neutral": true
+    }
+  ]
+}

@@ -283,6 +283,58 @@
       "weibo": "Weibo",
       "kuaishou": "Kuaishou",
       "shipinhao": "チャンネルズ"
+    },
+    "expressionProfile": {
+      "sectionTitle": "表現プロフィール",
+      "sectionDescription": "このアカウントが誰に向けて、どんな口調で書くか、週にどれだけ時間を割けるか。未記入のままでも構いません。未記入はエラーではありません。",
+      "statusConfirmed": "確認済み",
+      "statusPending": "未記入",
+      "statusPendingEdited": "入力済み・未確認",
+      "confirm": "このグループを確認",
+      "listHint": "1 行に 1 件",
+      "hoursPlaceholder": "週あたりの時間",
+      "readyTitle": "開始に必要な最小条件",
+      "readyYes": "満たしています。開始できます",
+      "readyNo": "不足：{{fields}}",
+      "neutralTitle": "表現スタイルの出どころ",
+      "neutralOn": "中立的な表現",
+      "neutralOnHint": "確認済みのスタイルサンプルがないため、このアカウントは中立的な表現で書き、原稿にその旨を記します。素材の記録や手書きは妨げません。",
+      "neutralOff": "確認済みのスタイルサンプルに沿って書きます",
+      "extractTitle": "素材から抽出",
+      "extractUnavailable": "現在利用できません（実行機能は無効、EP-08 で対応）",
+      "groups": {
+        "audience": "読者と質問",
+        "identity": "経験と立ち位置",
+        "direction": "方向性と目標",
+        "style": "表現スタイル",
+        "capacity": "チャネルと稼働時間"
+      },
+      "fields": {
+        "audience": "想定読者",
+        "common_questions": "よく聞かれること",
+        "experience": "関連する経験",
+        "positioning": "アカウントの立ち位置",
+        "content_pillars": "コンテンツの方向性",
+        "expression_style": "表現スタイル",
+        "forbidden_expressions": "避けたい表現",
+        "content_goals": "コンテンツの目標",
+        "primary_channels": "主なチャネル",
+        "weekly_hours": "週あたりの時間",
+        "style_samples": "スタイルサンプル"
+      },
+      "placeholders": {
+        "audience": "このアカウントは誰に向けて書くか",
+        "common_questions": "繰り返し聞かれる質問",
+        "experience": "この話題を語れる理由になる経験",
+        "positioning": "このアカウントが何であるかを一文で",
+        "content_pillars": "継続して書く方向性",
+        "expression_style": "口調、文の運び、例の出し方",
+        "forbidden_expressions": "使いたくない言い回し、誇張、約束",
+        "content_goals": "この発信で何を実現したいか",
+        "primary_channels": "1 行に 1 チャネル",
+        "style_samples": "自分で書いた文章を 1 行に 1 つ貼り付け"
+      },
+      "fieldSeparator": "、"
     }
   }
 }

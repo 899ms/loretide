@@ -40,6 +40,7 @@ import {
   type SettingsSaveStatus,
 } from "@multica/views/settings/layout";
 import { PageHeader } from "@multica/views/layout/page-header";
+import { ExpressionProfileSections } from "./expression-profile";
 
 // The account settings page: create accounts under a brand, switch between
 // them, edit the platform and the persona prompt.
@@ -396,6 +397,8 @@ function AccountEditor({
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>
+
+      <ExpressionProfileSections wsId={wsId} accountId={accountId} />
     </>
   );
 }
