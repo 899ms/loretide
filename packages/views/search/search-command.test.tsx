@@ -217,6 +217,15 @@ vi.mock("@multica/core/paths", async (importOriginal) => ({
     runtimes: () => "/ws-test/runtimes",
     skills: () => "/ws-test/skills",
     settings: () => "/ws-test/settings",
+    // Loretide's content surfaces. The palette derives its page list from
+    // WORKSPACE_PAGES, so a page registered there and missing here throws
+    // "p[page.key] is not a function" - this mock is the hand-maintained
+    // subset the test above is named after.
+    today: () => "/ws-test/today",
+    sources: () => "/ws-test/sources",
+    topics: () => "/ws-test/topics",
+    accounts: () => "/ws-test/accounts",
+    contentDiagnostics: () => "/ws-test/diagnostics",
     issueDetail: (id: string) => `/ws-test/issues/${id}`,
     memberDetail: (id: string) => `/ws-test/members/${id}`,
     agentDetail: (id: string) => `/ws-test/agents/${id}`,

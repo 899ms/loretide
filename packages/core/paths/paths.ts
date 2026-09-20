@@ -67,6 +67,20 @@ function workspaceScoped(slug: string) {
     skills: () => `${ws}/skills`,
     skillDetail: (id: string) => `${ws}/skills/${encode(id)}`,
     settings: () => `${ws}/settings`,
+
+    // Loretide's content surfaces. They are here for the same reason every
+    // other route is: a caller building "/" + something is a caller that can
+    // put the workspace ID where the slug goes, which is exactly what happened
+    // on the Today dashboard (Issue #191) - the URL resolved to no workspace
+    // and every link on the page landed on "no access".
+    //
+    // Parameterless, so they are also valid sidebar nav destinations if a
+    // later card adds them there (specs/026 revision B, FR-B-09).
+    today: () => `${ws}/today`,
+    sources: () => `${ws}/sources`,
+    topics: () => `${ws}/topics`,
+    accounts: () => `${ws}/accounts`,
+    contentDiagnostics: () => `${ws}/diagnostics`,
     attachmentPreview: (id: string) => `${ws}/attachments/${encode(id)}/preview`,
   };
 }
