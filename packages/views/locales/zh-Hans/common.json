@@ -336,5 +336,102 @@
       },
       "fieldSeparator": "、"
     }
+  },
+  "contentTopics": {
+    "title": "选题",
+    "description": "本品牌下手工写下的选题卡，以及它们开始创作时冻结的简报。",
+    "listTitle": "选题卡",
+    "empty": "还没有选题卡。在下面写一张，记下它写给谁、判断是什么。",
+    "loadFailed": "选题卡加载失败",
+    "createTitle": "新建选题卡",
+    "createDescription": "docs/01 §5.2 的七项。写「没有」就是完整回答，留空不是。",
+    "create": "创建选题卡",
+    "detailTitle": "选题卡",
+    "statusLabel": "状态",
+    "blank": "未填写",
+    "channelsHint": "多个渠道用逗号分隔。",
+    "revision": "第 {{number}} 版",
+    "firstRevision": "这张卡开始时的那一版",
+    "saving": "保存中",
+    "saved": "已保存",
+    "failed": "保存失败",
+    "nextAction": "下一步：{{action}}",
+    "fields": {
+      "audienceProblemJudgment": "写给谁、解决什么问题、拟表达什么判断",
+      "ipFit": "为什么适合这个 IP",
+      "timing": "为什么是现在",
+      "existingContentRelation": "与已有作品的关系",
+      "evidenceGapsAndInvestment": "证据缺口与投入",
+      "channels": "适合哪些渠道",
+      "recommendedAction": "推荐动作"
+    },
+    "placeholders": {
+      "audienceProblemJudgment": "谁在读、解决什么、要表达什么判断",
+      "ipFit": "为什么由这个 IP 来说——或者说明并不适合",
+      "timing": "时效依据；没有就直接写「没有时效依据」",
+      "existingContentRelation": "承接哪一篇；没有就写「没有既有作品」",
+      "evidenceGapsAndInvestment": "缺哪些证据、预计投入多少",
+      "channels": "知乎，公众号",
+      "recommendedAction": "开始 / 保存 / 暂缓 / 放弃，以及理由"
+    },
+    "status": {
+      "draft": "草稿",
+      "started": "已开始",
+      "saved": "已保存",
+      "deferred": "已暂缓",
+      "dropped": "已放弃",
+      "unknown": "未知状态"
+    },
+    "actions": {
+      "start": "开始",
+      "save": "先保存",
+      "defer": "暂缓",
+      "drop": "放弃"
+    },
+    "reasons": {
+      "no_evidence": "证据不足",
+      "no_timing": "没有时效依据",
+      "duplicate": "已有内容覆盖",
+      "low_fit": "与这个 IP 不契合",
+      "no_capacity": "当前没有产能"
+    },
+    "decisionTitle": "决策",
+    "decisionDescription": "「开始」会创建冻结的首版简报；再次「开始」仍是同一份首版。",
+    "decisionRun": "记录决策",
+    "decisionReason": "原因",
+    "decisionReasonHint": "只在暂缓与放弃时记录；开始与保存不会保存它。",
+    "decisionReasonPlaceholder": "选择原因",
+    "decisionNote": "备注",
+    "decisionNotePlaceholder": "原因之外还需要说明的",
+    "briefTitle": "简报版本",
+    "briefDescription": "版本只追加、不修改。点开一版可以读它当时写了什么。",
+    "briefEmpty": "还没有版本。",
+    "briefLoadFailed": "版本加载失败",
+    "briefReadOnly": "只读——修改会存成新的一版。",
+    "appendTitle": "新的一版",
+    "appendDescription": "docs/01 §5.3 的十一项。保存会追加一版，旧版原样保留。",
+    "appendRun": "存为新版本",
+    "appendHint": "与最新一版有差异时才可保存。",
+    "brief": {
+      "audience": "受众",
+      "coreProblem": "核心问题",
+      "claimAndBoundaries": "主张与边界",
+      "channels": "渠道",
+      "format": "形式",
+      "structure": "结构",
+      "citationRequirements": "引用要求",
+      "sourceScope": "资料范围",
+      "deliverable": "交付物",
+      "timeLimit": "时间上限",
+      "costLimit": "成本上限"
+    },
+    "unavailable": {
+      "title": "暂不可用",
+      "description": "属于本系列后续的卡。在这里点名，是为了让「还没做」不被读成「做坏了」。",
+      "badge": "暂不可用",
+      "candidates": "候选选题自动生成",
+      "mustUse": "必用与排除的素材",
+      "files": "文件与素材输入"
+    }
   }
 }

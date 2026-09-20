@@ -336,5 +336,102 @@
       },
       "fieldSeparator": "、"
     }
+  },
+  "contentTopics": {
+    "title": "テーマ",
+    "description": "このブランドで手書きしたテーマカードと、制作開始時に凍結されたブリーフ。",
+    "listTitle": "テーマカード",
+    "empty": "テーマカードがありません。誰に向けて何を判断するのかを下に書いてください。",
+    "loadFailed": "テーマカードを読み込めませんでした",
+    "createTitle": "新規テーマカード",
+    "createDescription": "docs/01 §5.2 の 7 項目。「なし」と書くのも完全な回答です。空欄は違います。",
+    "create": "テーマカードを作成",
+    "detailTitle": "テーマカード",
+    "statusLabel": "状態",
+    "blank": "未記入",
+    "channelsHint": "複数のチャネルはカンマで区切ってください。",
+    "revision": "第 {{number}} 版",
+    "firstRevision": "このカードが開始した版",
+    "saving": "保存中",
+    "saved": "保存しました",
+    "failed": "保存できませんでした",
+    "nextAction": "次: {{action}}",
+    "fields": {
+      "audienceProblemJudgment": "誰に向けて・何の課題・どんな判断か",
+      "ipFit": "この IP に合う理由",
+      "timing": "なぜ今か",
+      "existingContentRelation": "既存作品との関係",
+      "evidenceGapsAndInvestment": "証拠の不足と工数",
+      "channels": "適したチャネル",
+      "recommendedAction": "推奨アクション"
+    },
+    "placeholders": {
+      "audienceProblemJudgment": "誰が読み、何を解決し、何を主張するか",
+      "ipFit": "なぜこの IP が言うのか、または合わないこと",
+      "timing": "時期の根拠。なければ「時期の根拠なし」",
+      "existingContentRelation": "どの作品を受けるか、なければ「既存作品なし」",
+      "evidenceGapsAndInvestment": "不足している証拠と見込み工数",
+      "channels": "Zhihu、WeChat",
+      "recommendedAction": "開始 / 保存 / 保留 / 取りやめと、その理由"
+    },
+    "status": {
+      "draft": "下書き",
+      "started": "開始済み",
+      "saved": "保存済み",
+      "deferred": "保留",
+      "dropped": "取りやめ",
+      "unknown": "不明な状態"
+    },
+    "actions": {
+      "start": "開始",
+      "save": "保存",
+      "defer": "保留",
+      "drop": "取りやめ"
+    },
+    "reasons": {
+      "no_evidence": "証拠が足りない",
+      "no_timing": "時期の根拠がない",
+      "duplicate": "既存の内容で足りる",
+      "low_fit": "この IP に合わない",
+      "no_capacity": "今は手が空かない"
+    },
+    "decisionTitle": "判断",
+    "decisionDescription": "「開始」は凍結された初版ブリーフを作ります。もう一度開始しても初版は同じです。",
+    "decisionRun": "判断を記録",
+    "decisionReason": "理由",
+    "decisionReasonHint": "保留と取りやめのみ記録されます。開始と保存では保存されません。",
+    "decisionReasonPlaceholder": "理由を選択",
+    "decisionNote": "メモ",
+    "decisionNotePlaceholder": "理由では伝わらないこと",
+    "briefTitle": "ブリーフの版",
+    "briefDescription": "版は追加のみで、書き換えません。開くとその版の内容を読めます。",
+    "briefEmpty": "まだ版がありません。",
+    "briefLoadFailed": "版を読み込めませんでした",
+    "briefReadOnly": "読み取り専用 — 変更は新しい版として保存されます。",
+    "appendTitle": "新しい版",
+    "appendDescription": "docs/01 §5.3 の 11 項目。保存すると版が追加され、古い版はそのまま残ります。",
+    "appendRun": "新しい版として保存",
+    "appendHint": "最新の版と違いがあるときに保存できます。",
+    "brief": {
+      "audience": "読者",
+      "coreProblem": "中心となる課題",
+      "claimAndBoundaries": "主張と境界",
+      "channels": "チャネル",
+      "format": "形式",
+      "structure": "構成",
+      "citationRequirements": "引用の要件",
+      "sourceScope": "資料の範囲",
+      "deliverable": "成果物",
+      "timeLimit": "時間の上限",
+      "costLimit": "費用の上限"
+    },
+    "unavailable": {
+      "title": "まだ利用できません",
+      "description": "このシリーズの後続カードです。「未実装」が「故障」と読まれないよう明示します。",
+      "badge": "まだ利用できません",
+      "candidates": "候補テーマの自動生成",
+      "mustUse": "必須・除外の素材",
+      "files": "ファイルと素材の入力"
+    }
   }
 }

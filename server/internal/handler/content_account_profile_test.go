@@ -141,6 +141,11 @@ func TestOldRevisionWithoutProfileReadsAsEmptyPendingProfile(t *testing.T) {
 	ws := accountWorkspace(t, "profile-old-revision", "owner")
 	accountID := createAccount(t, ws, "zhihu", "Old revision")["account_id"].(string)
 	revisionID := "pre-482-profile-revision"
+	// A fixed id has to be removed again, or the second run against the same
+	// database fails on the unique index instead of testing anything. The
+	// workspace cleanup does not reach it: this row is deleted by revision id,
+	// and accountWorkspace only sweeps content_account.
+	dbfx.Cleanup(t, `DELETE FROM content_account_revision WHERE revision_id = $1`, revisionID)
 	_, err := testPool.Exec(t.Context(), `
 		INSERT INTO content_account_revision
 			(revision_id, account_id, workspace_id, revision, persona_prompt)

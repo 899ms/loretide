@@ -336,5 +336,102 @@
       },
       "fieldSeparator": ", "
     }
+  },
+  "contentTopics": {
+    "title": "주제",
+    "description": "이 브랜드에서 직접 작성한 주제 카드와, 작업을 시작할 때 고정된 브리프입니다.",
+    "listTitle": "주제 카드",
+    "empty": "주제 카드가 없습니다. 누구를 위한 것이고 무엇을 판단하는지 아래에 적어 보세요.",
+    "loadFailed": "주제 카드를 불러오지 못했습니다",
+    "createTitle": "새 주제 카드",
+    "createDescription": "docs/01 §5.2의 일곱 항목. “없음”이라고 쓰는 것도 완전한 답이며, 빈칸은 아닙니다.",
+    "create": "주제 카드 만들기",
+    "detailTitle": "주제 카드",
+    "statusLabel": "상태",
+    "blank": "작성되지 않음",
+    "channelsHint": "여러 채널은 쉼표로 구분하세요.",
+    "revision": "버전 {{number}}",
+    "firstRevision": "이 카드가 시작한 버전",
+    "saving": "저장 중",
+    "saved": "저장됨",
+    "failed": "저장하지 못했습니다",
+    "nextAction": "다음: {{action}}",
+    "fields": {
+      "audienceProblemJudgment": "누구를 위한 것인지, 어떤 문제인지, 어떤 판단인지",
+      "ipFit": "이 IP에 맞는 이유",
+      "timing": "왜 지금인지",
+      "existingContentRelation": "기존 작업과의 관계",
+      "evidenceGapsAndInvestment": "근거의 공백과 투입",
+      "channels": "적합한 채널",
+      "recommendedAction": "권장 행동"
+    },
+    "placeholders": {
+      "audienceProblemJudgment": "누가 읽고, 무엇을 해결하며, 무엇을 주장하는지",
+      "ipFit": "왜 이 IP가 말해야 하는지, 또는 맞지 않는다는 점",
+      "timing": "시의성 근거. 없으면 “시의성 근거 없음”",
+      "existingContentRelation": "무엇을 이어받는지, 없으면 “기존 작업 없음”",
+      "evidenceGapsAndInvestment": "빠진 근거와 예상 투입",
+      "channels": "Zhihu, WeChat",
+      "recommendedAction": "시작 / 저장 / 보류 / 폐기와 그 이유"
+    },
+    "status": {
+      "draft": "초안",
+      "started": "시작됨",
+      "saved": "저장됨",
+      "deferred": "보류됨",
+      "dropped": "폐기됨",
+      "unknown": "알 수 없는 상태"
+    },
+    "actions": {
+      "start": "시작",
+      "save": "저장",
+      "defer": "보류",
+      "drop": "폐기"
+    },
+    "reasons": {
+      "no_evidence": "근거가 부족함",
+      "no_timing": "시의성 근거 없음",
+      "duplicate": "이미 다룬 내용",
+      "low_fit": "이 IP와 맞지 않음",
+      "no_capacity": "지금은 여력이 없음"
+    },
+    "decisionTitle": "결정",
+    "decisionDescription": "“시작”은 고정된 첫 브리프를 만듭니다. 다시 시작해도 첫 버전은 같습니다.",
+    "decisionRun": "결정 기록",
+    "decisionReason": "이유",
+    "decisionReasonHint": "보류와 폐기에서만 기록되며, 시작과 저장에서는 저장되지 않습니다.",
+    "decisionReasonPlaceholder": "이유 선택",
+    "decisionNote": "메모",
+    "decisionNotePlaceholder": "이유만으로 설명되지 않는 내용",
+    "briefTitle": "브리프 버전",
+    "briefDescription": "버전은 추가만 되고 수정되지 않습니다. 열어서 그때의 내용을 읽을 수 있습니다.",
+    "briefEmpty": "아직 버전이 없습니다.",
+    "briefLoadFailed": "버전을 불러오지 못했습니다",
+    "briefReadOnly": "읽기 전용 — 변경은 새 버전으로 저장됩니다.",
+    "appendTitle": "새 버전",
+    "appendDescription": "docs/01 §5.3의 열한 항목. 저장하면 버전이 추가되고 이전 버전은 그대로 남습니다.",
+    "appendRun": "새 버전으로 저장",
+    "appendHint": "최신 버전과 다른 점이 있을 때 저장할 수 있습니다.",
+    "brief": {
+      "audience": "독자",
+      "coreProblem": "핵심 문제",
+      "claimAndBoundaries": "주장과 경계",
+      "channels": "채널",
+      "format": "형식",
+      "structure": "구성",
+      "citationRequirements": "인용 요건",
+      "sourceScope": "자료 범위",
+      "deliverable": "산출물",
+      "timeLimit": "시간 상한",
+      "costLimit": "비용 상한"
+    },
+    "unavailable": {
+      "title": "아직 사용할 수 없음",
+      "description": "이 시리즈의 이후 카드입니다. “미구현”이 “고장”으로 읽히지 않도록 명시합니다.",
+      "badge": "아직 사용할 수 없음",
+      "candidates": "후보 주제 자동 생성",
+      "mustUse": "필수 및 제외 자료",
+      "files": "파일 및 자료 입력"
+    }
   }
 }
