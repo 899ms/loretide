@@ -15,10 +15,10 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
-      — **未通过，且是故意的**。五条 clarify 列在 spec 文末「待裁决」一节，已各带一个暂定推荐值，规格按推荐值写成可读的整体。**Q1 与 Q3 的裁决会改变表的数量**（Q1=B 多一张交付快照表、Q3=B 去掉迁移记录表），**Q5 需要 SOP §9.2 原文**才能定枚举——派单口径是「clarify 回主控、推荐值暂定不阻塞」，所以这一条要到裁决回写后（tasks.md T001）才能勾上。
+- [x] No [NEEDS CLARIFICATION] markers remain
+      — **裁决后勾上**（主控 2026-09-21，PR #144 评论）。五条全部裁决，SOP §8 / §9.1 / §9.2 / §9.3 原文已抄进 spec 的「SOP 原文」一节，结论与「它改变了什么」记在「裁决记录」一节。文末不再有「待裁决」。
 - [x] Requirements are testable and unambiguous
-      — 未裁决的四处都**指名道姓**地指向对应的 Q（FR-004→Q1、FR-007→Q3、FR-010/FR-013→Q4、FR-017→Q5），不是含混带过。其余 FR 都写死了可验的取值与断言形状。
+      — 裁决后无例外：FR-004（快照键恰好八个）、FR-010（交接三值）、FR-013（渠道四值）、FR-017（Q5 的字段清单，**没有枚举**）都写死了取值；FR-009a / FR-019a 把两处「显示」明确成读时派生而不是存储状态。
 - [x] Success criteria are measurable
       — 每条 SC 都给了用例条数与比较方式（「逐字节相同」而不是「一样」，「三条用例，不合并」而不是「有覆盖」）。
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -26,7 +26,7 @@
 - [x] All acceptance scenarios are defined
 - [x] Edge cases are identified
 - [x] Scope is clearly bounded
-      — 见 Out of Scope：平台 API、自动发布、调度器、聚合与建议（属 `feedback-learning`）、附件与素材回填、模型调用。
+      — 见 Out of Scope：平台 API、自动发布、调度器、聚合与建议（属 `feedback-learning`）、附件与媒体文件本身（W-03）、截图上传、模型调用。§9.2 原文的「系统不保存平台发布密钥，也不提供发布执行接口」已写进 FR-023。
 - [x] Dependencies and assumptions identified
       — 关键依赖是 work-editor（#141）尚未合入；规格只硬要求「版本不可变且有稳定键」，实际列名在 tasks.md T002 以合入后的树为准。
 
@@ -39,8 +39,10 @@
 
 ## Notes
 
-- **本卡只出规格，不含实现**（派单口径）。plan.md 与 contracts/ 按暂定推荐值写，裁决后回写三处：spec 的「裁决记录」、plan 的 Project Structure（迁移数量）、contract 的表定义。
-- **两处是我在原文之外补的，已在合同里标明**：(a) `held` 从 `ready` / `scheduled` 进、回到 `ready`——§7.1 原文只说「可 cancelled / held」，没说出入边；(b) 发布记录**没有状态机**，「只前进不删」落在「记录只插不改不删」上，而不是「状态不能回退」。两处若裁决另有口径，改的是合同 §2 的图与对应用例。
-- **有一条我特意没有发明**：Q5 的声明者与核验方式，若 §9.2 没有枚举就退成自由文本、只保留「必填」。三项必填（声明者 / 证据 / 核验方式）是 §9.2 明确的，枚举不是。
+- **本卡只出规格，不含实现**（派单口径）。五条裁决已回写四个文件：spec（「SOP 原文」+「裁决记录」两节）、plan（表数与风险）、contract（表定义、状态机、快照八键、六步决策顺序）、tasks（T001 已勾，新增九条先写用例与三处变异）。
+- **两处原文之外的补充已被裁决接受**：(a) `held` 从 `ready` / `scheduled` 进、回到 `ready`；(b) 发布记录**没有状态机**，「只前进不删」落在「记录只插不改不删」上。
+- **裁决之外我另补了两处，都单列在 spec 的「裁决记录」里**：`failed` / `removed` 的原因借用 `receipt_note`（Q5 的字段清单里没有 `reason` 列）；`DeliveryPackage` 是派生视图而不是第五张表。两处各一处改动即可翻转。
+- **一处我特意没做**：「延后」没有变成第七个状态——它是改 `scheduled_at` 或进 `held`，两者都写迁移记录与原因，而 §7.1 的六个状态里没有它。
+- **Q5 的裁决删掉了两个我本来要发明的枚举**。T015a 是守住它的那条负例：半年后看到两个自由文本字段的人，会觉得「补全一下」是在帮忙。
 - 宪法 II：本卡不写 UI 单测；界面项由主控在浏览器验收。
 - 宪法 X：本清单勾选只代表「已核对」，不代表验收通过。

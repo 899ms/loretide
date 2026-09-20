@@ -6,7 +6,7 @@ description: "Implementation plan for 025 review-delivery — manual review, del
 
 **Spec**: [spec.md](./spec.md) ｜ **Contract**: [contracts/review-delivery.md](./contracts/review-delivery.md)
 
-**Status**: 五条 clarify 待裁决；计划按暂定推荐值写。**Q1 与 Q3 的裁决会改动表的数量**（Q1=B 多一张交付快照表，Q3=B 少一张迁移表），届时回写本文件与 `tasks.md`。
+**Status**: **五条 clarify 已裁决**（主控 2026-09-21，PR #144 评论）。Q1=A 与 Q3=A 都不改表的数量，**四张表、十二个迁移定稿**。SOP §8 / §9.1 / §9.2 / §9.3 原文抄在 `spec.md`。
 
 ## 照抄什么，不发明什么
 
@@ -16,7 +16,11 @@ description: "Implementation plan for 025 review-delivery — manual review, del
 2. **不可变 jsonb 快照** 照 `content_start_snapshot.snapshot`（023）——交付快照用它。
 3. **可变状态列 + 受控集** 照 `content_topic_card.status`（022）——审核请求与交付任务的 `status` 用它，Go 枚举为准、库 `CHECK` 兜底。
 
+第四处照抄：**派生显示不进存储**——「待登记」与「到期待办」照 022 列表筛选的做法在读路径算，不新增状态值。
+
 一处**不照抄**：**不用审计事件当产品历史**。审计是诊断读模型（脱敏、保留期、component 白名单），产品历史要长期逐字保留，所以迁移记录是自己的表。
+
+**一处裁决明确要求不发明**：Q5——SOP §9.2 没有给声明者与核验方式的枚举，所以本卡**不定义**这两个受控集，它们是自由文本。整个规格里只剩下五个受控集：`channel`（4）、三套 `status`（5 / 6 / 5）、`handoff_method`（3）、`version_match`（3）、`subject_kind`（2）。
 
 ## Technical Context
 
@@ -35,11 +39,11 @@ description: "Implementation plan for 025 review-delivery — manual review, del
 | 原则 | 状态 | 说明 |
 |---|---|---|
 | II. 不写 UI 单测 | 通过 | 判定与状态机进 Go / core node 测试；界面进 `manual-ui-todo.md` |
-| III. 模块边界 | **需注意** | `review-delivery` 的依赖表里**没有** `ip-profile` / `topic-planning`；渠道受控集按 Q4=A 自己定义并用一条用例与 `ip-profile` 的源文件比对 |
+| III. 模块边界 | **需注意** | `review-delivery` 的依赖表里**没有** `ip-profile` / `topic-planning`；渠道受控集按 Q4=A 在本模块自己定义**四个值**，并用一条用例读 `ip-profile` 的 Go 源文件比对（不 import） |
 | V. 无外键、CONCURRENTLY 索引、单语句迁移 | 通过 | R1–R6 逐条 |
 | VI. zod + `parseWithFallback` | 通过 | core 侧三个响应各一份 schema 与畸形降级 |
 | VIII. 范围纪律 | **需注意** | 本卡只存记录，不聚合（那是 `feedback-learning`）；不碰平台 API |
-| IX. 真实执行器保持禁用 | 通过 | 本卡更强：连外发请求都不允许，有守卫 |
+| IX. 真实执行器保持禁用 | 通过 | 本卡更强：不外发、**不存平台密钥、不提供发布执行接口**（§9.2 原文），三条守卫。另 §8「AI 不能执行人工通过动作」= FR-006a |
 | X. 打勾不是验收 | 通过 | 界面项一律记「未执行」，由主控在浏览器验收 |
 
 ## Project Structure
@@ -60,9 +64,9 @@ server/
 │   ├── N+10_content_publication_record_id_unique_idx.*
 │   └── N+11_content_publication_record_artifact_idx.*
 ├── internal/content/review-delivery/
-│   ├── contract.go          # 三类实体、四个受控集、状态机与错误
-│   ├── states.go            # 纯函数：合法迁移表与判定
-│   ├── states_test.go       # 状态机矩阵（无数据库）
+│   ├── contract.go          # 三类实体、五个受控集、八键快照、状态机与错误
+│   ├── states.go            # 纯函数：合法迁移表、条件必填判定、派生显示（待登记 / 到期待办）
+│   ├── states_test.go       # 状态机矩阵与派生显示矩阵（无数据库）
 │   ├── store.go             # 栅栏 + 审计 + 写入；读路径按 workspace_id
 │   └── store_integration_test.go
 ├── internal/handler/
@@ -92,7 +96,7 @@ specs/025-review-delivery-manual/
 
 | PR | 内容 | 验收口径 |
 |---|---|---|
-| **PR 1 存储与接口** | 四张表与十二个迁移、模块、九条端点、路由与索引登记（同一个 `upstream:` 提交）、core 的 schema 与状态机副本 | 状态机矩阵逐条、守卫（不改不删 / 不外发 / 不调度）、第 12 步三类 id 各一条、删除清单四张表各一条 |
+| **PR 1 存储与接口** | 四张表与十二个迁移、模块、九条端点、路由与索引登记（同一个 `upstream:` 提交）、core 的 schema 与状态机副本 | 状态机矩阵逐条、守卫（不改不删 / 不外发 / 不存密钥 / 不提供发布接口 / 不调度）、第 12 步**两类** id 各一条、删除清单四张表各一条、SC-012「交接 ≠ 发布」三条 |
 | **PR 2 页面** | 审核与交付页面、四语言、`manual-ui-todo.md` | 只挂既有组件、无 UI 单测；界面项全部记「未执行」 |
 
 ## 风险与对策
@@ -102,4 +106,7 @@ specs/025-review-delivery-manual/
 | work-editor（#141）尚未合入，`version_id` 的实际形状可能与 024 contract 有出入 | PR 1 的第一步是**读 #141 合入后的实际形状**；本规格只硬要求「版本不可变且有稳定键」 |
 | 「一张表记两类主体」（迁移记录）可能被读成偷懒 | 合同里写明理由：两者迁移形状完全相同，分表会让「列出这件事的全部动作」要查两次 |
 | 受控集在 Go 与 TS 两侧各写一份会漂移 | 照 `packages/core/content/ip-profile/scope.test.ts`：前端的用例**读 Go 源文件**比对，漂了就红 |
-| `scheduled_at` 被后人接上调度器而无人察觉 | SC-010 的检索用例钉住「没有任何代码读它去执行」 |
+| `scheduled_at` 被后人接上调度器而无人察觉 | SC-010 的检索用例钉住「没有任何代码读它去执行」；§9.1 的「到期待办」是读时比较（FR-009a），不是事件 |
+| §9.3 的自动 `held` 触发点分散（换稿 / 换附件 / 换账号 / 改渠道配置）会被实现成四段各自的代码 | 判定收敛成 `states.go` 的**一个纯函数**：比较任务引用的快照与当前交付目标；四个触发点是同一次比较的四个输入 |
+| Q5 不发明枚举后，自由文本字段容易退化成「什么都能填也什么都不填」 | 条件必填是唯一的约束面，SC-004 的三条用例逐字段点名；**不补充长度以外的格式校验** |
+| `failed` / `removed` 的原因借用了 `receipt_note`（裁决字段清单里没有 `reason` 列） | 已在 spec 的「裁决记录」单列，一处改动即可换成独立列 |
