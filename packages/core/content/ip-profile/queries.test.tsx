@@ -63,7 +63,11 @@ describe("useAccountProfile", () => {
     qc.clear();
   });
 
-  it("reads a failed request as the empty, all-pending profile", async () => {
+  // This used to assert the opposite: a failure came back as the empty
+  // profile. The two states are not the same, and the endpoint answers 200
+  // with an all-pending profile for an account that has no revisions, so the
+  // fallback only ever hid a real error - as "all four fields are missing".
+  it("reports a failed request as a failure, not as an empty profile", async () => {
     setApiInstance({
       getContentAccountProfile: vi.fn(async () => {
         throw new Error("boom");
@@ -75,11 +79,8 @@ describe("useAccountProfile", () => {
       wrapper: wrapper(qc),
     });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.profile).toEqual(emptyProfile());
-    expect(result.current.data?.readiness.can_start).toBe(false);
-    // Nothing confirmed means nothing to write in the account's voice.
-    expect(result.current.data?.usesNeutralExpression).toBe(true);
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.data).toBeUndefined();
     qc.clear();
   });
 

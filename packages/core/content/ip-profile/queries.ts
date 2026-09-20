@@ -78,21 +78,24 @@ export function useAccountPersona(wsId: string, accountId: string) {
  * The account's stored expression profile plus the readiness and neutral-
  * expression decisions the server derived from it.
  *
- * Like the persona query, a failure degrades to the empty profile rather than
- * an error banner: an account that has never been confirmed reads as
- * all-pending, which is exactly what the page shows anyway.
+ * A failure is reported as a failure. This used to swallow one and return the
+ * empty profile, on the reasoning that an unconfirmed account reads as
+ * all-pending anyway - but the two are not the same thing, and the endpoint
+ * never needed the fallback: `GetAccountExpressionProfile` answers 200 with an
+ * all-pending profile for an account that has no revisions yet. So the only
+ * thing the fallback ever hid was a real error, and it hid it as "this account
+ * is missing all four fields", which sends someone to go fill in a form that
+ * is already filled in.
+ *
+ * Malformed JSON still degrades rather than throwing: `parseProfileRead` goes
+ * through `parseWithFallback`. What reaches the error state here is a request
+ * that did not come back.
  */
 export function useAccountProfile(wsId: string, accountId: string) {
   return useQuery<ProfileRead>({
     queryKey: accountKeys.profile(wsId, accountId),
     enabled: !!accountId,
-    queryFn: async () => {
-      try {
-        return parseProfileRead(await api.getContentAccountProfile(accountId));
-      } catch {
-        return emptyProfileRead();
-      }
-    },
+    queryFn: async () => parseProfileRead(await api.getContentAccountProfile(accountId)),
   });
 }
 

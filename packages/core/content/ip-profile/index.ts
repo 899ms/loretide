@@ -4,4 +4,5 @@ export * from "./form-state";
 export * from "./contract";
 export * from "./queries";
 export * from "./profile";
+export * from "./profile-state";
 export * from "./profile-draft";

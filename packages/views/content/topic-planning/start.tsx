@@ -259,6 +259,12 @@ export function StartRunSection({
             accountId={accountId}
             canStart={canStart}
             missing={readiness?.missing ?? []}
+            // A failed profile read is not a readiness verdict. Without this
+            // the row would say "cannot start" and name no field, because the
+            // missing list is empty for the same reason the readiness is:
+            // nothing was read.
+            failed={profile.isError}
+            onRetry={() => void profile.refetch()}
           />
 
           <SettingsRow
@@ -430,12 +436,28 @@ function ReadinessRow({
   accountId,
   canStart,
   missing,
+  failed,
+  onRetry,
 }: {
   accountId: string;
   canStart: boolean;
   missing: string[];
+  failed: boolean;
+  onRetry: () => void;
 }) {
   const { t } = useT("common");
+  if (accountId && failed) {
+    return (
+      <SettingsRow
+        label={t(($) => $.contentTopics.start.readiness)}
+        description={t(($) => $.contentAccounts.expressionProfile.readFailedHint)}
+      >
+        <Button variant="outline" onClick={onRetry}>
+          {t(($) => $.contentAccounts.expressionProfile.retry)}
+        </Button>
+      </SettingsRow>
+    );
+  }
   if (!accountId) {
     return (
       <SettingsRow label={t(($) => $.contentTopics.start.readiness)}>

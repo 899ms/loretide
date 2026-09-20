@@ -9,6 +9,7 @@ import {
   draftToProfile,
   emptyProfileRead,
   isListField,
+  profileReadState,
   isPendingWithValue,
   profileToDraft,
   saveOutcome,
@@ -54,6 +55,13 @@ export function ExpressionProfileSections({
   const [confirming, setConfirming] = useState<string>("");
   const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
 
+  const state = profileReadState({
+    enabled: !!accountId,
+    isPending: profileRead.isPending,
+    isError: profileRead.isError,
+    data: profileRead.data,
+  });
+
   // Until the read lands the page shows an all-pending profile, which is also
   // what a real account with no revisions reads as. One rendering, one shape.
   const server = profileRead.data ?? emptyProfileRead();
@@ -82,6 +90,27 @@ export function ExpressionProfileSections({
       },
     );
   };
+
+  // A failed read does not fall back to the empty profile. Rendering the form
+  // against a profile nobody read would let someone confirm a group and append
+  // a revision of blanks over fields that are actually filled in - the read
+  // failed, so what is on screen is not the account's.
+  if (state === "failed") {
+    return (
+      <SettingsSection
+        title={t(($) => $.contentAccounts.expressionProfile.sectionTitle)}
+        description={t(($) => $.contentAccounts.expressionProfile.readFailedHint)}
+      >
+        <SettingsCard>
+          <SettingsRow label={t(($) => $.contentAccounts.expressionProfile.readFailed)}>
+            <Button variant="outline" onClick={() => void profileRead.refetch()}>
+              {t(($) => $.contentAccounts.expressionProfile.retry)}
+            </Button>
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
+    );
+  }
 
   return (
     <>
