@@ -65,6 +65,7 @@
     "discord_card": {
       "title": "Discord に参加",
       "dismiss": "閉じる"
-    }
+    },
+    "content_group": "コンテンツ"
   }
 }
