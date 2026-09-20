@@ -17,6 +17,10 @@ import (
 //	        cascade, and every index is created CONCURRENTLY in a file of its
 //	        own                                                      (SC-004)
 //
+// Feature 022 extends that policy from migration 483 onward with R5: PRIMARY
+// KEY and UNIQUE constraints are also indexes and therefore cannot be hidden
+// inside a table migration (FR-013 / SC-008).
+//
 // This closes the DIAG-04 row of docs/development/diagnostics-acceptance-mapping.md,
 // which #48 had just recorded as verified BY HAND ("仓库迁移测试仍不检查这两项,
 // 属人工核对"). A hand check is true on the day it is done; this one is true on
@@ -31,6 +35,12 @@ import (
 // turn every other module's foreign key into a red line owned by this one.
 const contentMigrationFloor = 468
 
+// implicitIndexRuleFloor is the first topic-planning migration. Migrations 477
+// and 479 predate the rule and contain inline primary keys; changing them would
+// be a separate production migration, not a lint repair. New content migrations
+// must keep every index in its own concurrent migration.
+const implicitIndexRuleFloor = 483
+
 // violation is one broken rule, addressed to whoever has to fix it.
 type violation struct {
 	file string
@@ -41,11 +51,14 @@ type violation struct {
 func (v violation) String() string { return fmt.Sprintf("%s: %s %s", v.file, v.rule, v.why) }
 
 var (
-	reForeignKey  = regexp.MustCompile(`(?i)\b(REFERENCES|FOREIGN\s+KEY)\b`)
-	reCascade     = regexp.MustCompile(`(?i)\bCASCADE\b`)
-	reCreateIndex = regexp.MustCompile(`(?i)\bCREATE\s+(UNIQUE\s+)?INDEX\b`)
-	reConcurrent  = regexp.MustCompile(`(?i)\bCREATE\s+(UNIQUE\s+)?INDEX\s+CONCURRENTLY\b`)
-	reNumber      = regexp.MustCompile(`^(\d+)_`)
+	reForeignKey        = regexp.MustCompile(`(?i)\b(REFERENCES|FOREIGN\s+KEY)\b`)
+	reCascade           = regexp.MustCompile(`(?i)\bCASCADE\b`)
+	reCreateIndex       = regexp.MustCompile(`(?i)\bCREATE\s+(UNIQUE\s+)?INDEX\b`)
+	reCreateUniqueIndex = regexp.MustCompile(`(?i)\bCREATE\s+UNIQUE\s+INDEX\b`)
+	reConcurrent        = regexp.MustCompile(`(?i)\bCREATE\s+(UNIQUE\s+)?INDEX\s+CONCURRENTLY\b`)
+	rePrimaryKey        = regexp.MustCompile(`(?i)\bPRIMARY\s+KEY\b`)
+	reUnique            = regexp.MustCompile(`(?i)\bUNIQUE\b`)
+	reNumber            = regexp.MustCompile(`^(\d+)_`)
 )
 
 // stripSQLTrivia blanks out line comments, block comments and string literals,
@@ -134,6 +147,18 @@ func checkContentMigrations(files map[string]string) []violation {
 		concurrent := reConcurrent.FindAllString(sql, -1)
 		if len(indexes) != len(concurrent) {
 			found = append(found, violation{name, "R3", fmt.Sprintf("index must be created CONCURRENTLY (%d index statements, %d concurrent)", len(indexes), len(concurrent))})
+		}
+		// PRIMARY KEY and UNIQUE constraints also build indexes, but PostgreSQL
+		// does not offer a concurrent form for those implicit builds. Explicit
+		// CREATE UNIQUE INDEX statements account for one UNIQUE token each and
+		// are already governed by R3/R4.
+		number, _ := strconv.Atoi(reNumber.FindStringSubmatch(name)[1])
+		if number >= implicitIndexRuleFloor {
+			primaryKeys := len(rePrimaryKey.FindAllString(sql, -1))
+			uniqueConstraints := len(reUnique.FindAllString(sql, -1)) - len(reCreateUniqueIndex.FindAllString(sql, -1))
+			if primaryKeys > 0 || uniqueConstraints > 0 {
+				found = append(found, violation{name, "R5", fmt.Sprintf("PRIMARY KEY/UNIQUE constraint creates a non-concurrent index (%d primary key, %d unique constraints)", primaryKeys, uniqueConstraints)})
+			}
 		}
 		// PostgreSQL refuses a concurrent index build inside a transaction or a
 		// multi-statement string, so a file that builds one may hold nothing
@@ -235,6 +260,18 @@ func TestContentMigrationConstraintsCatchViolations(t *testing.T) {
 			file: "483_content_thing_idx.up.sql",
 			sql:  "CREATE TABLE content_other (id text);\nCREATE INDEX CONCURRENTLY content_thing_idx ON content_thing (id);",
 			rule: "R4",
+		},
+		{
+			name: "inline primary key",
+			file: "484_content_thing.up.sql",
+			sql:  "CREATE TABLE content_thing (id text PRIMARY KEY);",
+			rule: "R5",
+		},
+		{
+			name: "inline unique constraint",
+			file: "485_content_thing.up.sql",
+			sql:  "CREATE TABLE content_thing (id text NOT NULL, slug text UNIQUE);",
+			rule: "R5",
 		},
 	}
 	for _, tc := range cases {

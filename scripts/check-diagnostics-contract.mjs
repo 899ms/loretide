@@ -23,7 +23,7 @@ const PROVIDER_MODULE = DIAGNOSTICS_IMPORT.slice(DIAGNOSTICS_IMPORT.lastIndexOf(
 // and using one does not mean the module records anything. Keeping them out is
 // the entire value E2 adds on top of E1.
 const CALL_SITES = {
-  audit: ['Audit', 'CommitRun'],
+  audit: ['Audit', 'AuditTx', 'CommitRun'],
   'technical log': ['Technical', 'SlogHandler', 'LogBuffer'],
   trace: ['Child', 'Pack', 'Unpack', 'DecodeQueuedEnvelope'],
 };

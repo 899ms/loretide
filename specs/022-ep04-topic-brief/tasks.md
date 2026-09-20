@@ -17,19 +17,19 @@
 
 - [ ] T001 迁移编号按当时 `server/migrations/` 的最大值顺延，先确认最大值再写文件名。 — **FR-013**
 - [ ] T002 `content_topic_card` 建表迁移（**单语句、无外键、无级联、不建索引**）。字段见 `contracts/` T-1～T-5。 — **FR-001、FR-006、FR-013**
-- [ ] T003 [P] `content_topic_card` 的 `workspace_id` 索引 —— **单独文件、单条语句、`CREATE INDEX CONCURRENTLY`**。 — **FR-013**
+- [ ] T003 [P] `content_topic_card` 的稳定 id 唯一索引与 `workspace_id` 索引 —— **各自单独文件、单条语句、`CREATE UNIQUE INDEX CONCURRENTLY` / `CREATE INDEX CONCURRENTLY`**。建表迁移不得用会隐式建索引的 `PRIMARY KEY`。 — **FR-011、FR-013**
 - [ ] T004 `content_brief_revision` 建表迁移（同 T002 的约束）。字段见 B-1。 — **FR-007、FR-008、FR-011、FR-013**
-- [ ] T005 [P] `UNIQUE (topic_card_id, revision)` —— 单独文件、`CREATE UNIQUE INDEX CONCURRENTLY`。 — **FR-011、FR-013**
+- [ ] T005 [P] `brief_revision_id` 的稳定 id 唯一索引与 `UNIQUE (topic_card_id, revision)` —— **各自单独文件、`CREATE UNIQUE INDEX CONCURRENTLY`**。建表迁移不得用会隐式建索引的 `PRIMARY KEY`。 — **FR-011、FR-013**
 - [ ] T006 [P] `content_brief_revision` 的 `workspace_id` 索引 —— 单独文件、`CREATE INDEX CONCURRENTLY`。 — **FR-013**
 - [ ] T007 每个 `.up.sql` 配一个可逆的 `.down.sql`。 — **FR-013**
-- [ ] T008 本机实跑 `go run ./cmd/migrate up`，确认五个文件全部应用成功；再跑一次确认幂等。 — **FR-013**
+- [ ] T008 本机实跑 `go run ./cmd/migrate up`，确认七个文件全部应用成功；再跑一次确认幂等。 — **FR-013**
 - [ ] T009 迁移约束自证：新迁移中外键 / 级联数为 0；非 CONCURRENTLY 索引数为 0；一个文件多于一条语句的数为 0（SC-008）。既有的 `server/internal/migrations/content_constraints_test.go` 覆盖 468 及之后所有 `content_` 迁移，确认它对新文件也通过。 — **FR-013、SC-008**
 
 ## PR 1 · Phase 2：模块与存储
 
 - [ ] T010 先写失败测试 `server/internal/content/topic-planning/*_test.go`：七项字段可存可读回；每项允许「如实说明没有」；四个动作改状态；暂缓 / 放弃记原因与备注。 — **FR-001 ～ FR-004**
 - [ ] T011 新建 `server/internal/content/topic-planning/contract.go`：`TopicCard` / `BriefRevision` 形状与动作枚举。 — **FR-001、FR-006、FR-008、FR-015**
-- [ ] T012 `store.go`：读写。**改变状态的操作在同一事务内调 `diagnostics.Store.Audit`**，审计写失败即整体回滚。 — **FR-015**
+- [ ] T012 `store.go`：读写。**改变状态的操作在同一事务内调 `diagnostics.Store.AuditTx`**，审计写失败即整体回滚。 — **FR-015**
 - [ ] T013 简报版本 append-only：**不提供** UPDATE 或 DELETE 方法。先写一条测试断言这样的方法不存在（代码检索 + 行为断言双管）。 — **FR-009、FR-010、FR-018、SC-006**
 - [ ] T014 「开始」的幂等：同一张卡连续两次「开始」只产生一份首版（SC-007）。先写失败测试。 — **FR-012、SC-007**
 - [ ] T015 暂缓 / 放弃不触碰 IP 配置：操作前后账号配置**逐字节比对**（SC-003）。先写失败测试。 — **FR-005、SC-003**

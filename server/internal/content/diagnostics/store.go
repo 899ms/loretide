@@ -182,6 +182,25 @@ func (s *Store) Audit(ctx context.Context, scope Scope, e Event) error {
 	}
 	return s.withWorkspaceWrite(ctx, e.Workspace, func(tx pgx.Tx) error { return s.appendAudit(ctx, tx, e) })
 }
+
+// AuditTx records an audit event inside a transaction owned by the caller.
+// It deliberately does not begin, commit, or roll back: the business write and
+// audit write must have one fate, decided by the module that owns the business
+// transaction. The workspace guard runs before the audit insert so callers can
+// use this as the first write in their transaction and share the same lock
+// order as workspace deletion.
+func (s *Store) AuditTx(ctx context.Context, tx pgx.Tx, scope Scope, e Event) error {
+	if tx == nil || s == nil || s.guard == nil {
+		return ErrUnavailable
+	}
+	if !scope.Allows(e.Workspace, e.Account) || scope.Actor != e.Actor {
+		return ErrDenied
+	}
+	if err := s.guard.LockForContentDiagnosticWrite(ctx, tx, e.Workspace); err != nil {
+		return err
+	}
+	return s.appendAudit(ctx, tx, Sanitize(e))
+}
 func (s *Store) Technical(ctx context.Context, e Event) { s.technical(ctx, e, false) }
 
 // TechnicalFailingSink takes the same event down the same path but makes the

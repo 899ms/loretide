@@ -610,6 +610,25 @@ type ContentAccountRevision struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentBriefRevision struct {
+	BriefRevisionID      string             `json:"brief_revision_id"`
+	TopicCardID          string             `json:"topic_card_id"`
+	WorkspaceID          string             `json:"workspace_id"`
+	Revision             int64              `json:"revision"`
+	Audience             string             `json:"audience"`
+	CoreProblem          string             `json:"core_problem"`
+	ClaimAndBoundaries   string             `json:"claim_and_boundaries"`
+	Channels             []byte             `json:"channels"`
+	Format               string             `json:"format"`
+	Structure            string             `json:"structure"`
+	CitationRequirements string             `json:"citation_requirements"`
+	SourceScope          string             `json:"source_scope"`
+	Deliverable          string             `json:"deliverable"`
+	TimeLimit            string             `json:"time_limit"`
+	CostLimit            string             `json:"cost_limit"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContentDiagnosticRun struct {
 	RunID       string             `json:"run_id"`
 	WorkspaceID string             `json:"workspace_id"`
@@ -651,6 +670,25 @@ type ContentTechnicalLog struct {
 	AccountID   string             `json:"account_id"`
 	ReceivedAt  pgtype.Timestamptz `json:"received_at"`
 	Payload     []byte             `json:"payload"`
+}
+
+type ContentTopicCard struct {
+	TopicCardID               string             `json:"topic_card_id"`
+	WorkspaceID               string             `json:"workspace_id"`
+	AccountID                 pgtype.Text        `json:"account_id"`
+	AudienceProblemJudgment   string             `json:"audience_problem_judgment"`
+	IpFit                     string             `json:"ip_fit"`
+	Timing                    string             `json:"timing"`
+	ExistingContentRelation   string             `json:"existing_content_relation"`
+	EvidenceGapsAndInvestment string             `json:"evidence_gaps_and_investment"`
+	Channels                  []byte             `json:"channels"`
+	RecommendedAction         string             `json:"recommended_action"`
+	Status                    string             `json:"status"`
+	DecisionReason            string             `json:"decision_reason"`
+	DecisionNote              string             `json:"decision_note"`
+	StartedBriefRevisionID    pgtype.Text        `json:"started_brief_revision_id"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
 }
 
 type DaemonConnection struct {

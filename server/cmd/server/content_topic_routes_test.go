@@ -1,0 +1,158 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/multica-ai/multica/server/internal/analytics"
+	"github.com/multica-ai/multica/server/internal/events"
+	"github.com/multica-ai/multica/server/internal/realtime"
+	"github.com/multica-ai/multica/server/internal/testutil"
+)
+
+var contentTopicRoutes = []struct {
+	method  string
+	pattern string
+	path    string
+}{
+	{http.MethodGet, "/api/content-topics/", "/api/content-topics"},
+	{http.MethodPost, "/api/content-topics/", "/api/content-topics"},
+	{http.MethodGet, "/api/content-topics/{id}/", "/api/content-topics/topic-1"},
+	{http.MethodPost, "/api/content-topics/{id}/actions", "/api/content-topics/topic-1/actions"},
+	{http.MethodGet, "/api/content-topics/{id}/briefs", "/api/content-topics/topic-1/briefs"},
+	{http.MethodPost, "/api/content-topics/{id}/briefs", "/api/content-topics/topic-1/briefs"},
+	{http.MethodGet, "/api/content-topics/{id}/briefs/{revisionId}", "/api/content-topics/topic-1/briefs/revision-1"},
+}
+
+func TestContentTopicEndpointsAreMounted(t *testing.T) {
+	router := NewRouter(nil, realtime.NewHub(), events.New(), analytics.NoopClient{}, nil)
+	mounted := map[string]bool{}
+	if err := chi.Walk(router, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		mounted[method+" "+route] = true
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, route := range contentTopicRoutes {
+		if !mounted[route.method+" "+route.pattern] {
+			t.Errorf("%s %s is not mounted", route.method, route.pattern)
+		}
+	}
+}
+
+func TestContentTopicEndpointsRejectUnauthenticatedCallers(t *testing.T) {
+	router := NewRouter(nil, realtime.NewHub(), events.New(), analytics.NoopClient{}, nil)
+	for _, route := range contentTopicRoutes {
+		req := testutil.JSONRequest(route.method, route.path, `{}`)
+		testutil.Call(t, router.ServeHTTP, req).Want(http.StatusUnauthorized)
+	}
+}
+
+// workspaceCoreRefusal matches the row content/workspace-core writes when it
+// refuses a request. It cannot match on the component name: Sanitize is an
+// allowlist and carries no content-module name, so every module's refusal is
+// stored as component "unknown". What survives sanitization still identifies
+// this writer uniquely - the api middleware logs object_type "diagnostics" with
+// action "execute", and no other writer pairs object_type "account" with action
+// "query" and step "not_member".
+const workspaceCoreRefusal = `payload->>'error_code'='AUTHORIZATION_DENIED'
+	AND payload->>'object_type'='account'
+	AND payload->>'action'='query'
+	AND payload->>'outcome'='failed'
+	AND payload->>'severity'='warn'
+	AND payload->>'step'='not_member'`
+
+func TestContentTopicEndpointsHideTheWorkspaceFromNonMembers(t *testing.T) {
+	if testPool == nil || testServer == nil {
+		t.Skip("database not available")
+	}
+	fx := testutil.New(testPool, testWorkspaceID, testUserID)
+	email := fmt.Sprintf("content-topic-outsider-%d@multica.test", time.Now().UnixNano())
+	outsider := fx.User(t, "Content Topic Outsider", email)
+	token, err := generateTestJWT(outsider, email, "Content Topic Outsider")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fx.Cleanup(t, `DELETE FROM content_technical_log
+		WHERE workspace_id=$1 AND payload->>'actor_id'=$2 AND `+workspaceCoreRefusal,
+		testWorkspaceID, outsider)
+	denialsBefore := fx.Count(t, `SELECT count(*) FROM content_technical_log
+		WHERE workspace_id=$1 AND payload->>'actor_id'=$2 AND `+workspaceCoreRefusal,
+		testWorkspaceID, outsider)
+	for _, route := range contentTopicRoutes {
+		req, err := http.NewRequest(route.method, testServer.URL+route.path, strings.NewReader("{}"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Workspace-ID", testWorkspaceID)
+		response, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusNotFound {
+			t.Errorf("%s %s as outsider = %d, want 404", route.method, route.path, response.StatusCode)
+		}
+	}
+	denialsAfter := fx.Count(t, `SELECT count(*) FROM content_technical_log
+		WHERE workspace_id=$1 AND payload->>'actor_id'=$2 AND `+workspaceCoreRefusal,
+		testWorkspaceID, outsider)
+	if got := denialsAfter - denialsBefore; got != len(contentTopicRoutes) {
+		t.Fatalf("workspace-core recorded %d topic refusals, want %d", got, len(contentTopicRoutes))
+	}
+}
+
+func TestContentTopicPathIDSurvivesTheRealMiddleware(t *testing.T) {
+	if testPool == nil || testServer == nil {
+		t.Skip("database not available")
+	}
+	fx := testutil.New(testPool, testWorkspaceID, testUserID)
+	response := accountAPIRequest(t, http.MethodPost, "/api/content-topics", `{
+		"audience_problem_judgment":"audience/problem/judgment",
+		"ip_fit":"fit",
+		"timing":"没有时效依据",
+		"existing_content_relation":"没有",
+		"evidence_gaps_and_investment":"没有现成证据",
+		"channels":["zhihu"],
+		"recommended_action":"start"
+	}`)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("create topic = %d, want 201", response.StatusCode)
+	}
+	var created struct {
+		TopicCardID string `json:"topic_card_id"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.TopicCardID == "" || created.TopicCardID == testWorkspaceID {
+		t.Fatalf("topic id %q cannot prove path/context separation", created.TopicCardID)
+	}
+	fx.Cleanup(t, `DELETE FROM content_operation_audit
+		WHERE workspace_id=$1 AND payload->>'object_id'=$2`, testWorkspaceID, created.TopicCardID)
+	fx.Cleanup(t, `DELETE FROM content_brief_revision WHERE topic_card_id=$1`, created.TopicCardID)
+	fx.Cleanup(t, `DELETE FROM content_topic_card WHERE topic_card_id=$1`, created.TopicCardID)
+
+	read := accountAPIRequest(t, http.MethodGet, "/api/content-topics/"+created.TopicCardID, "")
+	defer read.Body.Close()
+	if read.StatusCode != http.StatusOK {
+		t.Fatalf("GET path topic = %d, want 200", read.StatusCode)
+	}
+	var got struct {
+		TopicCardID string `json:"topic_card_id"`
+	}
+	if err := json.NewDecoder(read.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.TopicCardID != created.TopicCardID {
+		t.Fatalf("path named %q, response returned %q", created.TopicCardID, got.TopicCardID)
+	}
+}

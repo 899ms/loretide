@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_brief_revision_topic_revision_idx;

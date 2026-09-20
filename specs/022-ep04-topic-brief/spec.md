@@ -31,7 +31,7 @@
 `content_account_revision`（迁移 479）与它的两个 CONCURRENTLY 索引（480 / 481）就是 `ContentBriefRevision` 要照抄的形状：
 
 ```text
-revision_id  text PRIMARY KEY   -- 被别处引用的键
+revision_id  text NOT NULL      -- 被别处引用的键；唯一索引另用 CONCURRENTLY 迁移
 account_id   text
 workspace_id text
 revision     bigint             -- 每账号自增，给人读与排序，不是跨表键
@@ -178,7 +178,7 @@ created_at   timestamptz
 - **FR-008**: 「渠道」MUST 能容纳多个值。
 - **FR-009**: 修改简报 MUST 追加新版本，MUST NOT 更新既有版本。
 - **FR-010**: 版本表 MUST 是 append-only：没有更新路径，没有删除路径（品牌删除除外）。
-- **FR-011**: 版本 id MUST 是稳定且可被外部引用的键；版本号 MUST 只作人读与排序之用，MUST NOT 作跨表键。
+- **FR-011**: 版本 id MUST 是稳定且可被外部引用的唯一键；其唯一索引 MUST 由单独的 `CREATE UNIQUE INDEX CONCURRENTLY` 迁移建立；版本号 MUST 只作人读与排序之用，MUST NOT 作跨表键。
 - **FR-012**: 同一张卡重复「开始」MUST NOT 产生第二份首版。
 
 ### 存储与边界

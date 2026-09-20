@@ -20,7 +20,7 @@
 | B-1 | 字段覆盖 §5.3 十一项：受众 / 核心问题 / 主张与边界 / 渠道 / 形式 / 结构 / 引用要求 / 资料范围 / 交付物 / 时间上限 / 成本上限 |
 | B-2 | **渠道可以是多个**（§5.3：「简报可以包含多个渠道」） |
 | B-3 | **Append-only**：没有 UPDATE 路径，没有 DELETE 路径。唯一的删除是品牌删除 |
-| B-4 | `revision_id` 是被外部引用的稳定键；`revision` 是每张卡自增的计数器，**只给人读与排序**，MUST NOT 作跨表键 |
+| B-4 | `revision_id` 是被外部引用的稳定键，以单独的 `CREATE UNIQUE INDEX CONCURRENTLY` 保证唯一；`revision` 是每张卡自增的计数器，**只给人读与排序**，MUST NOT 作跨表键 |
 | B-5 | `UNIQUE (topic_card_id, revision)`，**单独一个 CONCURRENTLY 迁移文件** |
 | B-6 | 同一张卡重复「开始」MUST NOT 产生第二份首版 |
 
@@ -40,11 +40,24 @@
 | A-2 | 越权是 **404**，经 `RefusalStatus` / `RefusalBody` |
 | A-3 | 带路径参数的端点有一条**穿过真实中间件、路径参数 ≠ 上下文值**的用例 |
 
+## HTTP 端点（PR 1）
+
+| 方法 | 路径 | 用途 |
+|---|---|---|
+| `GET` / `POST` | `/api/content-topics` | 列表 / 手工新建选题卡 |
+| `GET` | `/api/content-topics/{id}` | 读取一张卡；查询同时带 `workspace_id` |
+| `POST` | `/api/content-topics/{id}/actions` | `start` / `save` / `defer` / `drop`；`start` 同事务创建且只创建一份首版简报 |
+| `GET` / `POST` | `/api/content-topics/{id}/briefs` | 版本列表 / 追加版本 |
+| `GET` | `/api/content-topics/{id}/briefs/{revisionId}` | 按稳定 `brief_revision_id` 读取旧版 |
+
+简报端点故意没有 `PATCH` / `PUT` / `DELETE`。`revision` 只排序，路径使用稳定的 `revisionId`。
+
 ## 接入合同
 
 新模块目录从创建那一刻起受 `docs/development/diagnostics-onboarding-contract.md` 第 2 节约束，落地模块数由 **3** 变 **4**。至少四面：
 
-- **审计**：改变状态的操作在**同一个事务内**调 `Store.Audit`；审计写失败即整体回滚；
+- **审计**：改变状态的操作在**同一个事务内**调 `Store.AuditTx`；审计写失败即整体回滚；
+- **删除栅栏**：每条写入在自己的事务里**先取** `LockWorkspaceForContentDiagnosticWrite`（FOR KEY SHARE），无行即工作区已删、按 404 语义拒绝。`AuditTx` 也取同一把锁，但那只覆盖有审计的路径，不作数（Issue #104）；
 - **技术日志**：失败路径产出 `Event`，填 `Component` / `Severity` / `Action` / `Outcome` / `Code`；写失败只计数不拖垮业务；
 - **trace**：跨步骤用 `Child(ctx)`，**不自己造 trace id**；
 - **脱敏**：进日志或审计的 `Event` 一律过 `Sanitize`；HTTP 边界只用 `RequestIdentity`。

@@ -1883,6 +1883,23 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			})
 		})
 
+		// Topic planning owns its workspace authorization boundary. Keep this
+		// route inside Auth but outside the generic member middleware below so
+		// every decision reaches workspace-core.Authorize, including refusals
+		// that must be recorded in the technical diagnostics log.
+		r.Route("/api/content-topics", func(r chi.Router) {
+			r.Use(h.DiagnosticTrace)
+			r.Get("/", h.ListContentTopics)
+			r.Post("/", h.CreateContentTopic)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Get("/", h.GetContentTopic)
+				r.Post("/actions", h.ActOnContentTopic)
+				r.Get("/briefs", h.ListContentBriefs)
+				r.Post("/briefs", h.AppendContentBrief)
+				r.Get("/briefs/{revisionId}", h.GetContentBrief)
+			})
+		})
+
 		// --- Workspace-scoped routes (all require workspace membership) ---
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireWorkspaceMember(queries))
@@ -1925,6 +1942,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Put("/scope", h.SetAccountScope)
 				})
 			})
+
 			r.Get("/api/assignee-frequency", h.GetAssigneeFrequency)
 
 			// Issues

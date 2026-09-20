@@ -8,7 +8,7 @@
 
 三处照抄既有做法，不发明：
 
-1. **版本表** 照 `content_account_revision`（迁移 479～481）—— append-only，`revision_id` 是被引用的键，`revision` 只给人读，唯一索引单独一个 CONCURRENTLY 迁移。
+1. **版本表** 照 `content_account_revision` 的 append-only 形状，但按当前迁移硬规则把 `revision_id` 唯一性也拆成单独的 CONCURRENTLY 索引——`revision_id` 是被引用的键，`revision` 只给人读。
 2. **授权** 照 `workspace-core` 的 `Authorize` + `RefusalStatus` / `RefusalBody` —— 不自己判成员、不自己造 404。
 3. **工作区删除** 照四张 `content_` 表 —— 删除清单登记 + 同一 CTE 链里一条 `DELETE`，无外键无级联。
 
@@ -18,7 +18,7 @@
 
 **Language/Version**: Go 1.26（`server/`）、TypeScript 5 strict（`packages/core`、`packages/views`）
 
-**Storage**: PostgreSQL。**两张新表 + 若干 CONCURRENTLY 索引**，每个索引单独一个迁移文件、单条语句。
+**Storage**: PostgreSQL。**两张新表 + 五个 CONCURRENTLY 索引**，每个索引单独一个迁移文件、单条语句；建表迁移不使用会隐式建索引的 `PRIMARY KEY`。
 
 **Testing**: `go test ./internal/content/topic-planning/` 与 `./internal/handler/`（`DATABASE_URL` 实跑）、`packages/core/*.test.ts`（node）。**无 UI 单测。**
 
@@ -51,8 +51,10 @@
 server/
 ├── migrations/
 │   ├── 4xx_content_topic_card.up.sql            # 建表，单语句
+│   ├── 4xx_content_topic_card_id_unique_idx.up.sql
 │   ├── 4xx_content_topic_card_workspace_idx.up.sql
 │   ├── 4xx_content_brief_revision.up.sql
+│   ├── 4xx_content_brief_revision_id_unique_idx.up.sql
 │   ├── 4xx_content_brief_revision_unique_idx.up.sql   # UNIQUE (topic_card_id, revision)
 │   └── 4xx_content_brief_revision_workspace_idx.up.sql
 │       （各配 .down.sql；编号在实施时按当时的最大值顺延）
