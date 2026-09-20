@@ -10,7 +10,7 @@ description: "Task list for 021 account expression profile — storage and inter
 
 **三项 clarify 已裁决（全部 A）**，并追加一条：最小可开始条件只计 `status=confirmed`。
 
-**本 PR 无界面、无 TS 改动。** 页面是第二个 PR。
+**第一个 PR（T001-T022）无界面、无 TS 改动。** 页面是第二个 PR（T023-T031，Issue #117）。
 
 ---
 
@@ -84,3 +84,21 @@ Setup (T001-T002)
 1. **结转那条先钉死**：加列之后最容易出现的数据丢失就是「改一半清空另一半」，而且它很安静。
 2. **「不自动猜测」拆成四条**，因为它是 §3.1 唯一一句明确的禁止，笼统一条测不出是哪一类漏了。
 3. **判定矩阵与中性表达分开写**：前者是门槛，后者是标记，混在一起会让「没有样本也能开始」这件事变得不明显。
+
+
+---
+
+## Phase 7: 页面与 core 判定（第二个 PR，Issue #117）
+
+宪法 II：**不写 UI 单测、不做浏览器验收**。界面项进 `manual-ui-todo.md`，由主任务人工看。
+非 UI 的逻辑（core 纯函数、hooks 解析）必须有测试。
+
+- [x] T023 新建 `packages/core/content/ip-profile/profile.ts`：Go 侧类型的镜像 + `profileReadiness` / `usesNeutralExpression` / `parseProfileRead`（`parseWithFallback` + 宽松 schema，未知状态降级为 `pending`）
+- [x] T024 新建 `specs/021-account-expression-profile/contracts/readiness-parity.json`：16 条判定矩阵，Go 与 TS **两侧都断言它**，比的是判定而不是函数名
+- [x] T025 新建 `server/internal/content/ip-profile/profile_parity_test.go`：Go 侧跑矩阵，并有一条「矩阵必须覆盖两种结果」的守卫，防止两侧同时把规则反过来还是绿
+- [x] T026 新建 `packages/core/content/ip-profile/profile.test.ts`（node 环境）：TS 侧跑同一份矩阵 + 解析与降级用例
+- [x] T027 新建 `packages/core/content/ip-profile/profile-draft.ts`：分组、草稿↔档案互转、编辑已确认字段即退回 pending、按组确认。**页面里的每条规则都在这里**，配 `profile-draft.test.ts`
+- [x] T028 `packages/core/api/client.ts` 加 `getContentAccountProfile` / `setContentAccountProfile`；`queries.ts` 加 `useAccountProfile` / `useSetAccountProfile` / `accountKeys.profile`，配 `queries.test.tsx`（解析、失败降级、写入后两个 key 都失效）
+- [x] T029 新建 `packages/views/content/ip-profile/expression-profile.tsx` 并挂进账号页：**只用既有组件**（SettingsSection / SettingsCard / SettingsRow / Textarea / Input / Button / SettingsSaveState），不新增控件、不调样式
+- [x] T030 四语言文案（en / zh-Hans / ja / ko）并跑 `locales/parity.test.ts`
+- [x] T031 验证：core 与 views vitest、`pnpm typecheck --force`、三项 check；界面项写进 `manual-ui-todo.md` 并在 PR 正文列出
