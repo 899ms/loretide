@@ -664,6 +664,18 @@ type ContentOperationAudit struct {
 	Payload     []byte             `json:"payload"`
 }
 
+type ContentStartSnapshot struct {
+	SnapshotID      string             `json:"snapshot_id"`
+	WorkspaceID     string             `json:"workspace_id"`
+	TopicCardID     string             `json:"topic_card_id"`
+	BriefRevisionID string             `json:"brief_revision_id"`
+	AccountID       string             `json:"account_id"`
+	ProjectID       string             `json:"project_id"`
+	ActorID         string             `json:"actor_id"`
+	Snapshot        []byte             `json:"snapshot"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContentTechnicalLog struct {
 	Sequence    pgtype.Int8        `json:"sequence"`
 	EventID     string             `json:"event_id"`

@@ -318,6 +318,9 @@ deleted_content_brief_revisions AS (
 deleted_content_topic_cards AS (
     DELETE FROM content_topic_card WHERE workspace_id = $1::text
 ),
+deleted_content_start_snapshots AS (
+    DELETE FROM content_start_snapshot WHERE workspace_id = $1::text
+),
 deleted_content_accounts AS (
     DELETE FROM content_account WHERE workspace_id = $1::text
 ),
@@ -518,6 +521,11 @@ WHERE channel_media_pending_object.workspace_id = $1
 // cast the handler UUID parameter at this boundary.
 // Topic cards and their immutable brief history are application-related only;
 // both are removed explicitly in this same workspace transaction.
+// Input snapshots are append-only everywhere else; this is the one statement
+// that removes them, and it is here rather than behind a cascade because the
+// table carries no foreign key (specs/023). Registered in the deletion
+// manifest test alongside this: doing only one of the two leaves either
+// orphaned rows or a drifting manifest.
 // Brand content accounts go with the workspace. Registered in the deletion
 // manifest test alongside this, because only doing one of the two leaves
 // either orphaned rows (manifest only) or a drifting manifest (delete only).
