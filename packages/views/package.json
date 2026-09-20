@@ -62,7 +62,7 @@
     "./content/topic-planning": "./content/topic-planning/index.tsx",
     "./content/work-editor": "./content/work-editor/index.tsx",
     "./content/review-delivery": "./content/review-delivery/index.tsx",
-    "./content/feedback-learning": "./content/feedback-learning/index.tsx"
+    "./content/source-inbox": "./content/source-inbox/index.tsx"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",

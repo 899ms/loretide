@@ -780,5 +780,81 @@
         "weeklyHours": "Weekly hours"
       }
     }
+  },
+  "contentSources": {
+    "title": "Material inbox",
+    "description": "Collect what is worth keeping, then organise it. Nothing here is fetched or parsed for you.",
+    "parseTitle": "Parsing",
+    "parseUnavailable": "Material parsing is unavailable for now (it arrives with the parser). Everything below was typed by a person — no summaries, entities or related material are generated.",
+    "collectTitle": "Collect",
+    "kindLabel": "Type",
+    "kinds": {
+      "pasted_text": "Pasted text",
+      "url": "Link"
+    },
+    "urlLabel": "Link",
+    "urlPlaceholder": "https://…",
+    "urlNotFetched": "The link is stored, not opened. Write down what it says in the note below.",
+    "contentLabel": "Text",
+    "contentPlaceholder": "Paste the text here",
+    "titleLabel": "Title",
+    "tagsLabel": "Tags",
+    "tagsPlaceholder": "separated by commas or spaces",
+    "annotationLabel": "Note while collecting",
+    "judgementLabel": "Why keep it",
+    "historicalLabel": "Historical import",
+    "historicalHint": "Material brought in from before, rather than collected just now. Set when it is collected and never changes.",
+    "collect": "Collect",
+    "collected": "Collected",
+    "problem": {
+      "kind": "Pick a type",
+      "url": "A link starting with http:// or https://",
+      "content": "Paste some text"
+    },
+    "duplicateHint": "The same text is already here as {{count}} other items. All are kept, each with its own note.",
+    "listTitle": "Inbox",
+    "empty": "Nothing collected yet",
+    "loading": "Loading…",
+    "failed": "Could not load",
+    "rowFailed": "Could not read this one",
+    "filterStatus": "Status",
+    "filterTag": "Tag",
+    "filterAll": "All",
+    "statuses": {
+      "inbox": "To organise",
+      "organized": "Organised",
+      "archived": "Archived"
+    },
+    "selectRow": "Select",
+    "selected": "{{count}} selected",
+    "bulkTitle": "Do this to the selected",
+    "bulkAddTags": "Add tags",
+    "bulkStatus": "Set status",
+    "bulkApply": "Apply",
+    "bulkResult": "{{ok}} done, {{failed}} not done",
+    "bulkFailedIds": "Not done: {{ids}}",
+    "open": "Open",
+    "close": "Close",
+    "detailTitle": "Item",
+    "originalTitle": "Original",
+    "originalReadOnly": "Stored as collected. It never changes.",
+    "noOriginal": "A link has no stored text — what it says is in the note.",
+    "hashLabel": "Content hash",
+    "capturedAt": "Collected at",
+    "recordedBy": "Collected by",
+    "organizeTitle": "Organise",
+    "save": "Save",
+    "saved": "Saved",
+    "historyTitle": "How it was organised",
+    "historyEmpty": "Not organised yet",
+    "changedFields": "Changed",
+    "fields": {
+      "title": "title",
+      "tags": "tags",
+      "annotation": "note",
+      "personal_judgement": "why keep it",
+      "status": "status"
+    },
+    "noDelete": "There is no delete. Archiving keeps it and takes it out of the list."
   }
 }
