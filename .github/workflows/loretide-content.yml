@@ -80,8 +80,56 @@ jobs:
           # concurrency defect; failures are not swallowed (set -e + non-zero exit).
           go test -race ./internal/content/diagnostics -count=1
           go test ./pkg/executionpolicy ./pkg/agent ./internal/daemon/execenv -run 'TestMissingPolicy|TestConfiguredPolicy|TestLoretide' -count=1
-          go test ./internal/migrations -run 'TestMigrationNumericPrefixesAreUnique|TestMigrationFilesHaveMatchingDirections|TestContentMigrationConstraints' -count=1
           go build ./cmd/server
+
+      # Migration policy lints. Text-only: they read the migration files and
+      # cmd/migrate's registration map, and open no database.
+      #
+      # cmd/migrate was not on this branch's CI path at all. ci.yml, which runs
+      # the whole Go suite through scripts/test-go.sh, triggers only on `main`;
+      # every Loretide PR targets app-main, where this workflow names a handful
+      # of tests in internal/migrations and none in cmd/migrate. Upstream's
+      # TestEveryConcurrentUpBuildHasCleanup was therefore red from the first
+      # content index migration through the fifteenth without a single job
+      # noticing (Issue #122).
+      #
+      # Only the file lints are added. The rest of cmd/migrate is database
+      # backed through the generic DATABASE_URL and t.Skipf()s without one, so
+      # running the whole package here would report ok while skipping - the
+      # exact failure mode Issue #102 removed from the other two suites. Giving
+      # those tests a provisioned database is separate work; it needs the
+      # LORETIDE_DB_TEST_* contract first, and is not smuggled in here.
+      - name: Migration policy lints
+        working-directory: server
+        run: |
+          set -euo pipefail
+          # `go test -run` that matches nothing exits 0. A renamed test would
+          # silently drop out of the gate, which is the same class of failure
+          # as the one being fixed - so the passes are counted, not assumed.
+          migrations_tests='TestMigrationNumericPrefixesAreUnique TestMigrationFilesHaveMatchingDirections TestContentMigrationConstraints TestContentConcurrentIndexRegistration'
+          migrate_tests='TestConcurrentIndexCleanupsMatchTheirMigrations TestEveryConcurrentUpBuildHasCleanup TestEveryConcurrentDownBuildHasCleanup TestEveryPGBigmConcurrentDownBuildHasCondition'
+
+          run_named() {
+            local package=$1 output=$2
+            shift 2
+            local pattern
+            # Anchored at the front only, so the existing prefix behaviour is
+            # kept: TestContentMigrationConstraintsCatchViolations and any
+            # future sibling still run. The loop below only requires the named
+            # ones to have passed.
+            pattern=$(printf '^(%s)' "$(printf '%s|' "$@" | sed 's/|$//')")
+            go test "$package" -run "$pattern" -count=1 -json | tee "$output"
+            for name in "$@"; do
+              passes=$(jq -r --arg t "$name" 'select(.Action == "pass" and .Test == $t) | .Test' "$output" | wc -l)
+              if [ "$passes" -ne 1 ]; then
+                echo "::error::$package: $name passed $passes times, want 1 (renamed, removed, or no longer matched)"
+                exit 1
+              fi
+            done
+          }
+
+          run_named ./internal/migrations migrations.json $migrations_tests
+          run_named ./cmd/migrate migrate.json $migrate_tests
 
   # The two package-wide database test suites, each on its own runner with its
   # own database and role.
