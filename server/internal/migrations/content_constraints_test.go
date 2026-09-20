@@ -2,6 +2,9 @@ package migrations
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -320,4 +323,259 @@ func TestContentMigrationConstraintsScopeExcludesOtherModules(t *testing.T) {
 	if found := checkContentMigrations(files); len(found) != 0 {
 		t.Fatalf("check reached outside the diagnostics module: %v", found)
 	}
+}
+
+// R6: every content migration that builds an index CONCURRENTLY on up must be
+// registered in cmd/migrate's concurrentIndexCleanups.
+//
+// The hazard is upstream MUL-5999's: an interrupted `CREATE INDEX CONCURRENTLY`
+// leaves an INVALID relation behind. On retry `IF NOT EXISTS` sees it, reports
+// success, and the runner records the migration as applied - so the index stays
+// permanently unusable and nothing at runtime says so. The registration lets the
+// migrator drop the leftover before retrying.
+//
+// Upstream already checks this in cmd/migrate (TestEveryConcurrentUpBuildHasCleanup),
+// and that check failed on app-main from the first content index migration until
+// Issue #122, unnoticed for fifteen migrations: ci.yml runs only on `main`, and
+// loretide-content.yml named a handful of tests in this package and none in
+// cmd/migrate. The rule is repeated here because this is the file a content
+// migration author is pointed at, and because this package IS on the branch's
+// CI path.
+//
+// Reading the registration out of the upstream source rather than importing it
+// is forced - it lives in `package main`. Same shape as the TypeScript constant
+// tests that read their Go source: compare against the real thing, so a change
+// on either side is visible here.
+
+// concurrentIndexRegistryVar is the upstream map this rule reads.
+const concurrentIndexRegistryVar = "concurrentIndexCleanups"
+
+// reConcurrentIndexName pulls the index name out of a concurrent build. Kept
+// separate from reConcurrent above, which only has to decide whether one is
+// present.
+var reConcurrentIndexName = regexp.MustCompile(
+	`(?i)CREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-z0-9_]+)`)
+
+// parseConcurrentIndexCleanups reads the registration map out of
+// server/cmd/migrate/main.go.
+//
+// Parsed as Go rather than matched with a regex: a commented-out entry or a
+// string containing a brace would both fool a text match, and this map is the
+// thing the rule trusts. An entry it cannot read as a plain string literal is
+// an error, not a skip.
+func parseConcurrentIndexCleanups(path string) (map[string]string, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.VAR {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			valueSpec, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for i, name := range valueSpec.Names {
+				if name.Name != concurrentIndexRegistryVar || i >= len(valueSpec.Values) {
+					continue
+				}
+				literal, ok := valueSpec.Values[i].(*ast.CompositeLit)
+				if !ok {
+					return nil, fmt.Errorf("%s is not a composite literal", concurrentIndexRegistryVar)
+				}
+				return entriesOf(literal)
+			}
+		}
+	}
+	return nil, fmt.Errorf("%s not found in %s", concurrentIndexRegistryVar, path)
+}
+
+func entriesOf(literal *ast.CompositeLit) (map[string]string, error) {
+	entries := make(map[string]string, len(literal.Elts))
+	for _, element := range literal.Elts {
+		pair, ok := element.(*ast.KeyValueExpr)
+		if !ok {
+			return nil, fmt.Errorf("%s has a non key-value element", concurrentIndexRegistryVar)
+		}
+		key, err := stringLiteral(pair.Key)
+		if err != nil {
+			return nil, err
+		}
+		value, err := stringLiteral(pair.Value)
+		if err != nil {
+			return nil, err
+		}
+		entries[key] = value
+	}
+	return entries, nil
+}
+
+func stringLiteral(expr ast.Expr) (string, error) {
+	basic, ok := expr.(*ast.BasicLit)
+	if !ok || basic.Kind != token.STRING {
+		return "", fmt.Errorf("%s has a non-literal entry", concurrentIndexRegistryVar)
+	}
+	return strconv.Unquote(basic.Value)
+}
+
+// checkContentIndexRegistration is R6 over a name -> contents map, against a
+// registration map. Down migrations are out of scope: their counterpart rule
+// (concurrentDownIndexCleanups) covers rebuilds on rollback, and the content
+// module's down files only drop.
+func checkContentIndexRegistration(files map[string]string, registry map[string]string) []violation {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	found := []violation{}
+	for _, name := range names {
+		if !isContentMigration(name) || !strings.HasSuffix(name, ".up.sql") {
+			continue
+		}
+		match := reConcurrentIndexName.FindStringSubmatch(stripSQLTrivia(files[name]))
+		if match == nil {
+			continue
+		}
+		version := strings.TrimSuffix(name, ".up.sql")
+		index := match[1]
+		registered, ok := registry[version]
+		if !ok {
+			found = append(found, violation{name, "R6", fmt.Sprintf(
+				"builds %q concurrently but is not registered in cmd/migrate's %s; an interrupted build would be recorded as success on retry",
+				index, concurrentIndexRegistryVar)})
+			continue
+		}
+		if registered != index {
+			found = append(found, violation{name, "R6", fmt.Sprintf(
+				"%s registers %q but the migration builds %q; a hook naming an index nothing creates is a silent no-op",
+				concurrentIndexRegistryVar, registered, index)})
+		}
+	}
+	return found
+}
+
+// migrateMainPath locates the upstream file holding the registration map.
+func migrateMainPath(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(realMigrationsDir(t), "..", "cmd", "migrate", "main.go")
+}
+
+// TestContentConcurrentIndexRegistration holds the repository's own content
+// migrations to R6.
+func TestContentConcurrentIndexRegistration(t *testing.T) {
+	registry, err := parseConcurrentIndexCleanups(migrateMainPath(t))
+	if err != nil {
+		t.Fatalf("read registration map: %v", err)
+	}
+	// A registry that came back empty would make every migration a violation,
+	// which is loud; one that came back with a handful of entries because the
+	// parse went wrong would not be. Upstream's own map is long.
+	if len(registry) < 100 {
+		t.Fatalf("read only %d entries from %s; the parse is wrong", len(registry), concurrentIndexRegistryVar)
+	}
+
+	dir := realMigrationsDir(t)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read migrations dir: %v", err)
+	}
+	files := map[string]string{}
+	concurrent := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !isContentMigration(name) || !strings.HasSuffix(name, ".up.sql") {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		files[name] = string(b)
+		if reConcurrentIndexName.MatchString(stripSQLTrivia(files[name])) {
+			concurrent++
+		}
+	}
+	if concurrent == 0 {
+		// Every content index migration is one concurrent build in a file of
+		// its own (R3/R4), so finding none means the selector is broken, not
+		// that the module stopped building indexes.
+		t.Fatalf("no content_ up migration at or above %d builds an index concurrently", contentMigrationFloor)
+	}
+	for _, v := range checkContentIndexRegistration(files, registry) {
+		t.Errorf("%s", v)
+	}
+	t.Logf("checked %d concurrent content index migrations against %d registered entries", concurrent, len(registry))
+}
+
+// TestContentConcurrentIndexRegistrationCatchesViolations is the other half.
+func TestContentConcurrentIndexRegistrationCatchesViolations(t *testing.T) {
+	registry := map[string]string{"490_content_thing_idx": "content_thing_idx"}
+	cases := []struct {
+		name string
+		file string
+		sql  string
+		want string
+	}{
+		{
+			name: "unregistered",
+			file: "491_content_other_idx.up.sql",
+			sql:  "CREATE INDEX CONCURRENTLY IF NOT EXISTS content_other_idx ON content_other (id);",
+			want: "not registered",
+		},
+		{
+			name: "registered under the wrong index name",
+			file: "490_content_thing_idx.up.sql",
+			sql:  "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS content_thing_renamed_idx ON content_thing (id);",
+			want: "silent no-op",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			found := checkContentIndexRegistration(map[string]string{tc.file: tc.sql}, registry)
+			if len(found) != 1 {
+				t.Fatalf("want one R6 violation, got %v", found)
+			}
+			if found[0].rule != "R6" {
+				t.Errorf("want R6, got %s", found[0].rule)
+			}
+			if !strings.Contains(found[0].String(), tc.file) {
+				t.Errorf("violation does not name the file: %s", found[0])
+			}
+			if !strings.Contains(found[0].String(), tc.want) {
+				t.Errorf("violation does not say %q: %s", tc.want, found[0])
+			}
+		})
+	}
+
+	t.Run("a registered migration passes", func(t *testing.T) {
+		found := checkContentIndexRegistration(map[string]string{
+			"490_content_thing_idx.up.sql": "CREATE INDEX CONCURRENTLY IF NOT EXISTS content_thing_idx ON content_thing (id);",
+		}, registry)
+		if len(found) != 0 {
+			t.Fatalf("registered migration reported: %v", found)
+		}
+	})
+
+	t.Run("a down migration is out of scope", func(t *testing.T) {
+		found := checkContentIndexRegistration(map[string]string{
+			"491_content_other_idx.down.sql": "DROP INDEX CONCURRENTLY IF EXISTS content_other_idx;",
+		}, registry)
+		if len(found) != 0 {
+			t.Fatalf("down migration reported: %v", found)
+		}
+	})
+
+	t.Run("a comment mentioning a concurrent build is not one", func(t *testing.T) {
+		found := checkContentIndexRegistration(map[string]string{
+			"491_content_other.up.sql": "-- CREATE INDEX CONCURRENTLY content_other_idx would go here\nCREATE TABLE content_other (id text NOT NULL);",
+		}, registry)
+		if len(found) != 0 {
+			t.Fatalf("comment reported as a build: %v", found)
+		}
+	})
 }
