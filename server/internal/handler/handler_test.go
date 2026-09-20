@@ -20,6 +20,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/realtime"
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/testutil"
+	"github.com/multica-ai/multica/server/internal/testutil/dbtest"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 )
@@ -35,28 +36,49 @@ var testRuntimeID string
 // writing an INSERT and a matching DELETE by hand; see internal/testutil.
 var dbfx *testutil.Fixture
 
-const (
-	handlerTestEmail         = "handler-test@multica.ai"
+// The root fixture's names are unique per run. They used to be constants, so
+// two runs against one database collided and cleanup deleted by email and slug
+// — which would also delete somebody else's row that happened to match. The
+// names are now only for reading in a psql session; every delete goes by the
+// id the insert returned.
+var (
+	handlerTestEmail         string
 	handlerTestName          = "Handler Test User"
-	handlerTestWorkspaceSlug = "handler-tests"
+	handlerTestWorkspaceSlug string
+	handlerSuite             dbtest.SuiteScope
 )
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://multica:multica@localhost:5432/multica?sslmode=disable"
-	}
 
-	pool, err := pgxpool.New(ctx, dbURL)
+	// Fail closed. No default DSN, no fallback to the generic DATABASE_URL and
+	// no exit-0 skip: an unconfigured run stops here, before a socket is
+	// opened, with a status a wrapper can see. The previous shape reported a
+	// green package while running nothing, and reached developer databases.
+	cfg, err := dbtest.LoadRequired(dbtest.SuiteHandler)
 	if err != nil {
-		fmt.Printf("Skipping tests: could not connect to database: %v\n", err)
-		os.Exit(0)
+		fmt.Fprintf(os.Stderr, "refusing to run the handler database suite: %v\n", err)
+		os.Exit(dbtest.ExitConfig)
+	}
+	handlerSuite = dbtest.NewSuiteScope(cfg)
+	handlerTestEmail = handlerSuite.Email("handler-test")
+	handlerTestWorkspaceSlug = handlerSuite.Slug("handler-tests")
+
+	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		// The URL is not printed: it carries a password.
+		fmt.Fprintf(os.Stderr, "handler database suite: could not open a pool (%s)\n", cfg.Describe())
+		os.Exit(dbtest.ExitConfig)
 	}
 	if err := pool.Ping(ctx); err != nil {
-		fmt.Printf("Skipping tests: database not reachable: %v\n", err)
+		fmt.Fprintf(os.Stderr, "handler database suite: database unreachable (%s)\n", cfg.Describe())
 		pool.Close()
-		os.Exit(0)
+		os.Exit(dbtest.ExitConfig)
+	}
+	if err := dbtest.VerifyConnected(ctx, pool, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "refusing to run the handler database suite: %v\n", err)
+		pool.Close()
+		os.Exit(dbtest.ExitConfig)
 	}
 
 	queries := db.New(pool)
@@ -102,10 +124,9 @@ func TestMain(m *testing.M) {
 }
 
 func setupHandlerTestFixture(ctx context.Context, pool *pgxpool.Pool) (string, string, error) {
-	if err := cleanupHandlerTestFixture(ctx, pool); err != nil {
-		return "", "", err
-	}
-
+	// No pre-setup cleanup. It used to delete by email and slug, which is a
+	// delete against rows this run never created; with unique names there is
+	// nothing to clear anyway.
 	var userID string
 	if err := pool.QueryRow(ctx, `
 		INSERT INTO "user" (name, email)
@@ -172,16 +193,26 @@ func cleanupHandlerTestFixture(ctx context.Context, pool *pgxpool.Pool) error {
 	if err := pool.QueryRow(ctx, `SELECT to_regclass('client_usage_daily') IS NOT NULL`).Scan(&hasClientUsageTable); err != nil {
 		return err
 	}
-	if hasClientUsageTable {
-		if _, err := pool.Exec(ctx, `DELETE FROM client_usage_daily WHERE user_id IN (SELECT id FROM "user" WHERE email = $1)`, handlerTestEmail); err != nil {
+	// Every delete is by the id the insert returned. Deleting by email or slug
+	// would reach any row that happened to match, which is not this suite's to
+	// remove — and with per-run names it would not find its own rows anyway.
+	if testUserID == "" && testWorkspaceID == "" {
+		return nil
+	}
+	if hasClientUsageTable && testUserID != "" {
+		if _, err := pool.Exec(ctx, `DELETE FROM client_usage_daily WHERE user_id = $1`, testUserID); err != nil {
 			return err
 		}
 	}
-	if _, err := pool.Exec(ctx, `DELETE FROM workspace WHERE slug = $1`, handlerTestWorkspaceSlug); err != nil {
-		return err
+	if testWorkspaceID != "" {
+		if _, err := pool.Exec(ctx, `DELETE FROM workspace WHERE id = $1`, testWorkspaceID); err != nil {
+			return err
+		}
 	}
-	if _, err := pool.Exec(ctx, `DELETE FROM "user" WHERE email = $1`, handlerTestEmail); err != nil {
-		return err
+	if testUserID != "" {
+		if _, err := pool.Exec(ctx, `DELETE FROM "user" WHERE id = $1`, testUserID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -46,6 +46,18 @@ if [ "$only" != agent ]; then
   for package in $packages; do
     case "$package" in
       */pkg/agent|*/pkg/agent/*) ;;
+      # internal/handler and cmd/server are package-wide database suites. They
+      # fail closed without an isolated database (internal/testutil/dbtest), so
+      # running them here would turn this wrapper red on every machine and in
+      # every job that has no such database. They run through test-go-db.sh
+      # instead, against a database provisioned for one run.
+      #
+      # This is a real coverage gap, not a claim that their database-free tests
+      # still run: until the 346 test files in those two packages are
+      # classified (Phase 2, separate issue), those packages are not executed
+      # by the default wrapper at all. The gap is deliberate and smaller than
+      # what it replaces — a suite that reported green while running nothing.
+      */internal/handler|*/cmd/server) ;;
       *) regular_packages+=("$package") ;;
     esac
   done

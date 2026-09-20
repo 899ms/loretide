@@ -21,6 +21,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/auth"
 	"github.com/multica-ai/multica/server/internal/events"
 	"github.com/multica-ai/multica/server/internal/realtime"
+	"github.com/multica-ai/multica/server/internal/testutil/dbtest"
 )
 
 var (
@@ -34,28 +35,46 @@ var (
 // jwtSecret is resolved at runtime via auth.JWTSecret() so it respects
 // the JWT_SECRET env var (set in .env) and stays in sync with the server.
 
-const (
-	integrationTestEmail         = "integration-test@multica.ai"
+// Unique per run; see internal/testutil/dbtest. The names used to be
+// constants and cleanup deleted by them, which both collided between runs and
+// reached rows this suite never created. Cleanup now goes by captured id.
+var (
+	integrationTestEmail         string
 	integrationTestName          = "Integration Tester"
-	integrationTestWorkspaceSlug = "integration-tests"
+	integrationTestWorkspaceSlug string
+	integrationSuite             dbtest.SuiteScope
 )
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://multica:multica@localhost:5432/multica?sslmode=disable"
-	}
 
-	pool, err := pgxpool.New(ctx, dbURL)
+	// Fail closed; see internal/testutil/dbtest. No default DSN, no generic
+	// DATABASE_URL, no exit-0 skip: an unconfigured run stops before opening a
+	// socket, with a status a wrapper can see.
+	cfg, err := dbtest.LoadRequired(dbtest.SuiteCmdServer)
 	if err != nil {
-		fmt.Printf("Skipping integration tests: could not connect to database: %v\n", err)
-		os.Exit(0)
+		fmt.Fprintf(os.Stderr, "refusing to run the cmd/server database suite: %v\n", err)
+		os.Exit(dbtest.ExitConfig)
+	}
+	integrationSuite = dbtest.NewSuiteScope(cfg)
+	integrationTestEmail = integrationSuite.Email("integration-test")
+	integrationTestWorkspaceSlug = integrationSuite.Slug("integration-tests")
+
+	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		// The URL is not printed: it carries a password.
+		fmt.Fprintf(os.Stderr, "cmd/server database suite: could not open a pool (%s)\n", cfg.Describe())
+		os.Exit(dbtest.ExitConfig)
 	}
 	if err := pool.Ping(ctx); err != nil {
-		fmt.Printf("Skipping integration tests: database not reachable: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cmd/server database suite: database unreachable (%s)\n", cfg.Describe())
 		pool.Close()
-		os.Exit(0)
+		os.Exit(dbtest.ExitConfig)
+	}
+	if err := dbtest.VerifyConnected(ctx, pool, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "refusing to run the cmd/server database suite: %v\n", err)
+		pool.Close()
+		os.Exit(dbtest.ExitConfig)
 	}
 
 	testPool = pool
@@ -97,10 +116,8 @@ func TestMain(m *testing.M) {
 }
 
 func setupIntegrationTestFixture(ctx context.Context, pool *pgxpool.Pool) (string, string, error) {
-	if err := cleanupIntegrationTestFixture(ctx, pool); err != nil {
-		return "", "", err
-	}
-
+	// No pre-setup cleanup: it deleted by slug and email, which is a delete
+	// against rows this run never created. Unique names leave nothing to clear.
 	var userID string
 	if err := pool.QueryRow(ctx, `
 		INSERT INTO "user" (name, email)
@@ -155,11 +172,17 @@ func setupIntegrationTestFixture(ctx context.Context, pool *pgxpool.Pool) (strin
 }
 
 func cleanupIntegrationTestFixture(ctx context.Context, pool *pgxpool.Pool) error {
-	if _, err := pool.Exec(ctx, `DELETE FROM workspace WHERE slug = $1`, integrationTestWorkspaceSlug); err != nil {
-		return err
+	// By captured id, never by name: a name-matched delete can reach a row
+	// this suite did not create.
+	if testWorkspaceID != "" {
+		if _, err := pool.Exec(ctx, `DELETE FROM workspace WHERE id = $1`, testWorkspaceID); err != nil {
+			return err
+		}
 	}
-	if _, err := pool.Exec(ctx, `DELETE FROM "user" WHERE email = $1`, integrationTestEmail); err != nil {
-		return err
+	if testUserID != "" {
+		if _, err := pool.Exec(ctx, `DELETE FROM "user" WHERE id = $1`, testUserID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -83,19 +83,43 @@ jobs:
           go test ./internal/migrations -run 'TestMigrationNumericPrefixesAreUnique|TestMigrationFilesHaveMatchingDirections|TestContentMigrationConstraints' -count=1
           go build ./cmd/server
 
-  # Temporary, PR-scoped evidence gate for Issue #98. This is intentionally a
-  # separate job and database from the diagnostics fixture above: the handler
-  # and real-router TestMain packages require the complete application schema.
-  issue-98-account-profile-db:
+  # The two package-wide database test suites, each on its own runner with its
+  # own database and role.
+  #
+  # It began as Issue #98's PR-scoped gate, which ran ten named tests on the
+  # one branch that needed them. Issue #102 made both suites fail closed — they
+  # now refuse to start without the full LORETIDE_DB_TEST_* contract — so they
+  # need a job that provisions one on every branch, not just that one. The
+  # derivation, verification and least-privilege provisioning below are that
+  # job's, kept; what changed is that it is no longer branch-scoped, that each
+  # suite gets its own database, and that it runs the WHOLE package rather than
+  # a hand-listed subset.
+  #
+  # It is a separate job and database from the diagnostics fixture above: these
+  # packages require the complete application schema.
+  #
+  # The isolation boundary is this job — a fresh runner and a database created
+  # for one run, dropped afterwards. The environment variables, the name prefix
+  # and the loopback address are not the boundary; they are how the suite checks
+  # it is pointed where this job put it, and anyone who can set them can satisfy
+  # them.
+  #
+  # Contract: docs/development/testing-database-suites.md
+  db-suites:
     needs: boundaries
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.head.ref == 'codex/issue-98-account-expression-profile' &&
-      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      # Independent: one suite failing must not leave the other unreported.
+      fail-fast: false
+      matrix:
+        include:
+          - suite: handler
+            slug: handler
+          - suite: cmd-server
+            slug: cmdserver
     concurrency:
-      group: issue-98-account-profile-${{ github.event.pull_request.number }}
+      group: loretide-db-suites-${{ matrix.slug }}-${{ github.ref }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
@@ -104,6 +128,9 @@ jobs:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
 
+      # Derivation and validation are repeated in every step that acts on the
+      # database rather than trusting an earlier step's export: a step that
+      # drops a database has to re-derive the name it is allowed to drop.
       - name: Derive run-specific database identifiers
         shell: bash
         run: |
@@ -113,21 +140,26 @@ jobs:
             exit 1
           fi
 
-          expected_db="loretide_handler_test_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
-          expected_role="loretide_handler_role_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
-          if [[ ! "$expected_db" =~ ^loretide_handler_test_[0-9]+_[0-9]+$ ||
-                ! "$expected_role" =~ ^loretide_handler_role_[0-9]+_[0-9]+$ ]]; then
+          expected_db="loretide_db_test_${{ matrix.slug }}_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          expected_role="loretide_db_role_${{ matrix.slug }}_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          if [[ ! "$expected_db" =~ ^loretide_db_test_[a-z]+_[0-9]+_[0-9]+$ ||
+                ! "$expected_role" =~ ^loretide_db_role_[a-z]+_[0-9]+_[0-9]+$ ]]; then
             echo "::error::derived database identifiers failed the allowlist"
             exit 1
           fi
 
-          printf 'LORETIDE_HANDLER_TEST_DB=%s\n' "$expected_db" >> "$GITHUB_ENV"
-          printf 'LORETIDE_HANDLER_TEST_ROLE=%s\n' "$expected_role" >> "$GITHUB_ENV"
+          {
+            printf 'LORETIDE_DB_TESTS=1\n'
+            printf 'LORETIDE_DB_TEST_DATABASE=%s\n' "$expected_db"
+            printf 'LORETIDE_DB_TEST_ROLE=%s\n' "$expected_role"
+            printf 'LORETIDE_DB_TEST_RUN_ID=%s_%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            printf 'LORETIDE_DB_TEST_SUITE=%s\n' "${{ matrix.suite }}"
+          } >> "$GITHUB_ENV"
 
       - name: Start native PostgreSQL
         run: sudo systemctl start postgresql
 
-      - name: Provision isolated least-privilege handler database
+      - name: Provision isolated least-privilege database
         shell: bash
         run: |
           set -euo pipefail
@@ -136,18 +168,20 @@ jobs:
             exit 1
           fi
 
-          expected_db="loretide_handler_test_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
-          expected_role="loretide_handler_role_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
-          if [[ ! "$expected_db" =~ ^loretide_handler_test_[0-9]+_[0-9]+$ ||
-                ! "$expected_role" =~ ^loretide_handler_role_[0-9]+_[0-9]+$ ||
-                "${LORETIDE_HANDLER_TEST_DB:-}" != "$expected_db" ||
-                "${LORETIDE_HANDLER_TEST_ROLE:-}" != "$expected_role" ]]; then
+          expected_db="loretide_db_test_${{ matrix.slug }}_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          expected_role="loretide_db_role_${{ matrix.slug }}_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          if [[ "${LORETIDE_DB_TEST_DATABASE:-}" != "$expected_db" ||
+                "${LORETIDE_DB_TEST_ROLE:-}" != "$expected_role" ]]; then
             echo "::error::run-derived database identifiers are missing or inconsistent; refusing provisioning"
             exit 1
           fi
 
           pg_password="$(openssl rand -hex 24)"
           echo "::add-mask::$pg_password"
+
+          # NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS is the
+          # contract the Go guard verifies from the other side: a suite that can
+          # create databases is not the role this job provisioned.
           sudo -u postgres psql -X -v ON_ERROR_STOP=1 -q \
             -v db_name="$expected_db" -v role_name="$expected_role" -v pw="$pg_password" <<'SQL'
           SELECT pg_terminate_backend(pid)
@@ -170,58 +204,39 @@ jobs:
 
           database_url="postgres://${expected_role}:${pg_password}@127.0.0.1:5432/${expected_db}?sslmode=disable"
           echo "::add-mask::$database_url"
-          printf 'DATABASE_URL=%s\n' "$database_url" >> "$GITHUB_ENV"
+          printf 'LORETIDE_DB_TEST_DATABASE_URL=%s\n' "$database_url" >> "$GITHUB_ENV"
 
+      # The same checks the Go guard makes, before Go starts. Defence in depth
+      # against one miswiring, not two independent proofs: both read the same
+      # environment.
       - name: Verify isolated database identity and role attributes
         working-directory: server
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ || ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[0-9]+$ ]]; then
-            echo "::error::invalid GitHub run identity; refusing handler tests"
-            exit 1
-          fi
+        run: bash scripts/verify-db-test-target.sh
 
-          expected_db="loretide_handler_test_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
-          expected_role="loretide_handler_role_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
-          if [[ ! "$expected_db" =~ ^loretide_handler_test_[0-9]+_[0-9]+$ ||
-                ! "$expected_role" =~ ^loretide_handler_role_[0-9]+_[0-9]+$ ||
-                "${LORETIDE_HANDLER_TEST_DB:-}" != "$expected_db" ||
-                "${LORETIDE_HANDLER_TEST_ROLE:-}" != "$expected_role" ||
-                -z "${DATABASE_URL:-}" ]]; then
-            echo "::error::run-derived database identity is missing or inconsistent; refusing handler tests"
-            exit 1
-          fi
-
-          bash scripts/verify-handler-test-db.sh
-          identity="$(psql "$DATABASE_URL" -X -A -t -F '|' -v ON_ERROR_STOP=1 -c \
-            "SELECT current_database(), current_user, r.rolcanlogin::text, r.rolsuper::text, r.rolcreatedb::text, r.rolcreaterole::text, r.rolreplication::text, r.rolbypassrls::text, (d.datdba = r.oid)::text FROM pg_roles r JOIN pg_database d ON d.datname = current_database() WHERE r.rolname = current_user")"
-          expected_identity="${expected_db}|${expected_role}|true|false|false|false|false|false|true"
-          echo "handler identity (database|role|login|super|createdb|createrole|replication|bypassrls|owns_target_db): $identity"
-          if [[ "$identity" != "$expected_identity" ]]; then
-            echo "::error::isolated handler database identity or role attributes differ from the run-specific contract"
-            exit 1
-          fi
-
+      # The only place a generic DATABASE_URL exists, scoped to this command.
+      # It is not exported, so the test step cannot inherit it — an inherited
+      # generic URL is what made the old default dangerous.
       - name: Apply full application schema
         working-directory: server
         shell: bash
-        run: |
-          set -euo pipefail
-          go run ./cmd/migrate up
+        run: DATABASE_URL="$LORETIDE_DB_TEST_DATABASE_URL" go run ./cmd/migrate up
 
+      # A schema contract from Issue #98. It needs a migrated database and this
+      # is the cheapest job that has one; the handler leg runs it so it is
+      # asserted once per run rather than once per suite.
       - name: Verify migration 482 ledger and profile column contract
+        if: ${{ matrix.suite == 'handler' }}
         shell: bash
         run: |
           set -euo pipefail
-          ledger_count="$(psql "$DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 \
+          ledger_count="$(psql "$LORETIDE_DB_TEST_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 \
             -c "SELECT count(*) FROM schema_migrations WHERE version = '482_content_account_revision_profile'")"
           if [[ "$ledger_count" != "1" ]]; then
             echo "::error::migration 482 is not recorded exactly once in schema_migrations"
             exit 1
           fi
 
-          profile_shape="$(psql "$DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c \
+          profile_shape="$(psql "$LORETIDE_DB_TEST_DATABASE_URL" -X -A -t -v ON_ERROR_STOP=1 -c \
             "SELECT format_type(a.atttypid, a.atttypmod) || '|' || a.attnotnull::text || '|' || COALESCE(pg_get_expr(d.adbin, d.adrelid), '') FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum WHERE n.nspname = 'public' AND c.relname = 'content_account_revision' AND a.attname = 'profile' AND NOT a.attisdropped")"
           echo "migration 482 profile shape (type|not_null|default): $profile_shape"
           if [[ "$profile_shape" != "jsonb|true|'{}'::jsonb" ]]; then
@@ -229,114 +244,83 @@ jobs:
             exit 1
           fi
 
-      - name: Run the five Issue 98 handler tests serially
-        working-directory: server
+      # The whole package, not a hand-listed subset. The named-test manifest
+      # made sense while one branch needed evidence for ten cases; as the
+      # permanent gate for two suites it would silently stop covering every
+      # test added after it was written.
+      - name: Run the ${{ matrix.suite }} database suite
         shell: bash
         run: |
           set -euo pipefail
-          handler_pattern='^(TestProfileAndPersonaConfirmationsCarryTheOtherHalf|TestProfileRejectsInvalidShapeWithoutWriting|TestProfileReadinessReturnsCurrentDerivedDecision|TestOldRevisionWithoutProfileReadsAsEmptyPendingProfile|TestAnotherBrandsProfileIsIndistinguishableFromAMissingAccount|TestAWriteIsRefusedAfterTheWorkspaceIsDeleted|TestADeleteWaitsForAnInFlightRevisionWriteAndThenSweepsIt|TestTheFenceRefusesAnIdThatIsNotAWorkspace|TestADeletedWorkspaceAnswersLikeAMissingAccount)$'
-          go test -json -count=1 -p=1 -parallel=1 ./internal/handler -run "$handler_pattern" \
-            | tee "$RUNNER_TEMP/issue-98-handler.jsonl"
+          bash scripts/test-go-db.sh --suite "${{ matrix.suite }}" --json \
+            | tee "$RUNNER_TEMP/${{ matrix.slug }}.jsonl"
 
-      - name: Run the five Issue 98 real-router tests serially
-        working-directory: server
+      # A package-level pass is not evidence that anything ran — that is the
+      # exact failure Issue #102 repairs — so this counts terminal per-test
+      # events and treats zero passes as red.
+      - name: Require per-test pass evidence
         shell: bash
         run: |
           set -euo pipefail
-          router_pattern='^(TestExpressionProfileEndpointsUseTheIdFromTheURLBehindTheRealRouter|TestContentAccountEndpointsAreMounted|TestContentAccountEndpointsRejectUnauthenticatedCallers|TestContentAccountEndpointsRejectNonMembers|TestMountingContentAccountsLeftNeighbouringRoutesAlone)$'
-          go test -json -count=1 -p=1 -parallel=1 ./cmd/server -run "$router_pattern" \
-            | tee "$RUNNER_TEMP/issue-98-router.jsonl"
-
-      - name: Require all ten tests and every discovered subtest to pass
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'NODE'
+          node - "$RUNNER_TEMP/${{ matrix.slug }}.jsonl" "${{ matrix.suite }}" <<'NODE'
           const fs = require('node:fs');
-          const path = require('node:path');
+          const [file, suite] = process.argv.slice(2);
 
-          const suites = [
-            {
-              label: 'handler',
-              file: path.join(process.env.RUNNER_TEMP, 'issue-98-handler.jsonl'),
-              expected: [
-                'TestProfileAndPersonaConfirmationsCarryTheOtherHalf',
-                'TestProfileRejectsInvalidShapeWithoutWriting',
-                'TestProfileReadinessReturnsCurrentDerivedDecision',
-                'TestOldRevisionWithoutProfileReadsAsEmptyPendingProfile',
-                'TestAnotherBrandsProfileIsIndistinguishableFromAMissingAccount',
-                // Issue #104: the workspace delete/write fence.
-                'TestAWriteIsRefusedAfterTheWorkspaceIsDeleted',
-                'TestADeleteWaitsForAnInFlightRevisionWriteAndThenSweepsIt',
-                'TestTheFenceRefusesAnIdThatIsNotAWorkspace',
-                'TestADeletedWorkspaceAnswersLikeAMissingAccount',
-              ],
-            },
-            {
-              label: 'router',
-              file: path.join(process.env.RUNNER_TEMP, 'issue-98-router.jsonl'),
-              expected: [
-                'TestExpressionProfileEndpointsUseTheIdFromTheURLBehindTheRealRouter',
-                'TestContentAccountEndpointsAreMounted',
-                'TestContentAccountEndpointsRejectUnauthenticatedCallers',
-                'TestContentAccountEndpointsRejectNonMembers',
-                'TestMountingContentAccountsLeftNeighbouringRoutesAlone',
-              ],
-            },
-          ];
+          if (!fs.existsSync(file) || fs.statSync(file).size === 0) {
+            throw new Error(`${suite}: the JSON event file is missing or empty`);
+          }
+          const events = fs.readFileSync(file, 'utf8')
+            .split(/\r?\n/)
+            .filter((line) => line.startsWith('{'))
+            .map((line) => JSON.parse(line));
 
-          const summary = [];
-          for (const suite of suites) {
-            if (!fs.existsSync(suite.file) || fs.statSync(suite.file).size === 0) {
-              throw new Error(`${suite.label}: JSON event file is missing or empty`);
+          const terminal = new Map();
+          for (const event of events) {
+            if (!event.Test || !['pass', 'fail', 'skip'].includes(event.Action)) continue;
+            if (terminal.has(event.Test)) {
+              throw new Error(`${suite}: ${event.Test} reported more than one terminal action`);
             }
-            const lines = fs.readFileSync(suite.file, 'utf8').split(/\r?\n/).filter(Boolean);
-            const events = lines.map((line, index) => {
-              try {
-                return JSON.parse(line);
-              } catch (error) {
-                throw new Error(`${suite.label}: invalid JSON event at line ${index + 1}: ${error.message}`);
-              }
-            });
-
-            for (const test of suite.expected) {
-              const terminal = events.filter((event) =>
-                event.Test === test && ['pass', 'fail', 'skip'].includes(event.Action));
-              if (terminal.length !== 1 || terminal[0].Action !== 'pass') {
-                throw new Error(`${suite.label}: ${test} did not have exactly one terminal pass event`);
-              }
-
-              const childNames = new Set(events
-                .filter((event) => typeof event.Test === 'string' && event.Test.startsWith(`${test}/`))
-                .map((event) => event.Test));
-              for (const child of childNames) {
-                const childTerminal = events.filter((event) =>
-                  event.Test === child && ['pass', 'fail', 'skip'].includes(event.Action));
-                if (childTerminal.length !== 1 || childTerminal[0].Action !== 'pass') {
-                  throw new Error(`${suite.label}: subtest ${child} did not have exactly one terminal pass event`);
-                }
-              }
-              summary.push(`${suite.label}: ${test}: pass (${childNames.size} subtests)`);
-            }
+            terminal.set(event.Test, event.Action);
           }
 
-          if (summary.length !== 14) {
-            throw new Error(`verified ${summary.length} top-level tests, expected 14`);
+          const counts = { pass: 0, fail: 0, skip: 0 };
+          const failed = [];
+          const skipped = [];
+          for (const [name, action] of terminal) {
+            counts[action] += 1;
+            if (action === 'fail') failed.push(name);
+            if (action === 'skip') skipped.push(name);
           }
-          const report = `${summary.join('\n')}\nverified-top-level-tests=14\n`;
-          process.stdout.write(report);
-          fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'issue-98-verification-summary.txt'), report);
+
+          if (counts.pass === 0) {
+            throw new Error(`${suite}: no test reported a pass; a suite that ran nothing is not a green suite`);
+          }
+          if (failed.length > 0) {
+            throw new Error(`${suite}: failures: ${failed.slice(0, 20).join(', ')}`);
+          }
+
+          // Skips are named rather than absorbed into a total: these packages
+          // contain tests gated on services this job does not provide, and a
+          // skip that should not be there has to be visible.
+          const report = [
+            `suite=${suite}`,
+            `pass=${counts.pass}`,
+            `fail=${counts.fail}`,
+            `skip=${counts.skip}`,
+            skipped.length ? `skipped: ${skipped.join(', ')}` : 'skipped: none',
+          ].join('\n');
+          process.stdout.write(`${report}\n`);
+          fs.writeFileSync(`${file}.summary.txt`, `${report}\n`);
           NODE
 
-      - name: Upload Issue 98 JSON test evidence
+      - name: Upload JSON test evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: issue-98-account-profile-${{ github.run_id }}-${{ github.run_attempt }}
+          name: loretide-db-suite-${{ matrix.slug }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/issue-98-handler.jsonl
-            ${{ runner.temp }}/issue-98-router.jsonl
-            ${{ runner.temp }}/issue-98-verification-summary.txt
+            ${{ runner.temp }}/${{ matrix.slug }}.jsonl
+            ${{ runner.temp }}/${{ matrix.slug }}.jsonl.summary.txt
           if-no-files-found: warn
           retention-days: 14
 
@@ -350,12 +334,10 @@ jobs:
             exit 1
           fi
 
-          expected_db="loretide_handler_test_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
-          expected_role="loretide_handler_role_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
-          if [[ ! "$expected_db" =~ ^loretide_handler_test_[0-9]+_[0-9]+$ ||
-                ! "$expected_role" =~ ^loretide_handler_role_[0-9]+_[0-9]+$ ||
-                "${LORETIDE_HANDLER_TEST_DB:-}" != "$expected_db" ||
-                "${LORETIDE_HANDLER_TEST_ROLE:-}" != "$expected_role" ]]; then
+          expected_db="loretide_db_test_${{ matrix.slug }}_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          expected_role="loretide_db_role_${{ matrix.slug }}_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          if [[ "${LORETIDE_DB_TEST_DATABASE:-}" != "$expected_db" ||
+                "${LORETIDE_DB_TEST_ROLE:-}" != "$expected_role" ]]; then
             echo "::error::run-derived database identifiers are missing or inconsistent; refusing terminate/drop"
             exit 1
           fi
