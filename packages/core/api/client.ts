@@ -751,6 +751,24 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}/briefs/${encodeURIComponent(revisionId)}`);
   }
 
+  // Starting a brief revision and reading back what a start fixed (EP-04b).
+  // Not idempotent: the same revision may be started again with a different
+  // material scope, and that produces a second snapshot.
+  async startContentBrief(topicCardId: string, revisionId: string, body: {account_id: string; source_scope: string; project_id: string}): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}/briefs/${encodeURIComponent(revisionId)}/start`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async listContentBriefStarts(topicCardId: string, revisionId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}/briefs/${encodeURIComponent(revisionId)}/snapshots`);
+  }
+
+  async getContentStartSnapshot(topicCardId: string, snapshotId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}/snapshots/${encodeURIComponent(snapshotId)}`);
+  }
+
   async contentDiagnosticStream(query: string, signal: AbortSignal): Promise<Response> {
     return this.fetchRaw(`/api/content-diagnostics/stream?${query}`, {signal});
   }

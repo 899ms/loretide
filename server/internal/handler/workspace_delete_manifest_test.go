@@ -59,6 +59,7 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"content_diagnostic_run":             workspaceDelete,
 	"content_dispatch_outbox":            workspaceDelete,
 	"content_operation_audit":            workspaceDelete,
+	"content_start_snapshot":             workspaceDelete,
 	"content_technical_log":              workspaceDelete,
 	"content_topic_card":                 workspaceDelete,
 	"comment_reaction":                   workspaceDelete,
