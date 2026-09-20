@@ -16,7 +16,6 @@ import { api } from "@multica/core/api";
 import { useWorkspaceId } from "@multica/core/hooks";
 import {
   accountKeys,
-  emptyProfileRead,
   parseProfileRead,
   useContentAccounts,
 } from "@multica/core/content/ip-profile";
@@ -99,33 +98,29 @@ function TodayPage({ wsId }: { wsId: string }) {
  * observers of one key with different fetchers is a race, and sections 1 and 6
  * are supposed to share a single read rather than each fetching its own.
  *
- * That fetcher degrades a failure to an empty profile, so a profile that could
- * not be read is indistinguishable from one nobody has filled in. See the
- * known limits in manual-ui-todo.md.
+ * A failed read is reported as failed rather than as an empty profile (#167),
+ * which is what makes the per-row failure marks below reachable at all.
  */
 function useAccountProfiles(wsId: string, accountIds: string[]) {
   const results = useQueries({
     queries: accountIds.map((accountId) => ({
       queryKey: accountKeys.profile(wsId, accountId),
-      queryFn: async () => {
-        try {
-          return parseProfileRead(await api.getContentAccountProfile(accountId));
-        } catch {
-          return emptyProfileRead();
-        }
-      },
+      queryFn: async () => parseProfileRead(await api.getContentAccountProfile(accountId)),
     })),
   });
   const profiles = new Map<string, ProfileLike>();
+  const failed = new Set<string>();
   accountIds.forEach((accountId, index) => {
-    const data = results[index]?.data;
+    const result = results[index];
+    if (result?.isError) failed.add(accountId);
+    const data = result?.data;
     if (!data) return;
     profiles.set(accountId, {
       readiness: data.readiness,
       weekly_hours: data.profile.weekly_hours,
     });
   });
-  return { profiles, pending: results.some((result) => result.isPending) };
+  return { profiles, failed, pending: results.some((result) => result.isPending) };
 }
 
 // ---------------------------------------------------------------- section 1
@@ -138,8 +133,8 @@ function TopicsSection({ wsId }: { wsId: string }) {
   const accountIds = uniq(
     cards.filter((card) => card.status === "draft").map((card) => card.accountId ?? ""),
   ).filter(Boolean);
-  const { profiles, pending } = useAccountProfiles(wsId, accountIds);
-  const section = worthWritingTopics(cards, profiles);
+  const { profiles, failed, pending } = useAccountProfiles(wsId, accountIds);
+  const section = worthWritingTopics(cards, profiles, failed);
 
   return (
     <SectionShell
@@ -155,7 +150,9 @@ function TopicsSection({ wsId }: { wsId: string }) {
         <SettingsRow
           key={entry.topicCardId}
           label={entry.reason || t(($) => $.contentToday.topics.noReason)}
-          description={effortLabel(t, entry.effort)}
+          description={
+            entry.failed ? t(($) => $.contentToday.rowFailed) : effortLabel(t, entry.effort)
+          }
         >
           <Button variant="outline" onClick={() => navigation.push(`/${wsId}/topics`)}>
             {t(($) => $.contentToday.open)}
@@ -334,11 +331,11 @@ function AccountGapsSection({ wsId }: { wsId: string }) {
   const navigation = useNavigation();
   const accounts = useContentAccounts(wsId);
   const list = accounts.data ?? [];
-  const { profiles, pending } = useAccountProfiles(
+  const { profiles, failed, pending } = useAccountProfiles(
     wsId,
     list.map((account) => account.account_id),
   );
-  const section = accountsMissingConfig(list, profiles);
+  const section = accountsMissingConfig(list, profiles, failed);
 
   return (
     <SectionShell
