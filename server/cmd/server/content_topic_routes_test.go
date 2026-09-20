@@ -23,6 +23,7 @@ var contentTopicRoutes = []struct {
 	{http.MethodGet, "/api/content-topics/", "/api/content-topics"},
 	{http.MethodPost, "/api/content-topics/", "/api/content-topics"},
 	{http.MethodGet, "/api/content-topics/{id}/", "/api/content-topics/topic-1"},
+	{http.MethodPost, "/api/content-topics/{id}/account", "/api/content-topics/topic-1/account"},
 	{http.MethodPost, "/api/content-topics/{id}/actions", "/api/content-topics/topic-1/actions"},
 	{http.MethodGet, "/api/content-topics/{id}/briefs", "/api/content-topics/topic-1/briefs"},
 	{http.MethodPost, "/api/content-topics/{id}/briefs", "/api/content-topics/topic-1/briefs"},
