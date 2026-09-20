@@ -196,8 +196,9 @@ file_hashes     temperature     budget        timeout_ms
 **输入快照**
 
 - **FR-013**：「开始」成功 MUST 产生恰好一份输入快照，字段 MUST 与 `diagnostics.Snapshot` 的十六个字段逐名对齐，MUST NOT 新造同义字段。
-- **FR-014**：快照 MUST 只插不改：没有更新端点，没有删除端点。
+- **FR-014**：快照 MUST 不可改写。口径要精确，因为 Q1=A 下它不是「只插」：没有更新端点、没有删除端点，写入路径只有「开始」一条，且该写入 MUST 只能把空快照变成非空快照，MUST NOT 改写一份已存在的快照。（Q1=B 下这条退化为字面意义的「只插不改」。）
 - **FR-015**：快照 MUST 记下开始那一刻的：所钉简报版本、账号表达配置版本（`persona_ref`）、资料范围与账号偏好、品牌预检开关值、是否中性表达、执行器状态。
+- **FR-015a**：品牌预检开关与中性表达在 `diagnostics.Snapshot` 的十六项里**没有对应字段**。它们 MUST 作为 `topic-planning` 的**扩展键**显式标注，MUST NOT 挤进任何一个既有字段——十六项各有含义，借用其中任何一个都会让「与 Snapshot 对齐」这句话变成半真。
 - **FR-016**：事后修改账号配置、账号偏好、简报或品牌开关 MUST NOT 改变任何已存在的快照。
 - **FR-017**：快照的时间戳 MUST 由服务端生成。
 - **FR-018**：项目 MUST 可选；留空 MUST 能成功开始。
@@ -207,7 +208,7 @@ file_hashes     temperature     budget        timeout_ms
 - **FR-019**：所有读写 MUST 按 `workspace_id` 过滤；越权 MUST 经 `workspace-core` 产出与「不存在」同形的拒绝。
 - **FR-020**：本卡 MUST NOT 调用模型、MUST NOT 起真实执行器（宪法 IX）。
 - **FR-021**：本地文件、素材包、知识卡的输入半边 MUST 呈现为明确的「暂不可用」并说明缺什么，MUST NOT 是空白、加载中或伪造内容。
-- **FR-022**：`required_sources` / `excluded_sources` / `grants` 在本阶段 MUST 为空，且 MUST 有负例钉住「不得伪造」（接入是 EP-04d / W-03）。
+- **FR-022**：**九个今天没有真实来源的字段** MUST 为空，且 MUST **各有一条**负例钉住「不得伪造」——`config_version`、`sop_version`、`skill_version`、`rule_version`、`executor_version`、`required_sources`、`excluded_sources`、`grants`、`file_hashes`。笼统一条「都为空」在有人填上其中一个时虽然也会红，但不会说是哪一个，而这九个各有各的接入方（EP-04d / W-03 / EP-08）。
 
 **工程约束**
 
@@ -234,7 +235,7 @@ file_hashes     temperature     budget        timeout_ms
 ### Measurable Outcomes
 
 - **SC-001**：四项最小条件的**每一项**单独缺失时，界面都能点名它；四项全齐时「开始」可点。共 5 种组合各有一条用例。
-- **SC-002**：开始一次后，改账号配置、改账号偏好、追加简报版本、改品牌开关四件事**各做一遍**，再读回快照，**十六个字段逐字节不变**。
+- **SC-002**：开始一次后，改账号配置、改账号偏好、追加简报版本、改品牌开关四件事**各做一遍**，再读回快照，**十六个对齐字段与两个扩展键逐字节不变**。四件事各有一条用例，不合并成一条。
 - **SC-003**：跨品牌简报版本、不存在的版本 id、非本账号的简报三种非法依赖，各返回与「不存在」同形的拒绝；三者的响应体**互相逐字节相同**。
 - **SC-004**：项目留空的开始成功率 100%；不存在任何把项目当必填的路径。
 - **SC-005**：`required_sources` / `excluded_sources` / `grants` 在本阶段的所有响应里**恒为空数组**，有一条用例在它们非空时变红。
