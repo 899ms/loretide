@@ -3,6 +3,7 @@ package workspacecore
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
 )
@@ -262,5 +263,49 @@ func TestRefusalBodyCarriesNothingAboutTheObject(t *testing.T) {
 	}
 	if body["code"] != "AUTHORIZATION_DENIED" {
 		t.Errorf("code = %v, want AUTHORIZATION_DENIED", body["code"])
+	}
+}
+
+// Issue #108: the refusal was recorded with both timestamps at their zero
+// value. The row still ordered correctly because received_at has a column
+// default, which is why this stayed invisible - but the panel renders the
+// PAYLOAD, and there the refusal claimed to have happened in year 1.
+func TestTheRecordedRefusalCarriesWhenItHappened(t *testing.T) {
+	before := time.Now().UTC().Add(-time.Second)
+	rec := &recordingRecorder{}
+	Authorize(context.Background(), members(map[string]string{}), rec, userU1, brandA, "owner")
+	if len(rec.events) != 1 {
+		t.Fatalf("want exactly one recorded refusal, got %d", len(rec.events))
+	}
+	after := time.Now().UTC().Add(time.Second)
+
+	for _, stamp := range []struct {
+		name string
+		at   time.Time
+	}{
+		{"occurred_at", rec.events[0].Occurred},
+		{"received_at", rec.events[0].Received},
+	} {
+		if stamp.at.IsZero() {
+			t.Errorf("%s is the zero time; the refusal reads as if it never happened", stamp.name)
+			continue
+		}
+		if stamp.at.Before(before) || stamp.at.After(after) {
+			t.Errorf("%s = %s, outside [%s, %s]", stamp.name, stamp.at, before, after)
+		}
+	}
+}
+
+// The component has to survive Sanitize, or the event lands in the real sink
+// as "unknown" and the panel cannot tell this module's refusals from anything
+// else's. That is the whole of Issue #108 from the producing side.
+func TestTheRecordedRefusalKeepsItsComponentThroughSanitize(t *testing.T) {
+	rec := &recordingRecorder{}
+	Authorize(context.Background(), members(map[string]string{}), rec, userU1, brandA, "owner")
+	if len(rec.events) != 1 {
+		t.Fatalf("want exactly one recorded refusal, got %d", len(rec.events))
+	}
+	if got := diagnostics.Sanitize(rec.events[0]).Component; got != "workspace-core" {
+		t.Errorf("sanitized component = %q, want workspace-core", got)
 	}
 }

@@ -23,6 +23,7 @@ package workspacecore
 
 import (
 	"context"
+	"time"
 
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
 )
@@ -144,6 +145,7 @@ func record(ctx context.Context, recorder Recorder, decision Decision) {
 	if recorder == nil {
 		return
 	}
+	at := time.Now().UTC()
 	recorder.Technical(ctx, diagnostics.Event{
 		ID:         diagnostics.NewID(),
 		Workspace:  decision.Workspace,
@@ -157,5 +159,12 @@ func record(ctx context.Context, recorder Recorder, decision Decision) {
 		Severity:   "warn",
 		Step:       string(decision.Reason),
 		Message:    "workspace authorization refused",
+		// Both timestamps, not just one: the panel renders the payload, and a
+		// refusal that arrived with a zero occurred_at and a zero received_at
+		// sorted to the epoch and read as if it had never happened. The column
+		// default only fixes the row's ordering, not what the event says about
+		// itself.
+		Occurred: at,
+		Received: at,
 	})
 }

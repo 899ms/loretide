@@ -80,11 +80,41 @@ func safePresence(names []string)[]string{
  sort.Strings(kept);if len(kept)==0{return nil};return kept
 }
 func oneOf(v string,allowed ...string)string{for _,a:=range allowed{if a==v{return v}};return "unknown"}
+// nonModuleComponents are the delivery tiers an event can come from. They
+// predate the content modules and name where in the stack something happened,
+// not which feature it belonged to.
+var nonModuleComponents = []string{"web", "api", "database", "queue", "daemon", "executor", "tool", "result"}
+
+// contentModuleComponents are the content module names, and they are copied
+// from scripts/content-boundaries.json - the registry the boundary checker
+// already enforces. That file is the single source; this slice has to agree
+// with it, and TestSanitizeComponentAllowlistFollowsTheModuleRegistry reads the
+// registry and fails in either direction if it does not.
+//
+// Copied rather than embedded because the registry lives outside the server Go
+// module and go:embed cannot reach past the module root. A generator would put
+// the same text in the same place with a build step in between; the test is
+// what actually keeps them equal either way.
+//
+// Without these names every ip-profile, workspace-core and topic-planning
+// event reached the real sink as component "unknown" (Issue #108), so the panel
+// and the export could not tell one content module's events from another's -
+// and neither could a test that wanted to count them.
+var contentModuleComponents = []string{
+	"diagnostics", "workspace-core", "ip-profile", "source-inbox",
+	"knowledge-base", "topic-planning", "work-editor", "agent-workflow",
+	"review-delivery", "feedback-learning", "project-collab", "agent-gateway",
+}
+
+// componentAllowlist is the union. "diagnostics" is in both groups - it is a
+// tier and a module - and oneOf does not mind the repeat.
+var componentAllowlist = append(append([]string{}, nonModuleComponents...), contentModuleComponents...)
+
 // Sanitize uses an allowlist. Model output, input text, paths, URLs, headers and
 // nested attributes are never copied into the technical read model.
 func Sanitize(e Event) Event {
  if _,ok:=codes[e.Code];!ok{e.Code="INTERNAL"};e.Message=codes[e.Code]
- e.Component=oneOf(e.Component,"web","api","database","queue","daemon","executor","tool","result","diagnostics")
+ e.Component=oneOf(e.Component,componentAllowlist...)
  e.Severity=oneOf(e.Severity,"debug","info","warn","error");e.ActorKind=oneOf(e.ActorKind,"human","agent","system")
  e.Outcome=oneOf(e.Outcome,"success","failed","cancelled","ignored","pending")
  e.Action=oneOf(e.Action,"simulate","execute","query","export","client_error","retry","cancel","cleanup","result")
