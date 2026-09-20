@@ -29,6 +29,8 @@ case "${1:-}" in
     printf '%s\n' \
       github.com/multica-ai/multica/server \
       github.com/multica-ai/multica/server/internal/daemon \
+      github.com/multica-ai/multica/server/internal/handler \
+      github.com/multica-ai/multica/server/cmd/server \
       github.com/multica-ai/multica/server/pkg/agent \
       github.com/multica-ai/multica/server/pkg/agent/internal/testutil
     ;;
@@ -98,5 +100,23 @@ expect_calls "--only agent" "$agent_call"
 expect_usage_failure "unknown option" --unknown
 expect_usage_failure "unknown --only scope" --only everything
 expect_usage_failure "missing --only scope" --only
+
+# The two package-wide database suites must never appear in the default
+# wrapper's package list. They fail closed without an isolated database, so
+# including them here would make `make test` red everywhere — and, before the
+# fail-closed change, would have let the generic job's DATABASE_URL act as an
+# implicit opt-in. They run through test-go-db.sh instead.
+for excluded in \
+  github.com/multica-ai/multica/server/internal/handler \
+  github.com/multica-ai/multica/server/cmd/server
+do
+  PATH="$BIN_DIR:$PATH" bash "$SCRIPT_DIR/test-go.sh" --only regular
+  if grep -q "$excluded" "$CALLS_FILE"; then
+    echo "default wrapper invoked the database suite $excluded:" >&2
+    cat "$CALLS_FILE" >&2
+    exit 1
+  fi
+  : >"$CALLS_FILE"
+done
 
 echo "test-go.test.sh: PASS"
