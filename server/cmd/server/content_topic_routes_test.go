@@ -156,3 +156,87 @@ func TestContentTopicPathIDSurvivesTheRealMiddleware(t *testing.T) {
 		t.Fatalf("path named %q, response returned %q", created.TopicCardID, got.TopicCardID)
 	}
 }
+
+// The account link endpoint carries the topic card id in the path and the
+// account id in the body, and both have to arrive as themselves. Behind the
+// real router the workspace id is in the request context, which is what the
+// account endpoints once read instead of their path parameter — every one of
+// them answered 404 for accounts that existed, and handler tests could not see
+// it because the context is empty when a handler is called directly (workflow
+// step 12).
+func TestContentTopicAccountLinkUsesThePathIDBehindTheRealMiddleware(t *testing.T) {
+	if testPool == nil || testServer == nil {
+		t.Skip("database not available")
+	}
+	fx := testutil.New(testPool, testWorkspaceID, testUserID)
+	accountID := "topic-link-account-" + fmt.Sprint(time.Now().UnixNano())
+	fx.Exec(t, `INSERT INTO content_account (account_id, workspace_id, platform, display_name, settings)
+		VALUES ($1, $2, 'zhihu', '关联用账号', '{}'::jsonb)`, accountID, testWorkspaceID)
+	fx.Cleanup(t, `DELETE FROM content_account WHERE account_id = $1`, accountID)
+
+	response := accountAPIRequest(t, http.MethodPost, "/api/content-topics", `{
+		"audience_problem_judgment":"audience/problem/judgment",
+		"ip_fit":"fit",
+		"timing":"没有时效依据",
+		"existing_content_relation":"没有",
+		"evidence_gaps_and_investment":"没有现成证据",
+		"channels":["zhihu"],
+		"recommended_action":"start"
+	}`)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("create topic = %d, want 201", response.StatusCode)
+	}
+	var created struct {
+		TopicCardID string `json:"topic_card_id"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.TopicCardID == "" || created.TopicCardID == testWorkspaceID {
+		t.Fatalf("topic id %q cannot prove path/context separation", created.TopicCardID)
+	}
+	fx.Cleanup(t, `DELETE FROM content_operation_audit
+		WHERE workspace_id=$1 AND payload->>'object_id'=$2`, testWorkspaceID, created.TopicCardID)
+	fx.Cleanup(t, `DELETE FROM content_brief_revision WHERE topic_card_id=$1`, created.TopicCardID)
+	fx.Cleanup(t, `DELETE FROM content_topic_card WHERE topic_card_id=$1`, created.TopicCardID)
+
+	linked := accountAPIRequest(t, http.MethodPost,
+		"/api/content-topics/"+created.TopicCardID+"/account",
+		`{"account_id":"`+accountID+`"}`)
+	defer linked.Body.Close()
+	if linked.StatusCode != http.StatusOK {
+		t.Fatalf("link account = %d, want 200", linked.StatusCode)
+	}
+	var got struct {
+		TopicCardID string  `json:"topic_card_id"`
+		AccountID   *string `json:"account_id"`
+	}
+	if err := json.NewDecoder(linked.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.TopicCardID != created.TopicCardID {
+		t.Fatalf("path named %q, response returned %q", created.TopicCardID, got.TopicCardID)
+	}
+	if got.AccountID == nil || *got.AccountID != accountID {
+		t.Fatalf("linked account = %v, want %s", got.AccountID, accountID)
+	}
+
+	// Detaching is the same endpoint with a null account, and it must not be
+	// read as "leave it alone".
+	detached := accountAPIRequest(t, http.MethodPost,
+		"/api/content-topics/"+created.TopicCardID+"/account", `{"account_id":null}`)
+	defer detached.Body.Close()
+	if detached.StatusCode != http.StatusOK {
+		t.Fatalf("detach = %d, want 200", detached.StatusCode)
+	}
+	var cleared struct {
+		AccountID *string `json:"account_id"`
+	}
+	if err := json.NewDecoder(detached.Body).Decode(&cleared); err != nil {
+		t.Fatal(err)
+	}
+	if cleared.AccountID != nil {
+		t.Fatalf("detached account = %v, want null", cleared.AccountID)
+	}
+}

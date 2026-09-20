@@ -357,6 +357,7 @@
     "failed": "保存できませんでした",
     "nextAction": "次: {{action}}",
     "fields": {
+      "account": "アカウント",
       "audienceProblemJudgment": "誰に向けて・何の課題・どんな判断か",
       "ipFit": "この IP に合う理由",
       "timing": "なぜ今か",
@@ -432,6 +433,14 @@
       "candidates": "候補テーマの自動生成",
       "mustUse": "必須・除外の素材",
       "files": "ファイルと素材の入力"
-    }
+    },
+    "noAccount": "アカウントなし",
+    "accountHint": "任意。アカウントに紐づけると「この IP に合う理由」の対象がはっきりします。",
+    "accountTitle": "アカウント",
+    "accountDescription": "このカードがどのアカウント向けかを示します。変更は記録されます。",
+    "accountSave": "アカウントを保存",
+    "filterByAccount": "アカウントで絞り込む",
+    "filterByAccountHint": "特定のアカウント、または未紐づけのカードだけを表示します。",
+    "filterAll": "すべてのカード"
   }
 }

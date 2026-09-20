@@ -701,8 +701,21 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-accounts/${encodeURIComponent(accountId)}/profile`, {method: "POST", body: JSON.stringify(profile)});
   }
 
-  async listContentTopics(): Promise<unknown> {
-    return this.fetch<unknown>("/api/content-topics");
+  // accountFilter is an account id, the sentinel for "no account chosen yet",
+  // or empty for every card. It goes in the query string so a filtered list has
+  // a URL of its own.
+  async listContentTopics(accountFilter?: string): Promise<unknown> {
+    const query = accountFilter ? `?account_id=${encodeURIComponent(accountFilter)}` : "";
+    return this.fetch<unknown>(`/api/content-topics${query}`);
+  }
+
+  // null detaches the card. The server reads null and "" the same way, and
+  // sending null keeps "no account" distinguishable from "field omitted".
+  async setContentTopicAccount(topicCardId: string, accountId: string | null): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}/account`, {
+      method: "POST",
+      body: JSON.stringify({account_id: accountId}),
+    });
   }
 
   async getContentTopic(topicCardId: string): Promise<unknown> {

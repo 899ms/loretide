@@ -357,6 +357,7 @@
     "failed": "저장하지 못했습니다",
     "nextAction": "다음: {{action}}",
     "fields": {
+      "account": "계정",
       "audienceProblemJudgment": "누구를 위한 것인지, 어떤 문제인지, 어떤 판단인지",
       "ipFit": "이 IP에 맞는 이유",
       "timing": "왜 지금인지",
@@ -432,6 +433,14 @@
       "candidates": "후보 주제 자동 생성",
       "mustUse": "필수 및 제외 자료",
       "files": "파일 및 자료 입력"
-    }
+    },
+    "noAccount": "계정 없음",
+    "accountHint": "선택 사항입니다. 계정에 연결하면 “이 IP에 맞는 이유”의 대상이 분명해집니다.",
+    "accountTitle": "계정",
+    "accountDescription": "이 카드가 어느 계정을 위한 것인지 나타냅니다. 변경은 기록됩니다.",
+    "accountSave": "계정 저장",
+    "filterByAccount": "계정으로 필터",
+    "filterByAccountHint": "특정 계정의 카드만, 또는 아직 연결되지 않은 카드만 봅니다.",
+    "filterAll": "모든 카드"
   }
 }

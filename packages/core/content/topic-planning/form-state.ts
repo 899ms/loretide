@@ -79,8 +79,51 @@ export function formatChannels(channels: readonly string[]): string {
   return channels.join(", ");
 }
 
+/**
+ * The list filter value for "no account chosen yet".
+ *
+ * A filter has three answers and only two of them have an id: every card, one
+ * account's cards, and the cards nobody has attached to an account. The third
+ * gets a word no id can be — ids are hex — and the server agrees on it.
+ */
+export const TOPIC_ACCOUNT_FILTER_NONE = "none";
+
+/** Every card, regardless of account. Empty so an absent filter is the default. */
+export const TOPIC_ACCOUNT_FILTER_ALL = "";
+
+/**
+ * What a card's account selection means on the wire.
+ *
+ * The page holds one string because a select holds one string: the empty one
+ * is "no account", and the server is told null rather than "" so the intent
+ * survives a reader who treats "" as "unset".
+ */
+export function accountSelectionToWire(selection: string): string | null {
+  const trimmed = selection.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+/** What the select should show for a card, given what is stored on it. */
+export function accountSelectionOf(accountId: string | null | undefined): string {
+  return accountId ?? "";
+}
+
+/**
+ * True when the selection would change the card. A link write is audited, so
+ * re-confirming the account a card already has would add an event saying
+ * nothing happened.
+ */
+export function accountSelectionChanged(
+  selection: string,
+  accountId: string | null | undefined,
+): boolean {
+  return accountSelectionToWire(selection) !== (accountId ?? null);
+}
+
 /** The seven items of docs/01 §5.2, as the form holds them. */
 export interface TopicCardDraft {
+  /** The account this card is written for; empty means none was chosen. */
+  accountId: string;
   audienceProblemJudgment: string;
   ipFit: string;
   timing: string;
@@ -91,6 +134,7 @@ export interface TopicCardDraft {
 }
 
 export const emptyTopicCardDraft: TopicCardDraft = {
+  accountId: "",
   audienceProblemJudgment: "",
   ipFit: "",
   timing: "",
@@ -102,7 +146,7 @@ export const emptyTopicCardDraft: TopicCardDraft = {
 
 export function topicCardDraftToInput(draft: TopicCardDraft): TopicCardInput {
   return {
-    accountId: null,
+    accountId: accountSelectionToWire(draft.accountId),
     audienceProblemJudgment: draft.audienceProblemJudgment.trim(),
     ipFit: draft.ipFit.trim(),
     timing: draft.timing.trim(),

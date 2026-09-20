@@ -5,11 +5,16 @@ import { useT } from "@multica/views/i18n";
 import {
   SAVED,
   saveOutcome,
+  useContentAccounts,
   type SaveOutcome,
 } from "@multica/core/content/ip-profile";
 import {
+  TOPIC_ACCOUNT_FILTER_NONE,
   TOPIC_ACTIONS,
   TOPIC_DECISION_REASONS,
+  accountSelectionChanged,
+  accountSelectionOf,
+  accountSelectionToWire,
   briefDraftDiffers,
   briefDraftFromRevision,
   briefDraftToInput,
@@ -29,6 +34,7 @@ import {
   useContentTopic,
   useContentTopics,
   useCreateContentTopic,
+  useSetContentTopicAccount,
   type BriefDraft,
   type BriefRevision,
   type TopicAction,
@@ -154,6 +160,74 @@ function reasonLabel(t: Translate, reason: string): string {
   }
 }
 
+// The accounts this brand publishes under, as select options. An account a
+// card points at but that no longer lists is still shown by its id rather than
+// as an empty box: the card says something, and hiding it would read as "no
+// account chosen".
+function useAccountOptions(wsId: string) {
+  const accounts = useContentAccounts(wsId);
+  return (accounts.data ?? []).map((account) => ({
+    value: account.account_id,
+    label: account.display_name || account.account_id,
+  }));
+}
+
+function accountName(
+  options: { value: string; label: string }[],
+  accountId: string,
+): string {
+  return (
+    options.find((option) => option.value === accountId)?.label ?? accountId
+  );
+}
+
+/** The account select, shared by the create form, the detail panel and the filter. */
+function AccountSelect({
+  value,
+  options,
+  onChange,
+  label,
+  noneLabel,
+}: {
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+  label: string;
+  noneLabel: string;
+}) {
+  // The empty option is a real choice, not a placeholder: "this card is not
+  // written for one account" is something a person means.
+  const items = [{ value: NO_ACCOUNT, label: noneLabel }, ...options];
+  return (
+    <Select
+      items={items}
+      value={value === "" ? NO_ACCOUNT : value}
+      onValueChange={(next) =>
+        onChange(next === NO_ACCOUNT || next == null ? "" : next)
+      }
+    >
+      <SelectTrigger aria-label={label}>
+        <SelectValue placeholder={noneLabel} />
+      </SelectTrigger>
+      <SelectContent>
+        {items.map((item) => (
+          <SelectItem key={item.value} value={item.value}>
+            {item.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+// Base UI's Select treats the empty string as "nothing selected", so the
+// "no account" choice needs a value of its own to be selectable at all. It
+// never leaves this file: accountSelectionToWire is what the server sees.
+const NO_ACCOUNT = "__none__";
+
+// Same reason as NO_ACCOUNT, for the list filter's "every card" row.
+const FILTER_ALL = "__all__";
+
 /** A value the person typed, shown back read-only. */
 function ReadOnlyValue({ value }: { value: string }) {
   const { t } = useT("common");
@@ -184,7 +258,10 @@ export function TopicPlanningPage({ wsId }: TopicPlanningPageProps) {
 
 function TopicPlanningContent({ wsId }: TopicPlanningPageProps) {
   const { t } = useT("common");
-  const topics = useContentTopics(wsId);
+  const accountOptions = useAccountOptions(wsId);
+  // "" is every card; the sentinel is the cards no account was chosen for.
+  const [accountFilter, setAccountFilter] = useState("");
+  const topics = useContentTopics(wsId, accountFilter);
   const [selectedId, setSelectedId] = useState("");
 
   const list = topics.data ?? [];
@@ -201,6 +278,52 @@ function TopicPlanningContent({ wsId }: TopicPlanningPageProps) {
       >
         <SettingsSection title={t(($) => $.contentTopics.listTitle)}>
           <SettingsCard>
+            <SettingsRow
+              label={t(($) => $.contentTopics.filterByAccount)}
+              description={t(($) => $.contentTopics.filterByAccountHint)}
+              size="select-wide"
+            >
+              <Select
+                items={[
+                  {
+                    value: FILTER_ALL,
+                    label: t(($) => $.contentTopics.filterAll),
+                  },
+                  {
+                    value: TOPIC_ACCOUNT_FILTER_NONE,
+                    label: t(($) => $.contentTopics.noAccount),
+                  },
+                  ...accountOptions,
+                ]}
+                value={accountFilter === "" ? FILTER_ALL : accountFilter}
+                onValueChange={(value) =>
+                  setAccountFilter(
+                    value === FILTER_ALL || value == null ? "" : value,
+                  )
+                }
+              >
+                <SelectTrigger
+                  aria-label={t(($) => $.contentTopics.filterByAccount)}
+                >
+                  <SelectValue
+                    placeholder={t(($) => $.contentTopics.filterAll)}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={FILTER_ALL}>
+                    {t(($) => $.contentTopics.filterAll)}
+                  </SelectItem>
+                  <SelectItem value={TOPIC_ACCOUNT_FILTER_NONE}>
+                    {t(($) => $.contentTopics.noAccount)}
+                  </SelectItem>
+                  {accountOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </SettingsRow>
             {topics.isError ? (
               <SettingsRow label={t(($) => $.contentTopics.loadFailed)}>
                 <span className="text-caption text-muted-foreground" />
@@ -225,7 +348,11 @@ function TopicPlanningContent({ wsId }: TopicPlanningPageProps) {
                       {card.audienceProblemJudgment || card.topicCardId}
                     </button>
                   }
-                  description={`${statusLabel(t, card.status)} · ${formatChannels(card.channels)}`}
+                  description={`${statusLabel(t, card.status)} · ${
+                    card.accountId
+                      ? accountName(accountOptions, card.accountId)
+                      : t(($) => $.contentTopics.noAccount)
+                  } · ${formatChannels(card.channels)}`}
                 >
                   <span className="text-caption text-muted-foreground" />
                 </SettingsRow>
@@ -234,7 +361,11 @@ function TopicPlanningContent({ wsId }: TopicPlanningPageProps) {
           </SettingsCard>
         </SettingsSection>
 
-        <CreateTopicSection wsId={wsId} onCreated={setSelectedId} />
+        <CreateTopicSection
+          wsId={wsId}
+          onCreated={setSelectedId}
+          accountOptions={accountOptions}
+        />
 
         <NotAvailableYetSection />
 
@@ -243,6 +374,7 @@ function TopicPlanningContent({ wsId }: TopicPlanningPageProps) {
             key={selected.topicCardId}
             wsId={wsId}
             card={selected}
+            accountOptions={accountOptions}
           />
         ) : null}
       </SettingsTab>
@@ -281,9 +413,11 @@ function NotAvailableYetSection() {
 function CreateTopicSection({
   wsId,
   onCreated,
+  accountOptions,
 }: {
   wsId: string;
   onCreated: (topicCardId: string) => void;
+  accountOptions: { value: string; label: string }[];
 }) {
   const { t } = useT("common");
   const create = useCreateContentTopic(wsId);
@@ -356,6 +490,19 @@ function CreateTopicSection({
       description={t(($) => $.contentTopics.createDescription)}
     >
       <SettingsCard>
+        <SettingsRow
+          label={t(($) => $.contentTopics.fields.account)}
+          description={t(($) => $.contentTopics.accountHint)}
+          size="select-wide"
+        >
+          <AccountSelect
+            value={draft.accountId}
+            options={accountOptions}
+            onChange={(value) => edit({ accountId: value })}
+            label={t(($) => $.contentTopics.fields.account)}
+            noneLabel={t(($) => $.contentTopics.noAccount)}
+          />
+        </SettingsRow>
         {items.map((item) => (
           <SettingsRow
             key={item.key}
@@ -412,14 +559,27 @@ function CreateTopicSection({
   );
 }
 
-function TopicCardPanel({ wsId, card }: { wsId: string; card: TopicCard }) {
+function TopicCardPanel({
+  wsId,
+  card,
+  accountOptions,
+}: {
+  wsId: string;
+  card: TopicCard;
+  accountOptions: { value: string; label: string }[];
+}) {
   // The detail query is what the four actions refresh, so the panel reads it
   // rather than the row it was selected from.
   const detail = useContentTopic(wsId, card.topicCardId);
   const current = detail.data ?? card;
   return (
     <>
-      <TopicCardDetail card={current} />
+      <TopicCardDetail card={current} accountOptions={accountOptions} />
+      <AccountLinkSection
+        wsId={wsId}
+        card={current}
+        accountOptions={accountOptions}
+      />
       <DecisionSection wsId={wsId} card={current} />
       {canAppendBrief(current) ? (
         <BriefSection wsId={wsId} card={current} />
@@ -428,7 +588,13 @@ function TopicCardPanel({ wsId, card }: { wsId: string; card: TopicCard }) {
   );
 }
 
-function TopicCardDetail({ card }: { card: TopicCard }) {
+function TopicCardDetail({
+  card,
+  accountOptions,
+}: {
+  card: TopicCard;
+  accountOptions: { value: string; label: string }[];
+}) {
   const { t } = useT("common");
   const items: { label: string; value: string }[] = [
     {
@@ -460,6 +626,13 @@ function TopicCardDetail({ card }: { card: TopicCard }) {
         <SettingsRow label={t(($) => $.contentTopics.statusLabel)}>
           <span className="text-body text-muted-foreground">
             {statusLabel(t, card.status)}
+          </span>
+        </SettingsRow>
+        <SettingsRow label={t(($) => $.contentTopics.fields.account)}>
+          <span className="text-body text-muted-foreground">
+            {card.accountId
+              ? accountName(accountOptions, card.accountId)
+              : t(($) => $.contentTopics.noAccount)}
           </span>
         </SettingsRow>
         {items.map((item) => (
@@ -494,6 +667,79 @@ function TopicCardDetail({ card }: { card: TopicCard }) {
             </SettingsRow>
           </>
         ) : null}
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
+// Changing which account a card is written for. Its own section rather than a
+// field in the decision row: it is a different question ("who is this for")
+// from the four actions ("what happens to it"), and the server audits it as
+// its own step.
+function AccountLinkSection({
+  wsId,
+  card,
+  accountOptions,
+}: {
+  wsId: string;
+  card: TopicCard;
+  accountOptions: { value: string; label: string }[];
+}) {
+  const { t } = useT("common");
+  const link = useSetContentTopicAccount(wsId);
+  const [selection, setSelection] = useState(() =>
+    accountSelectionOf(card.accountId),
+  );
+  const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
+
+  const submit = () => {
+    setOutcome(null);
+    link.mutate(
+      {
+        topicCardId: card.topicCardId,
+        accountId: accountSelectionToWire(selection),
+      },
+      {
+        onSuccess: () => setOutcome(SAVED),
+        onError: (error) => setOutcome(saveOutcome(error)),
+      },
+    );
+  };
+
+  return (
+    <SettingsSection
+      title={t(($) => $.contentTopics.accountTitle)}
+      description={t(($) => $.contentTopics.accountDescription)}
+    >
+      <SettingsCard>
+        <SettingsRow
+          label={t(($) => $.contentTopics.fields.account)}
+          size="select-wide"
+        >
+          <AccountSelect
+            value={selection}
+            options={accountOptions}
+            onChange={setSelection}
+            label={t(($) => $.contentTopics.fields.account)}
+            noneLabel={t(($) => $.contentTopics.noAccount)}
+          />
+        </SettingsRow>
+        <SettingsRow label={t(($) => $.contentTopics.accountSave)}>
+          <div className="flex items-center gap-3">
+            <SaveFeedback outcome={outcome} pending={link.isPending} />
+            {/* Saving the account the card already has would write an audit
+                event that records nothing happening. */}
+            <Button
+              onClick={submit}
+              disabled={
+                link.isPending ||
+                !accountSelectionChanged(selection, card.accountId)
+              }
+            >
+              {t(($) => $.contentTopics.accountSave)}
+            </Button>
+          </div>
+        </SettingsRow>
       </SettingsCard>
     </SettingsSection>
   );

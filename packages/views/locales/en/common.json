@@ -357,6 +357,7 @@
     "failed": "Could not save",
     "nextAction": "Next: {{action}}",
     "fields": {
+      "account": "Account",
       "audienceProblemJudgment": "Who it is for, the problem, the judgement",
       "ipFit": "Why it fits this IP",
       "timing": "Why now",
@@ -432,6 +433,14 @@
       "candidates": "Generated candidate topics",
       "mustUse": "Must-use and excluded material",
       "files": "File and material input"
-    }
+    },
+    "noAccount": "No account",
+    "accountHint": "Optional. A card written for one account can say why it fits that account.",
+    "accountTitle": "Account",
+    "accountDescription": "Which account this card is written for. Changing it is recorded.",
+    "accountSave": "Save account",
+    "filterByAccount": "Filter by account",
+    "filterByAccountHint": "Narrow the list to one account, or to the cards with none.",
+    "filterAll": "All cards"
   }
 }

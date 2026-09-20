@@ -44,8 +44,9 @@
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
-| `GET` / `POST` | `/api/content-topics` | 列表 / 手工新建选题卡 |
+| `GET` / `POST` | `/api/content-topics` | 列表 / 手工新建选题卡；列表可带 `?account_id=<id>` 或 `?account_id=none`（只看未关联）筛选 |
 | `GET` | `/api/content-topics/{id}` | 读取一张卡；查询同时带 `workspace_id` |
+| `POST` | `/api/content-topics/{id}/account` | 关联 / 改关联 / 解除关联账号（Issue #130）；`account_id` 为 `null` 即解除；跨品牌账号按 404 语义拒绝；写入持删除栅栏并记一条 `link-account` 审计 |
 | `POST` | `/api/content-topics/{id}/actions` | `start` / `save` / `defer` / `drop`；`start` 同事务创建且只创建一份首版简报 |
 | `GET` / `POST` | `/api/content-topics/{id}/briefs` | 版本列表 / 追加版本 |
 | `GET` | `/api/content-topics/{id}/briefs/{revisionId}` | 按稳定 `brief_revision_id` 读取旧版 |

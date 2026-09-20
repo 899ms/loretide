@@ -111,7 +111,10 @@ func (h *Handler) ListContentTopics(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	cards, err := h.topicPlanningStore().List(r.Context(), workspace, actor)
+	// The filter is read from the query string, not from a body: this is a GET
+	// and a bookmarked or shared URL should come back to the same list.
+	cards, err := h.topicPlanningStore().List(r.Context(), workspace, actor,
+		r.URL.Query().Get("account_id"))
 	if err != nil {
 		h.topicError(w, err)
 		return
@@ -125,6 +128,37 @@ func (h *Handler) GetContentTopic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	card, err := h.topicPlanningStore().Get(r.Context(), workspace, actor, topicCardIDFromURL(r))
+	if err != nil {
+		h.topicError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, card)
+}
+
+// SetContentTopicAccount attaches the card to one of the brand's accounts, or
+// detaches it. Its own endpoint rather than a field on the actions body, so a
+// decision cannot re-target a card as a side effect.
+func (h *Handler) SetContentTopicAccount(w http.ResponseWriter, r *http.Request) {
+	workspace, actor, ok := h.topicScope(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		AccountID *string `json:"account_id"`
+	}
+	if !decodeTopicBody(w, r, &body) {
+		h.topicError(w, topicplanning.ErrInvalid)
+		return
+	}
+	// null and "" both mean "no account". A client that clears a select sends
+	// one or the other depending on how it models an empty choice, and both
+	// readings of "nothing chosen" are the same state here.
+	accountID := body.AccountID
+	if accountID != nil && *accountID == "" {
+		accountID = nil
+	}
+	card, err := h.topicPlanningStore().SetAccount(r.Context(), workspace, actor,
+		topicCardIDFromURL(r), accountID)
 	if err != nil {
 		h.topicError(w, err)
 		return

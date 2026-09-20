@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -630,3 +631,156 @@ func TestStartAfterWaitingForTheCardLockReturnsTheWinnersFirstBrief(t *testing.T
 		t.Fatalf("two starts left %d revisions, want 1", len(briefs))
 	}
 }
+
+// Attaching a card to an account, moving it to another, and detaching it
+// again. The link is what makes "why this fits this IP" a question about a
+// particular account rather than about the brand in general (SOP §5.2).
+func TestTopicCardAccountLinkRoundTrip(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, actor = "workspace-link", "actor-a"
+	for _, account := range []string{"account-one", "account-two"} {
+		fx.db.InsertNoID(t, "content_account", testutil.Cols{
+			"account_id": account, "workspace_id": workspace, "platform": "zhihu",
+			"display_name": account, "settings": testutil.Raw(`'{}'::jsonb`),
+		}, "account_id=$1", account)
+	}
+	created, err := fx.store.Create(ctx, actor, completeCard(workspace))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.AccountID != nil {
+		t.Fatalf("a new card starts linked to %v, want nil", created.AccountID)
+	}
+
+	first := "account-one"
+	linked, err := fx.store.SetAccount(ctx, workspace, actor, created.TopicCardID, &first)
+	if err != nil {
+		t.Fatalf("link: %v", err)
+	}
+	if linked.AccountID == nil || *linked.AccountID != first {
+		t.Fatalf("linked card = %v, want %s", linked.AccountID, first)
+	}
+	second := "account-two"
+	if _, err = fx.store.SetAccount(ctx, workspace, actor, created.TopicCardID, &second); err != nil {
+		t.Fatalf("relink: %v", err)
+	}
+	detached, err := fx.store.SetAccount(ctx, workspace, actor, created.TopicCardID, nil)
+	if err != nil {
+		t.Fatalf("detach: %v", err)
+	}
+	if detached.AccountID != nil {
+		t.Fatalf("detached card = %v, want nil", detached.AccountID)
+	}
+	// Read back rather than trust the returned struct: the row is what the
+	// next request will see.
+	reread, err := fx.store.Get(ctx, workspace, actor, created.TopicCardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reread.AccountID != nil {
+		t.Fatalf("stored link = %v, want nil", reread.AccountID)
+	}
+	// Three links, three audit events. "Who pointed this card at that account,
+	// and when" is the question the audit exists to answer.
+	events := fx.db.Count(t, `SELECT count(*) FROM content_operation_audit
+		WHERE workspace_id=$1 AND payload->>'object_id'=$2 AND payload->>'step'='link-account'`,
+		workspace, created.TopicCardID)
+	if events != 3 {
+		t.Fatalf("link audit events = %d, want 3", events)
+	}
+}
+
+// An account from another brand is refused exactly like a card from another
+// brand, and the link the card already had is left alone.
+func TestSetAccountRejectsAnAccountFromAnotherWorkspace(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, actor = "workspace-link-foreign", "actor-a"
+	fx.db.InsertNoID(t, "content_account", testutil.Cols{
+		"account_id": "mine", "workspace_id": workspace, "platform": "zhihu",
+		"display_name": "Mine", "settings": testutil.Raw(`'{}'::jsonb`),
+	}, "account_id=$1", "mine")
+	fx.db.InsertNoID(t, "content_account", testutil.Cols{
+		"account_id": "theirs", "workspace_id": "workspace-other", "platform": "zhihu",
+		"display_name": "Theirs", "settings": testutil.Raw(`'{}'::jsonb`),
+	}, "account_id=$1", "theirs")
+	created, err := fx.store.Create(ctx, actor, completeCard(workspace))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine := "mine"
+	if _, err = fx.store.SetAccount(ctx, workspace, actor, created.TopicCardID, &mine); err != nil {
+		t.Fatal(err)
+	}
+	theirs := "theirs"
+	if _, err = fx.store.SetAccount(ctx, workspace, actor, created.TopicCardID, &theirs); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("foreign account link = %v, want ErrNotFound", err)
+	}
+	if _, err = fx.store.SetAccount(ctx, workspace, actor, created.TopicCardID, stringPointer("missing")); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing account link = %v, want ErrNotFound", err)
+	}
+	reread, err := fx.store.Get(ctx, workspace, actor, created.TopicCardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reread.AccountID == nil || *reread.AccountID != mine {
+		t.Fatalf("refused link changed the card to %v", reread.AccountID)
+	}
+}
+
+// The list narrows to one account, to the cards no account has been chosen
+// for, or to everything.
+func TestListFiltersByAccount(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, actor = "workspace-filter", "actor-a"
+	fx.db.InsertNoID(t, "content_account", testutil.Cols{
+		"account_id": "filter-account", "workspace_id": workspace, "platform": "zhihu",
+		"display_name": "Filter", "settings": testutil.Raw(`'{}'::jsonb`),
+	}, "account_id=$1", "filter-account")
+	linkedCard, err := fx.store.Create(ctx, actor, completeCard(workspace))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlinkedCard, err := fx.store.Create(ctx, actor, completeCard(workspace))
+	if err != nil {
+		t.Fatal(err)
+	}
+	account := "filter-account"
+	if _, err = fx.store.SetAccount(ctx, workspace, actor, linkedCard.TopicCardID, &account); err != nil {
+		t.Fatal(err)
+	}
+
+	ids := func(filter string) []string {
+		t.Helper()
+		cards, listErr := fx.store.List(ctx, workspace, actor, filter)
+		if listErr != nil {
+			t.Fatalf("list %q: %v", filter, listErr)
+		}
+		out := []string{}
+		for _, card := range cards {
+			out = append(out, card.TopicCardID)
+		}
+		sort.Strings(out)
+		return out
+	}
+	both := []string{linkedCard.TopicCardID, unlinkedCard.TopicCardID}
+	sort.Strings(both)
+	if got := ids(""); !reflect.DeepEqual(got, both) {
+		t.Errorf("unfiltered list = %v, want both cards", got)
+	}
+	if got := ids(account); !reflect.DeepEqual(got, []string{linkedCard.TopicCardID}) {
+		t.Errorf("list by account = %v, want the linked card", got)
+	}
+	if got := ids(AccountFilterNone); !reflect.DeepEqual(got, []string{unlinkedCard.TopicCardID}) {
+		t.Errorf("list of unlinked = %v, want the unlinked card", got)
+	}
+	// A filter naming an account with no cards is an empty list, not an error
+	// and not every card.
+	if got := ids("filter-account-with-nothing"); len(got) != 0 {
+		t.Errorf("list by an unused account = %v, want none", got)
+	}
+}
+
+func stringPointer(value string) *string { return &value }

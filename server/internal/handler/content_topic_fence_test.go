@@ -119,6 +119,10 @@ func TestContentTopicWritesAreFencedByWorkspaceDeletion(t *testing.T) {
 				topicplanning.BriefRevision{Audience: "audience"})
 			return err
 		}},
+		{"set-account", func() error {
+			_, err := store.SetAccount(ctx, workspaceID, testUserID, created.TopicCardID, nil)
+			return err
+		}},
 	} {
 		t.Run(write.name, func(t *testing.T) {
 			if err := write.call(); !errors.Is(err, topicplanning.ErrNotFound) {

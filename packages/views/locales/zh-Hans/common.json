@@ -357,6 +357,7 @@
     "failed": "保存失败",
     "nextAction": "下一步：{{action}}",
     "fields": {
+      "account": "关联账号",
       "audienceProblemJudgment": "写给谁、解决什么问题、拟表达什么判断",
       "ipFit": "为什么适合这个 IP",
       "timing": "为什么是现在",
@@ -432,6 +433,14 @@
       "candidates": "候选选题自动生成",
       "mustUse": "必用与排除的素材",
       "files": "文件与素材输入"
-    }
+    },
+    "noAccount": "不关联账号",
+    "accountHint": "可不填。关联到某个账号后，「为什么适合这个 IP」才有具体对象。",
+    "accountTitle": "关联账号",
+    "accountDescription": "这张卡写给哪个账号。改动会被记录。",
+    "accountSave": "保存关联",
+    "filterByAccount": "按账号筛选",
+    "filterByAccountHint": "只看某个账号的卡，或只看还没关联账号的卡。",
+    "filterAll": "全部选题卡"
   }
 }
