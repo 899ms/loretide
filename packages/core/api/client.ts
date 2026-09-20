@@ -951,6 +951,26 @@ export class ApiClient {
     return this.fetch<unknown>("/api/content-feedback/pending");
   }
 
+  // The brand's operating rules (specs/029). Brand-scoped: which brand is
+  // decided by the workspace header, so neither path carries an id.
+  async contentOperatingRules(): Promise<unknown> {
+    return this.fetch<unknown>("/api/operating-rules");
+  }
+
+  // PUT rather than a field on the workspace PATCH: that endpoint assigns the
+  // settings blob wholesale and would take the brand's timezone with it. The
+  // server merges this one key.
+  async setContentOperatingRules(body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>("/api/operating-rules", {method: "PUT", body: JSON.stringify(body)});
+  }
+
+  // The account's public page link, merged server-side for the same reason
+  // /scope is (LT-014). Stored, never fetched.
+  async setContentAccountHomepage(accountId: string, homepage: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-accounts/${encodeURIComponent(accountId)}/homepage`,
+      {method: "PUT", body: JSON.stringify({homepage})});
+  }
+
   async contentDiagnosticStream(query: string, signal: AbortSignal): Promise<Response> {
     return this.fetchRaw(`/api/content-diagnostics/stream?${query}`, {signal});
   }
