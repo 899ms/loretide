@@ -1974,6 +1974,20 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			})
 		})
 
+		// The brand's operating rules (specs/029, SOP 3.2). Its own workspace
+		// authorization boundary for the same reason the blocks below have
+		// one: every decision has to reach workspace-core.Authorize.
+		//
+		// No path parameter anywhere here: which brand is decided by the
+		// X-Workspace-ID header. PUT rather than a field on the workspace
+		// PATCH, because that query assigns the settings column wholesale and
+		// would take the brand's timezone with it.
+		r.Route("/api/operating-rules", func(r chi.Router) {
+			r.Use(h.DiagnosticTrace)
+			r.Get("/", h.GetContentOperatingRules)
+			r.Put("/", h.SetContentOperatingRules)
+		})
+
 		// Manual metrics and feedback excerpts own their workspace
 		// authorization boundary for the same reason review delivery does:
 		// every decision has to reach workspace-core.Authorize, including
@@ -2039,6 +2053,9 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					// replaces the settings blob wholesale, so this merges
 					// server-side instead (LT-014).
 					r.Put("/scope", h.SetAccountScope)
+					// The account's public page link (specs/029), for the same
+					// reason and by the same route shape as /scope.
+					r.Put("/homepage", h.SetContentAccountHomepage)
 				})
 			})
 
