@@ -16,9 +16,9 @@
 ## Requirement Completeness
 
 - [x] No [NEEDS CLARIFICATION] markers remain
-      — 三个待裁决项已提升为文末「待裁决（clarify）」一节，各带推荐值与取舍，**不阻塞 plan**。**Q3 需要 SOP §7.1 原文**，已在该节明确标出需要哪一段。
+      — 三条 clarify 与两个附带问题**已由主控裁决**（2026-09-21），**并给出了 SOP §7.1「文档编辑」行的原文**（抄在 spec 与 contract 的开头）。文末「裁决记录」记了结论与它改变了什么。
 - [x] Requirements are testable and unambiguous
-      — 例外：FR-004 与 FR-016 的取值/形态依赖 Q3，条文里指向了它而不是含糊其辞。
+      — 裁决后无例外：FR-004（作品无状态列）、FR-007a（`working`/`saved`）、FR-010（来源恰好三个）、FR-010a（动作第二列）、FR-011 / FR-016（恢复与采用的具体取值）都按 §7.1 原文写死了。
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
       — SC-004 / SC-008 提到守卫与迁移规则编号：它们是本仓库既有的、可运行的检查，不是本卡的实现选择。
@@ -37,8 +37,9 @@
 
 ## Notes
 
-- **Q1 影响 Key Entities 与 FR-007/FR-009**：选 A（可变列 + 独立版本表）则新表两张（作品、文档）加一张版本表；选 B 则四张。
-- **Q2 影响 `scripts/content-boundaries.json`**：选 A 不动登记表；选 B 要加一条依赖方向，属跨模块决定。
-- **Q3 影响 FR-004 / FR-016 与受控集的 `CHECK`**：改受控集要一次迁移，所以它最好在 plan 之前定下来；暂定值已写进 spec 以便不阻塞。
+- **Q1=A 已回写**：编辑副本是文档行可变列，版本独立 append-only 表，**显式**存版本；不自动存版；**要** `workspace_id` 打头的索引。
+- **Q2=A 已回写**：只存字符串 id，不 import `topic-planning`，登记表不动。
+- **Q3 已按 SOP 原文回写**：编辑副本状态只有 `working` / `saved`；作品**无状态列**；版本来源恰好 `generated` / `edited` / `adopted`；**来源与动作两列**，恢复是动作不是来源。
+- **本轮我补的两处**：`content_work` 也需要一个 `workspace_id` 打头的索引（同一论证，且「列一张卡下的作品」本就需要它）；普通保存的 `action = saved`（裁决未点名，已标明）。
 - 宪法 II：本卡不写 UI 单测、不做浏览器验收（FR-027）。
 - 宪法 X：本清单勾选只代表「已核对」，不代表验收通过。
