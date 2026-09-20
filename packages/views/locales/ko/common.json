@@ -724,5 +724,58 @@
       "removed": "삭제됨",
       "unknown": "알 수 없음"
     }
+  },
+  "contentToday": {
+    "title": "오늘의 작업대",
+    "description": "쓸 만한 것, 진행 중인 것, 결정이 필요한 것, 기한이 된 것.",
+    "open": "열기",
+    "seeAll": "전체 보기",
+    "loading": "불러오는 중…",
+    "empty": "오늘은 여기에 아무것도 없습니다",
+    "sectionFailed": "이 섹션을 불러오지 못했습니다",
+    "rowFailed": "이 항목을 불러오지 못했습니다",
+    "more": "{{hidden}}건 더 (총 {{total}}건)",
+    "deepLinkHint": "주제 페이지를 엽니다: 검토와 인계는 카드의 작품과 문서 아래에 있으며 자체 경로가 없습니다.",
+    "listSeparator": ", ",
+    "topics": {
+      "title": "쓸 만한 주제",
+      "unavailableHint": "후보 자동 생성은 사용할 수 없습니다(EP-04c 미구현). 여기에는 사람이 만든 초안 카드가 표시됩니다.",
+      "noReason": "기록된 이유 없음",
+      "effortLabel": "예상 투입",
+      "effortHours": "주 {{hours}}시간",
+      "effortUnconfirmed": "미확인",
+      "effortNoAccount": "연결된 계정 없음"
+    },
+    "works": {
+      "title": "진행 중인 작품",
+      "working": "편집 중"
+    },
+    "reviews": {
+      "title": "처리할 검토",
+      "status": {
+        "pending": "결정 대기",
+        "changesRequested": "수정 요청됨"
+      }
+    },
+    "deliveries": {
+      "title": "기한이 된 인계와 미등록 발행",
+      "due": "기한 초과, 미인계",
+      "pendingRegistration": "인계 완료, 결과 미등록"
+    },
+    "feedback": {
+      "title": "기록할 피드백",
+      "unavailable": "현재 사용할 수 없습니다(피드백 기록 연결 후).",
+      "unavailableShort": "현재 사용할 수 없습니다"
+    },
+    "accountGaps": {
+      "title": "계정 설정 누락",
+      "missingLabel": "누락",
+      "fields": {
+        "audience": "대상 독자",
+        "contentPillars": "콘텐츠 방향",
+        "primaryChannels": "주요 채널",
+        "weeklyHours": "주간 투입 시간"
+      }
+    }
   }
 }

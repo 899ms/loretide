@@ -724,5 +724,58 @@
       "removed": "Removed",
       "unknown": "Unknown"
     }
+  },
+  "contentToday": {
+    "title": "Today",
+    "description": "What is worth writing, what is in progress, what needs a decision, and what is due.",
+    "open": "Open",
+    "seeAll": "See all",
+    "loading": "Loading…",
+    "empty": "Nothing here today",
+    "sectionFailed": "Could not load this section",
+    "rowFailed": "Could not read this one",
+    "more": "{{hidden}} more ({{total}} in total)",
+    "deepLinkHint": "Opens the topics page: reviews and handovers live under a card's work and document, and have no route of their own.",
+    "listSeparator": ", ",
+    "topics": {
+      "title": "Topics worth writing",
+      "unavailableHint": "Automatic candidate generation is unavailable (EP-04c has not landed). These are the draft cards people created.",
+      "noReason": "No reason recorded",
+      "effortLabel": "Estimated effort",
+      "effortHours": "{{hours}} h/week",
+      "effortUnconfirmed": "Not confirmed",
+      "effortNoAccount": "No account linked"
+    },
+    "works": {
+      "title": "Works in progress",
+      "working": "Being written"
+    },
+    "reviews": {
+      "title": "Reviews to handle",
+      "status": {
+        "pending": "Waiting for a decision",
+        "changesRequested": "Changes requested"
+      }
+    },
+    "deliveries": {
+      "title": "Handovers due and publications to record",
+      "due": "Due, not handed over",
+      "pendingRegistration": "Handed over, nothing recorded yet"
+    },
+    "feedback": {
+      "title": "Feedback to record",
+      "unavailable": "Unavailable for now (once feedback records are connected).",
+      "unavailableShort": "Unavailable for now"
+    },
+    "accountGaps": {
+      "title": "Account setup gaps",
+      "missingLabel": "Missing",
+      "fields": {
+        "audience": "Audience",
+        "contentPillars": "Content direction",
+        "primaryChannels": "Primary channels",
+        "weeklyHours": "Weekly hours"
+      }
+    }
   }
 }

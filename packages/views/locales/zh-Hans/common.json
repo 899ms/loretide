@@ -724,5 +724,58 @@
       "removed": "已被删除",
       "unknown": "未知"
     }
+  },
+  "contentToday": {
+    "title": "今日工作台",
+    "description": "值得写的、正在推进的、需要决定的、以及到期的。",
+    "open": "打开",
+    "seeAll": "查看全部",
+    "loading": "加载中…",
+    "empty": "今天这里没有",
+    "sectionFailed": "这个区块读取失败",
+    "rowFailed": "这一条读取失败",
+    "more": "还有 {{hidden}} 条（共 {{total}} 条）",
+    "deepLinkHint": "打开后进入选题页：审核与交接在选题卡的作品与文档之下，没有独立路由，需在那里找到这一条。",
+    "listSeparator": "、",
+    "topics": {
+      "title": "值得写的选题",
+      "unavailableHint": "候选自动生成暂不可用（EP-04c 未落地）。这里列出的是人工创建的待定卡。",
+      "noReason": "未记录理由",
+      "effortLabel": "预计投入",
+      "effortHours": "每周 {{hours}} 小时",
+      "effortUnconfirmed": "未确认",
+      "effortNoAccount": "未关联账号"
+    },
+    "works": {
+      "title": "正在推进的作品",
+      "working": "编辑中"
+    },
+    "reviews": {
+      "title": "需要处理的审核",
+      "status": {
+        "pending": "等待决定",
+        "changesRequested": "已要求修改"
+      }
+    },
+    "deliveries": {
+      "title": "到期交接与待登记发布",
+      "due": "已到期，尚未交接",
+      "pendingRegistration": "已交接，尚未登记结果"
+    },
+    "feedback": {
+      "title": "待补录的反馈",
+      "unavailable": "暂不可用（反馈记录接入后）。",
+      "unavailableShort": "暂不可用"
+    },
+    "accountGaps": {
+      "title": "账号配置缺项",
+      "missingLabel": "缺",
+      "fields": {
+        "audience": "目标读者",
+        "contentPillars": "内容方向",
+        "primaryChannels": "主要渠道",
+        "weeklyHours": "每周投入"
+      }
+    }
   }
 }

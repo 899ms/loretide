@@ -162,6 +162,7 @@
     "./skills/pack-archive": "./skills/pack-archive.ts",
     "./skills/stores": "./skills/stores/index.ts",
     "./autopilots/stores": "./autopilots/stores/index.ts",
+    "./today": "./today/index.ts",
     "./content/diagnostics": "./content/diagnostics/index.ts",
     "./content/ip-profile": "./content/ip-profile/index.ts",
     "./content/topic-planning": "./content/topic-planning/index.ts",
