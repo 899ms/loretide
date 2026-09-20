@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_manual_metric_id_unique_idx;
