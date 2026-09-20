@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_source_revision_source_idx;

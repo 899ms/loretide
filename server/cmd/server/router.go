@@ -1953,6 +1953,27 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/", h.RecordContentPublication)
 		})
 
+		// The material inbox owns its workspace authorization boundary for the
+		// same reason the work editor does: every decision has to reach
+		// workspace-core.Authorize, including refusals that must be recorded.
+		//
+		// There is no DELETE. Archiving is a status, and R-011 forbids removing
+		// a duplicate's own annotation and collection context.
+		r.Route("/api/content-sources", func(r chi.Router) {
+			r.Use(h.DiagnosticTrace)
+			r.Get("/", h.ListContentSources)
+			r.Post("/", h.CreateContentSource)
+			// Static segments before the parameter: "duplicates" and "bulk"
+			// must not be read as a source id.
+			r.Get("/duplicates", h.ContentSourceDuplicates)
+			r.Post("/bulk", h.BulkOrganizeContentSources)
+			r.Route("/{sourceId}", func(r chi.Router) {
+				r.Get("/", h.GetContentSource)
+				r.Patch("/", h.OrganizeContentSource)
+				r.Get("/revisions", h.ListContentSourceRevisions)
+			})
+		})
+
 		// --- Workspace-scoped routes (all require workspace membership) ---
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireWorkspaceMember(queries))

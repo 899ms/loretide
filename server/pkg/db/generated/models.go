@@ -759,6 +759,40 @@ type ContentReviewTransition struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentSource struct {
+	SourceID          string             `json:"source_id"`
+	WorkspaceID       string             `json:"workspace_id"`
+	Kind              string             `json:"kind"`
+	Url               string             `json:"url"`
+	CapturedAt        pgtype.Timestamptz `json:"captured_at"`
+	RecordedBy        string             `json:"recorded_by"`
+	HistoricalImport  bool               `json:"historical_import"`
+	Title             string             `json:"title"`
+	Tags              []string           `json:"tags"`
+	Annotation        string             `json:"annotation"`
+	PersonalJudgement string             `json:"personal_judgement"`
+	Status            string             `json:"status"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ContentSourceRevision struct {
+	RevisionID    string             `json:"revision_id"`
+	WorkspaceID   string             `json:"workspace_id"`
+	SourceID      string             `json:"source_id"`
+	ChangedFields []string           `json:"changed_fields"`
+	ActorID       string             `json:"actor_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentSourceSnapshot struct {
+	SnapshotID  string             `json:"snapshot_id"`
+	WorkspaceID string             `json:"workspace_id"`
+	SourceID    string             `json:"source_id"`
+	Content     string             `json:"content"`
+	ContentHash string             `json:"content_hash"`
+	CapturedAt  pgtype.Timestamptz `json:"captured_at"`
+}
+
 type ContentStartSnapshot struct {
 	SnapshotID      string             `json:"snapshot_id"`
 	WorkspaceID     string             `json:"workspace_id"`

@@ -879,6 +879,42 @@ export class ApiClient {
     return this.fetch<unknown>("/api/content-publications", {method: "POST", body: JSON.stringify(body)});
   }
 
+  // The material inbox (specs/028). No delete: archiving is a status.
+  async listContentSources(status = "", tag = ""): Promise<unknown> {
+    const query = new URLSearchParams();
+    if (status) query.set("status", status);
+    if (tag) query.set("tag", tag);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return this.fetch<unknown>(`/api/content-sources${suffix}`);
+  }
+
+  async createContentSource(body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-sources", {method: "POST", body: JSON.stringify(body)});
+  }
+
+  async getContentSource(sourceId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-sources/${encodeURIComponent(sourceId)}`);
+  }
+
+  async organizeContentSource(sourceId: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-sources/${encodeURIComponent(sourceId)}`,
+      {method: "PATCH", body: JSON.stringify(body)});
+  }
+
+  async listContentSourceRevisions(sourceId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-sources/${encodeURIComponent(sourceId)}/revisions`);
+  }
+
+  async bulkOrganizeContentSources(body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-sources/bulk", {method: "POST", body: JSON.stringify(body)});
+  }
+
+  // A read. It returns the items already holding this content and changes
+  // nothing - merging is a person's decision (SOP §4).
+  async contentSourceDuplicates(contentHash: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-sources/duplicates?content_hash=${encodeURIComponent(contentHash)}`);
+  }
+
   async contentDiagnosticStream(query: string, signal: AbortSignal): Promise<Response> {
     return this.fetchRaw(`/api/content-diagnostics/stream?${query}`, {signal});
   }
