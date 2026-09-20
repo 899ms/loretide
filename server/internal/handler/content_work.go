@@ -115,9 +115,16 @@ func (h *Handler) workDiagnosticError(w http.ResponseWriter, status int, retryab
 }
 
 type createWorkRequest struct {
+	// TopicCardID may be "" for a historical import (SOP 3.3): a piece that
+	// was already published never came from a topic card here. Any other work
+	// still needs one, and a non-empty value is still confirmed to exist.
 	TopicCardID string `json:"topic_card_id"`
 	SnapshotID  string `json:"snapshot_id"`
 	Title       string `json:"title"`
+	// HistoricalImport is read on creation and never again - there is no
+	// update path that names the column, and a guard test in work-editor
+	// asserts none appears.
+	HistoricalImport bool `json:"historical_import"`
 }
 
 // CreateContentWork opens a work on a topic card.
@@ -134,12 +141,22 @@ func (h *Handler) CreateContentWork(w http.ResponseWriter, r *http.Request) {
 	// The card is confirmed here rather than inside the module: work-editor is
 	// registered against workspace-core and diagnostics only, and importing
 	// topic-planning to ask one existence question would widen that for good.
-	if !h.topicCardExists(r, workspace, body.TopicCardID) {
+	//
+	// "" skips the check instead of failing it. A historical import has no
+	// card, and topicCardExists answers false for "" - which is right for its
+	// own question ("is this a card here?") and wrong as a refusal.
+	//
+	// Note what this does NOT do: it does not require historical_import to be
+	// true for a card-less work. Whether the body says so is the caller's
+	// statement about provenance, and coupling the two would make an operator
+	// unable to record one without the other.
+	if body.TopicCardID != "" && !h.topicCardExists(r, workspace, body.TopicCardID) {
 		h.workError(w, workeditor.ErrNotFound)
 		return
 	}
 	created, err := h.workEditorStore().CreateWork(r.Context(), workspace, actor, workeditor.Work{
 		TopicCardID: body.TopicCardID, SnapshotID: body.SnapshotID, Title: body.Title,
+		HistoricalImport: body.HistoricalImport,
 	})
 	if err != nil {
 		h.workError(w, err)

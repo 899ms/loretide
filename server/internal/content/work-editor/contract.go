@@ -94,9 +94,20 @@ const (
 	ActionRestored Action = "restored"
 	// ActionAdopted is taking a version as the next step's baseline.
 	ActionAdopted Action = "adopted"
+	// ActionImported is the single version of a piece that was already
+	// published elsewhere and pasted back in (SOP 3.3).
+	//
+	// It is an action and not a fourth source: the body is still something a
+	// person wrote, so the source stays edited. What is different is that
+	// nobody wrote it today. Recording it as saved would make the history say
+	// someone composed a two-year-old article five minutes ago.
+	//
+	// Only the action set grows. Sources stays at exactly SOP 7.1's three -
+	// see its comment, which says so on purpose.
+	ActionImported Action = "imported"
 )
 
-var Actions = []Action{ActionSaved, ActionRestored, ActionAdopted}
+var Actions = []Action{ActionSaved, ActionRestored, ActionAdopted, ActionImported}
 
 // MaxBodyRunes bounds one document. Counted in runes for the same reason the
 // persona prompt is: a byte limit gives a Chinese draft a third of the room an
@@ -113,13 +124,22 @@ const MaxTitleRunes = 500
 type Work struct {
 	WorkID      string `json:"work_id"`
 	WorkspaceID string `json:"workspace_id"`
+	// TopicCardID is "" for a work imported from something already published:
+	// it never came from a topic card. A real state, like SnapshotID below -
+	// but one that by-card read paths have to exclude explicitly, because a
+	// work with no card is not a work of every card (specs/031 FR-034).
 	TopicCardID string `json:"topic_card_id"`
 	// SnapshotID is "" when the work was not started from a snapshot. A real
 	// state: SOP 6.2 requires writing to work with nothing else in place.
-	SnapshotID string    `json:"snapshot_id"`
-	Title      string    `json:"title"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	SnapshotID string `json:"snapshot_id"`
+	Title      string `json:"title"`
+	// HistoricalImport marks a work pasted in from something already published
+	// (SOP 3.3: "系统保留它们的『历史导入』标识"). Decided when the work is
+	// created and never changed, the same rule source-inbox gives its own copy
+	// of the flag.
+	HistoricalImport bool      `json:"historical_import"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // Artifact is one document, with its mutable editing copy.

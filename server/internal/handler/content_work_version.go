@@ -23,6 +23,27 @@ func (h *Handler) SaveContentArtifactVersion(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusCreated, version)
 }
 
+// ImportContentArtifactVersion stores the one version of a document imported
+// from something already published (SOP 3.3).
+//
+// A separate endpoint rather than a flag on the save endpoint, for the reason
+// the two metric endpoints in 027 are separate: which entry point was called
+// is what the server records as the version's provenance, and a caller that
+// could declare its own provenance is not reporting one.
+func (h *Handler) ImportContentArtifactVersion(w http.ResponseWriter, r *http.Request) {
+	workspace, actor, ok := h.workScope(w, r)
+	if !ok {
+		return
+	}
+	version, err := h.workEditorStore().ImportVersion(r.Context(), workspace, actor,
+		workIDFromURL(r), artifactIDFromURL(r))
+	if err != nil {
+		h.workError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, version)
+}
+
 func (h *Handler) ListContentArtifactVersions(w http.ResponseWriter, r *http.Request) {
 	workspace, actor, ok := h.workScope(w, r)
 	if !ok {

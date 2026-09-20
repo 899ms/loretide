@@ -224,7 +224,8 @@ const deliverySelect = `SELECT delivery_task_id, workspace_id, work_id, artifact
 const publicationSelect = `SELECT publication_record_id, workspace_id, work_id,
 	artifact_id, delivery_task_id, channel, status, actor_id, declared_by,
 	page_url_or_content_id, receipt_note, verification_note, published_at,
-	platform_account, platform_edited, edit_note, version_match, created_at
+	platform_account, platform_edited, edit_note, version_match, version_id,
+	historical_import, created_at
 	FROM content_publication_record`
 
 func scanReview(row scanner) (ReviewRequest, error) {
@@ -267,6 +268,7 @@ func scanPublication(row scanner) (PublicationRecord, error) {
 		&record.ActorID, &record.DeclaredBy, &record.PageURLOrContentID,
 		&record.ReceiptNote, &record.VerificationNote, &record.PublishedAt,
 		&record.PlatformAccount, &record.PlatformEdited, &record.EditNote,
-		&record.VersionMatch, &record.CreatedAt)
+		&record.VersionMatch, &record.VersionID, &record.HistoricalImport,
+		&record.CreatedAt)
 	return record, err
 }

@@ -52,6 +52,15 @@ describe("the controlled sets match the Go source", () => {
     expect(VERSION_SOURCES).not.toContain("restored");
     expect(VERSION_ACTIONS).toContain("restored");
   });
+
+  it("does not carry imported as a version source either", () => {
+    // Same shape of claim for SOP 3.3's historical import, and the same
+    // reason: a body pasted back in from a platform is still something a
+    // person wrote. The source set stays at exactly SOP 7.1's three.
+    expect(VERSION_SOURCES).not.toContain("imported");
+    expect(VERSION_ACTIONS).toContain("imported");
+    expect(VERSION_SOURCES).toHaveLength(3);
+  });
 });
 
 const workWire = {
@@ -74,6 +83,24 @@ describe("parseWork", () => {
     expect(parseWork({ nonsense: true }).workId).toBe("");
     expect(parseWorks({ works: null })).toEqual([]);
     expect(parseWorks("not an object")).toEqual([]);
+  });
+
+  it("reads an empty topic card id as a work that belongs to no card", () => {
+    // SOP 3.3. Before the historical import this could not happen, so the
+    // field being empty is new information rather than a missing value.
+    const imported = parseWork({ ...workWire, topic_card_id: "", historical_import: true });
+    expect(imported.topicCardId).toBe("");
+    expect(imported.historicalImport).toBe(true);
+  });
+
+  it("treats an absent historical_import as not an import", () => {
+    // A backend deployed without migration 532 sends nothing. Absent must
+    // read as false, and a non-boolean must not be coerced into true: a work
+    // wrongly labelled historical would be filtered out of the by-card lists
+    // it belongs in.
+    expect(parseWork(workWire).historicalImport).toBe(false);
+    expect(parseWork({ ...workWire, historical_import: "yes" }).historicalImport).toBe(false);
+    expect(parseWork({ ...workWire, historical_import: 1 }).historicalImport).toBe(false);
   });
 });
 

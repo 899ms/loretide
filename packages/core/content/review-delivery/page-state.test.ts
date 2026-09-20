@@ -48,7 +48,8 @@ function record(over: Partial<PublicationRecord> = {}): PublicationRecord {
     deliveryTaskId: "", channel: "xiaohongshu", status: "reported_published",
     actorId: "u", declaredBy: "", pageUrlOrContentId: "", receiptNote: "",
     verificationNote: "", publishedAt: "", platformAccount: "",
-    platformEdited: false, editNote: "", versionMatch: "unknown", createdAt: "",
+    platformEdited: false, editNote: "", versionMatch: "unknown",
+    versionId: "", historicalImport: false, createdAt: "",
     ...over,
   };
 }

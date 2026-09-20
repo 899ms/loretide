@@ -145,6 +145,14 @@ type recordPublicationRequest struct {
 	PlatformEdited     bool    `json:"platform_edited"`
 	EditNote           string  `json:"edit_note"`
 	VersionMatch       string  `json:"version_match"`
+	// VersionID is SOP 3.3's 发布后快照. A caller that went through the normal
+	// flow leaves it empty and the version is found through the delivery task;
+	// an import states it, because it has no task to walk.
+	VersionID string `json:"version_id"`
+	// HistoricalImport marks a record for something published before this
+	// system was in use. There is no update path to this table, so it cannot
+	// be un-set later.
+	HistoricalImport bool `json:"historical_import"`
 }
 
 // RecordContentPublication writes down one person's statement about what
@@ -173,6 +181,7 @@ func (h *Handler) RecordContentPublication(w http.ResponseWriter, r *http.Reques
 			PublishedAt: body.PublishedAt, PlatformAccount: body.PlatformAccount,
 			PlatformEdited: body.PlatformEdited, EditNote: body.EditNote,
 			VersionMatch: reviewdelivery.VersionMatch(body.VersionMatch),
+			VersionID:    body.VersionID, HistoricalImport: body.HistoricalImport,
 		})
 	if err != nil {
 		h.reviewError(w, err)
