@@ -10,6 +10,34 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("ApiClient historical import transport", () => {
+  it("sends stable keys and exact payloads for all four import writes", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () =>
+      new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ApiClient("https://api.example.test");
+    await client.createContentWork({ topic_card_id: "", snapshot_id: "", title: "Older post", historical_import: true }, "session:work");
+    await client.createContentArtifact("work/1", { kind: "body", title: "Older post", position: 0 }, "session:artifact");
+    await client.importContentArtifactVersion("work/1", "artifact 1", "session:version");
+    await client.recordContentPublication({ artifact_id: "artifact 1", historical_import: true }, "session:publication");
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.example.test/api/content-works");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ topic_card_id: "", snapshot_id: "", title: "Older post", historical_import: true });
+    expect(fetchMock.mock.calls.map((call) => new Headers(call[1]?.headers).get("Idempotency-Key"))).toEqual(["session:work", "session:artifact", "session:version", "session:publication"]);
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({ kind: "body", title: "Older post", position: 0 });
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("https://api.example.test/api/content-works/work%2F1/artifacts/artifact%201/versions/import");
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).toEqual({ artifact_id: "artifact 1", historical_import: true });
+  });
+
+  it("keeps non-import callers compatible without an idempotency header", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    await new ApiClient("https://api.example.test").createContentWork({ topic_card_id: "card", snapshot_id: "", title: "Ordinary" });
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).has("Idempotency-Key")).toBe(false);
+  });
+});
+
 describe("ApiClient agent conversation-starter compatibility", () => {
   const prompt = {
     label: "Review a PR",

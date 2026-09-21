@@ -82,10 +82,12 @@ export function WorkSections({
   wsId,
   topicCardId,
   renderArtifactExtras,
+  allowCreate = true,
 }: {
   wsId: string;
   topicCardId: string;
   renderArtifactExtras?: (context: ArtifactExtrasContext) => ReactNode;
+  allowCreate?: boolean;
 }) {
   const { t } = useT("common");
   const works = useContentWorks(wsId, topicCardId);
@@ -115,7 +117,9 @@ export function WorkSections({
               />
             ))
           )}
-          <CreateWorkRow wsId={wsId} topicCardId={topicCardId} onCreated={setOpenWorkId} />
+          {allowCreate ? (
+            <CreateWorkRow wsId={wsId} topicCardId={topicCardId} onCreated={setOpenWorkId} />
+          ) : null}
         </SettingsCard>
       </SettingsSection>
 
@@ -142,7 +146,12 @@ function WorkRow({
 }) {
   const { t } = useT("common");
   return (
-    <SettingsRow label={work.title || work.workId}>
+    <SettingsRow
+      label={work.title || work.workId}
+      description={
+        work.historicalImport ? t(($) => $.contentWorks.historicalLabel) : undefined
+      }
+    >
       <Button variant="outline" onClick={onToggle}>
         {open ? t(($) => $.contentWorks.close) : t(($) => $.contentWorks.open)}
       </Button>
@@ -678,6 +687,8 @@ function actionLabel(t: Translate, action: string): string {
       return t(($) => $.contentWorks.actions.restored);
     case "adopted":
       return t(($) => $.contentWorks.actions.adopted);
+    case "imported":
+      return t(($) => $.contentWorks.actions.imported);
     default:
       return action;
   }

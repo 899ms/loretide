@@ -16,7 +16,8 @@
     "sources": "素材",
     "topics": "テーマ",
     "accounts": "アカウント",
-    "content_diagnostics": "コンテンツ診断"
+    "content_diagnostics": "コンテンツ診断",
+    "historical_import": "過去コンテンツのインポート"
   },
   "tab": {
     "issue": "タスク",

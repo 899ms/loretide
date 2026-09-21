@@ -16,7 +16,8 @@
     "sources": "Materials",
     "topics": "Topics",
     "accounts": "Accounts",
-    "content_diagnostics": "Content diagnostics"
+    "content_diagnostics": "Content diagnostics",
+    "historical_import": "Historical import"
   },
   "tab": {
     "issue": "Issue",

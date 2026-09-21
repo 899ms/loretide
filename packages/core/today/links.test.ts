@@ -9,6 +9,7 @@ describe("todayLinks", () => {
       topics: "/acme/topics",
       accounts: "/acme/accounts",
       sources: "/acme/sources",
+      historicalImport: "/acme/historical-import",
     });
   });
 

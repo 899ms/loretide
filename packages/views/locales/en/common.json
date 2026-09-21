@@ -645,7 +645,8 @@
     "actions": {
       "saved": "Saved",
       "restored": "Restored",
-      "adopted": "Adopted as baseline"
+      "adopted": "Adopted as baseline",
+      "imported": "Historical import"
     },
     "fromLabel": "From",
     "restore": "Restore this version",
@@ -665,7 +666,66 @@
       "candidateVersions": "Candidate versions"
     },
     "failed": "That did not work",
-    "conflict": "Someone saved a version at the same moment; save again"
+    "conflict": "Someone saved a version at the same moment; save again",
+    "historicalLabel": "Historical import"
+  },
+  "contentPerformance": {
+    "title": "Personal performance data",
+    "noData": "No personal performance data yet",
+    "loading": "Loading personal performance data",
+    "loadFailed": "Could not read personal performance data"
+  },
+  "historicalImport": {
+    "title": "Import published work",
+    "description": "Paste a small number of works that were published before this workspace was used. This records what you provide and does not fetch a platform or invent a version history.",
+    "entryPoint": "Import published work",
+    "formTitle": "Published work",
+    "formDescription": "The work, document, version and publication record are saved in order. Completed steps are kept if a later step fails.",
+    "titleLabel": "Title (optional)",
+    "titlePlaceholder": "Leave blank to use the start of the body",
+    "bodyLabel": "Published body",
+    "bodyHint": "Paste the text as it appeared after publication. Maximum 200,000 characters.",
+    "bodyPlaceholder": "Paste the published body",
+    "bodyTooLong": "The body is longer than 200,000 characters. Nothing has been created.",
+    "required": "Required",
+    "channelLabel": "Channel",
+    "channelPlaceholder": "Choose a channel",
+    "publishedAtLabel": "Published at",
+    "platformAccountLabel": "Platform account",
+    "platformAccountPlaceholder": "Account name or identifier",
+    "pageUrlLabel": "Link or platform content ID",
+    "pageUrlHint": "The publication service checks this field when the final record is created.",
+    "pageUrlPlaceholder": "https://... or a platform content ID",
+    "pageUrlRequired": "A link or platform content ID is required by the publication record.",
+    "submit": "Import",
+    "retry": "Retry failed step",
+    "running": "Importing",
+    "completed": "Imported",
+    "failed": "Import failed",
+    "importAnother": "Import another work",
+    "progressTitle": "Import progress",
+    "progressDescription": "A retry starts at the failed step. Completed steps are not sent again.",
+    "failureTitle": "Import stopped",
+    "failureHint": "No object was created. Correct the field above and retry.",
+    "partialFailureHint": "Objects already created were kept. The work and document can be opened and edited normally, and a publication record can be added later.",
+    "failedAt": "Stopped at: {{step}}",
+    "steps": {
+      "work": "Create work",
+      "artifact": "Create document and save body",
+      "version": "Create imported version",
+      "publication": "Create publication record"
+    },
+    "status": {
+      "notStarted": "Not started",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "channels": {
+      "xiaohongshu": "Xiaohongshu",
+      "wechat_mp": "WeChat Official Account",
+      "douyin": "Douyin",
+      "shipinhao": "WeChat Channels"
+    }
   },
   "contentReviews": {
     "sectionTitle": "Review",

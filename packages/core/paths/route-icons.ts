@@ -69,6 +69,7 @@ export type NavLabelKey =
   | "sources"
   | "topics"
   | "accounts"
+  | "historical_import"
   | "content_diagnostics";
 
 /** Stable identifier for each workspace navigation page. */
@@ -89,6 +90,7 @@ export type WorkspacePageKey =
   | "sources"
   | "topics"
   | "accounts"
+  | "historicalImport"
   | "contentDiagnostics";
 
 export interface WorkspacePage {
@@ -125,6 +127,7 @@ export const WORKSPACE_PAGES: Record<WorkspacePageKey, WorkspacePage> = {
   sources: { segment: "sources", icon: "FileStack", navKey: "sources" },
   topics: { segment: "topics", icon: "Lightbulb", navKey: "topics" },
   accounts: { segment: "accounts", icon: "AtSign", navKey: "accounts" },
+  historicalImport: { segment: "historical-import", icon: "FileArchive", navKey: "historical_import" },
   contentDiagnostics: {
     segment: "diagnostics",
     icon: "Activity",

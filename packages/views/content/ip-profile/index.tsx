@@ -70,9 +70,14 @@ function saveStatusOf(outcome: SaveOutcome | null, pending: boolean): SettingsSa
 
 export interface AccountSettingsPageProps {
   wsId: string;
+  performance: {
+    pending: boolean;
+    failed: boolean;
+    metricAccountIds: readonly string[];
+  };
 }
 
-export function AccountSettingsPage({ wsId }: AccountSettingsPageProps) {
+export function AccountSettingsPage({ wsId, performance }: AccountSettingsPageProps) {
   const { t } = useT("common");
   return (
     <>
@@ -81,12 +86,12 @@ export function AccountSettingsPage({ wsId }: AccountSettingsPageProps) {
           {t(($) => $.contentAccounts.title)}
         </span>
       </PageHeader>
-      <AccountSettingsContent wsId={wsId} />
+      <AccountSettingsContent wsId={wsId} performance={performance} />
     </>
   );
 }
 
-function AccountSettingsContent({ wsId }: AccountSettingsPageProps) {
+function AccountSettingsContent({ wsId, performance }: AccountSettingsPageProps) {
   const { t } = useT("common");
   const accounts = useContentAccounts(wsId);
   const [selectedId, setSelectedId] = useState("");
@@ -162,6 +167,7 @@ function AccountSettingsContent({ wsId }: AccountSettingsPageProps) {
             settings={selected.settings}
             drafts={drafts}
             setDrafts={setDrafts}
+            performance={performance}
           />
         ) : null}
       </SettingsTab>
@@ -277,6 +283,7 @@ function AccountEditor({
   settings,
   drafts,
   setDrafts,
+  performance,
 }: {
   wsId: string;
   accountId: string;
@@ -285,6 +292,7 @@ function AccountEditor({
   settings: Record<string, unknown> | undefined;
   drafts: DraftState;
   setDrafts: (update: (state: DraftState) => DraftState) => void;
+  performance: AccountSettingsPageProps["performance"];
 }) {
   const { t } = useT("common");
   const persona = useAccountPersona(wsId, accountId);
@@ -373,6 +381,12 @@ function AccountEditor({
 
       <HomepageSection wsId={wsId} accountId={accountId} settings={settings} />
 
+      <PersonalPerformanceSection
+        pending={performance.pending}
+        failed={performance.failed}
+        metricCount={performance.metricAccountIds.filter((id) => id === accountId).length}
+      />
+
       <SettingsSection
         title={t(($) => $.contentAccounts.personaTitle)}
         description={t(($) => $.contentAccounts.personaDescription)}
@@ -412,6 +426,37 @@ function AccountEditor({
 
       <ExpressionProfileSections wsId={wsId} accountId={accountId} />
     </>
+  );
+}
+
+function PersonalPerformanceSection({
+  pending,
+  failed,
+  metricCount,
+}: {
+  pending: boolean;
+  failed: boolean;
+  metricCount: number;
+}) {
+  const { t } = useT("common");
+  if (!pending && !failed && metricCount !== 0) return null;
+
+  return (
+    <SettingsSection title={t(($) => $.contentPerformance.title)}>
+      <SettingsCard>
+        <SettingsRow
+          label={
+            pending
+              ? t(($) => $.contentPerformance.loading)
+              : failed
+                ? t(($) => $.contentPerformance.loadFailed)
+                : t(($) => $.contentPerformance.noData)
+          }
+        >
+          <span className="text-caption text-muted-foreground" />
+        </SettingsRow>
+      </SettingsCard>
+    </SettingsSection>
   );
 }
 

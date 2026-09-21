@@ -80,6 +80,7 @@ function workspaceScoped(slug: string) {
     sources: () => `${ws}/sources`,
     topics: () => `${ws}/topics`,
     accounts: () => `${ws}/accounts`,
+    historicalImport: () => `${ws}/historical-import`,
     contentDiagnostics: () => `${ws}/diagnostics`,
     attachmentPreview: (id: string) => `${ws}/attachments/${encode(id)}/preview`,
   };

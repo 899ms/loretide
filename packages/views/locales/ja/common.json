@@ -645,7 +645,8 @@
     "actions": {
       "saved": "版として保存",
       "restored": "復元",
-      "adopted": "基準として採用"
+      "adopted": "基準として採用",
+      "imported": "履歴からの取り込み"
     },
     "fromLabel": "元",
     "restore": "この版に戻す",
@@ -665,7 +666,66 @@
       "candidateVersions": "候補版"
     },
     "failed": "操作に失敗しました",
-    "conflict": "同時に別の版が保存されました。もう一度保存してください"
+    "conflict": "同時に別の版が保存されました。もう一度保存してください",
+    "historicalLabel": "履歴からの取り込み"
+  },
+  "contentPerformance": {
+    "title": "個人の実績データ",
+    "noData": "個人の実績データはまだありません",
+    "loading": "個人の実績データを読み込んでいます",
+    "loadFailed": "個人の実績データを読み込めませんでした"
+  },
+  "historicalImport": {
+    "title": "公開済み作品を取り込む",
+    "description": "このワークスペースを使う前に公開した少数の作品を貼り付けます。入力内容だけを記録し、プラットフォームの取得や版履歴の捏造はしません。",
+    "entryPoint": "公開済み作品を取り込む",
+    "formTitle": "公開済み作品",
+    "formDescription": "作品、文書、版、公開記録の順に保存します。後の手順が失敗しても完了済みの手順は残ります。",
+    "titleLabel": "タイトル（任意）",
+    "titlePlaceholder": "空欄なら本文の先頭を使います",
+    "bodyLabel": "公開済み本文",
+    "bodyHint": "公開後の本文を貼り付けます。最大 200,000 文字です。",
+    "bodyPlaceholder": "公開済み本文を貼り付け",
+    "bodyTooLong": "本文が 200,000 文字を超えています。まだ何も作成されていません。",
+    "required": "必須",
+    "channelLabel": "チャネル",
+    "channelPlaceholder": "チャネルを選択",
+    "publishedAtLabel": "公開日時",
+    "platformAccountLabel": "プラットフォームのアカウント",
+    "platformAccountPlaceholder": "アカウント名または識別子",
+    "pageUrlLabel": "リンクまたはプラットフォームのコンテンツ ID",
+    "pageUrlHint": "最後に公開記録を作るとき、公開サービスがこの項目を検証します。",
+    "pageUrlPlaceholder": "https://... またはコンテンツ ID",
+    "pageUrlRequired": "公開記録にはリンクまたはコンテンツ ID が必要です。",
+    "submit": "取り込む",
+    "retry": "失敗した手順から再試行",
+    "running": "取り込み中",
+    "completed": "取り込み済み",
+    "failed": "取り込みに失敗しました",
+    "importAnother": "別の作品を取り込む",
+    "progressTitle": "取り込みの進行状況",
+    "progressDescription": "再試行は失敗した手順から始まり、完了済みの手順は再送しません。",
+    "failureTitle": "取り込みを停止しました",
+    "failureHint": "まだ何も作成されていません。上の項目を直して再試行してください。",
+    "partialFailureHint": "作成済みのものは残ります。作品と文書は通常どおり開いて編集でき、公開記録はあとから追加できます。",
+    "failedAt": "停止した手順：{{step}}",
+    "steps": {
+      "work": "作品を作成",
+      "artifact": "文書を作成して本文を保存",
+      "version": "取り込み版を作成",
+      "publication": "公開記録を作成"
+    },
+    "status": {
+      "notStarted": "未開始",
+      "completed": "完了",
+      "failed": "失敗"
+    },
+    "channels": {
+      "xiaohongshu": "小紅書",
+      "wechat_mp": "WeChat 公式アカウント",
+      "douyin": "Douyin",
+      "shipinhao": "WeChat Channels"
+    }
   },
   "contentReviews": {
     "sectionTitle": "レビュー",

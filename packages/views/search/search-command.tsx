@@ -104,6 +104,7 @@ const PAGE_KEYWORDS: Record<WorkspacePageKey, string[]> = {
   // Loretide's content surfaces. Registering them in WORKSPACE_PAGES put them
   // in the palette automatically (see the note above); these are the extra
   // words someone would actually type to find them.
+  historicalImport: ["historical", "import", "archive", "历史", "导入"],
   today: ["today", "workbench", "dashboard", "今日", "工作台"],
   sources: ["sources", "materials", "inbox", "clippings", "素材", "收件箱"],
   topics: ["topics", "ideas", "选题", "题目"],
