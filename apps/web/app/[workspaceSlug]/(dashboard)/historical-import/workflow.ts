@@ -33,6 +33,7 @@ export interface HistoricalImportStepState {
   step: HistoricalImportStep;
   status: HistoricalImportStepStatus;
   idempotencyKey: string;
+  input: HistoricalImportDraft | null;
 }
 
 export interface HistoricalImportProblem {
@@ -92,6 +93,7 @@ export function createImportSession(sessionId: string): HistoricalImportSession 
       step,
       status: "not_started",
       idempotencyKey: `${sessionId}:${step}`,
+      input: null,
     })),
     outputs: {
       workId: "",
@@ -132,12 +134,22 @@ export function editableHistoricalImportFields(
   // committed even if the response was lost. Lock the inputs at that point:
   // changing them under the same stable key must surface the server's 409, not
   // create a misleading second client-side attempt.
-  if (!session.outputs.workId) fields.push("title");
-  if (!session.outputs.artifactId) fields.push("body");
-  if (!session.outputs.publicationRecordId) {
+  const canCorrect = isKnownClientFailure(session.failure?.error);
+  const frozen = (step: HistoricalImportStep) =>
+    session.steps.find((entry) => entry.step === step)?.input !== null &&
+    !(canCorrect && session.failure?.step === step);
+  if (!session.outputs.workId && !frozen("work")) fields.push("title");
+  if (!session.outputs.artifactId && !frozen("artifact")) fields.push("body");
+  if (!session.outputs.publicationRecordId && !frozen("publication")) {
     fields.push("channel", "publishedAt", "platformAccount", "pageUrlOrContentId");
   }
   return fields;
+}
+
+function isKnownClientFailure(error: unknown): boolean {
+  return !!error && typeof error === "object" &&
+    typeof (error as { status?: unknown }).status === "number" &&
+    (error as { status: number }).status >= 400 && (error as { status: number }).status < 500;
 }
 
 export function deriveHistoricalImportTitle(title: string, body: string): string {
@@ -172,6 +184,17 @@ export async function runHistoricalImport(
     if (!stepState || stepState.status === "completed") continue;
 
     const outputField = OUTPUT_FIELDS[step];
+    const replaceFailedInput = stepState.status === "failed" && isKnownClientFailure(current.failure?.error);
+    const frozenDraft = !stepState.input || replaceFailedInput ? { ...draft } : stepState.input;
+    if (!stepState.input || replaceFailedInput) {
+      current = {
+        ...current,
+        steps: current.steps.map((entry) =>
+          entry.step === step ? { ...entry, input: frozenDraft } : entry,
+        ),
+      };
+      onChange(current);
+    }
     const checkpoint = (outputId: string) => {
       if (!outputId) return;
       current = {
@@ -184,7 +207,7 @@ export async function runHistoricalImport(
     try {
       const operation = operations[OPERATION_FIELDS[step]];
       const outputId = await operation({
-        draft,
+        draft: frozenDraft,
         outputs: current.outputs,
         outputId: current.outputs[outputField],
         idempotencyKey: stepState.idempotencyKey,

@@ -121,9 +121,8 @@ describe("historical import workflow", () => {
     const sent: Array<{ key: string; title: string }> = [];
     const session = createImportSession("response-loss");
     const responseLost = operations({
-      createWork: async ({ draft: input, idempotencyKey, checkpoint }) => {
+      createWork: async ({ draft: input, idempotencyKey }) => {
         sent.push({ key: idempotencyKey, title: deriveHistoricalImportTitle(input.title, input.body) });
-        checkpoint("work-after-commit");
         throw new Error("response lost after commit");
       },
     });
