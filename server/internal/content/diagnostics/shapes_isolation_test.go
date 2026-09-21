@@ -306,7 +306,7 @@ func TestSanitizeComponentAllowlistUnionIsPinned(t *testing.T) {
 		"api", "daemon", "database", "executor", "queue", "result", "tool", "web",
 		// Content modules, from scripts/content-boundaries.json. "diagnostics"
 		// is both a tier and a module and appears once.
-		"agent-gateway", "agent-workflow", "diagnostics", "feedback-learning",
+		"agent-gateway", "agent-workflow", "diagnostics", "feedback-learning", "idempotency",
 		"ip-profile", "knowledge-base", "project-collab", "review-delivery",
 		"source-inbox", "topic-planning", "work-editor", "workspace-core",
 	}
