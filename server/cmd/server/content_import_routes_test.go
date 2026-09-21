@@ -346,6 +346,14 @@ func TestHistoricalImportIdempotencyCoversTheFourWrites(t *testing.T) {
 	if err := json.NewDecoder(replayedWork.Body).Decode(&work); err != nil || work.WorkID == "" {
 		t.Fatalf("lost-response replay = %d, decode=%v, work=%+v", replayedWork.StatusCode, err, work)
 	}
+	var workCount int
+	if err := testPool.QueryRow(t.Context(), `SELECT count(*) FROM content_work
+		WHERE workspace_id=$1 AND title='丢失响应也可恢复'`, testWorkspaceID).Scan(&workCount); err != nil {
+		t.Fatal(err)
+	}
+	if workCount != 1 {
+		t.Fatalf("lost-response work side effects=%d, want 1", workCount)
+	}
 
 	// Step 2: simultaneous retries must all receive the one original artifact.
 	const callers = 6
@@ -437,6 +445,14 @@ func TestHistoricalImportIdempotencyCoversTheFourWrites(t *testing.T) {
 	if replayed.VersionID != version.VersionID || replayed.Body != "首次导入快照" {
 		t.Fatalf("changed-draft replay = %+v, want original %+v", replayed, version)
 	}
+	var versionCount int
+	if err := testPool.QueryRow(t.Context(), `SELECT count(*) FROM content_artifact_version
+		WHERE workspace_id=$1 AND artifact_id=$2`, testWorkspaceID, artifactID).Scan(&versionCount); err != nil {
+		t.Fatal(err)
+	}
+	if versionCount != 1 {
+		t.Fatalf("changed-draft replay side effects=%d, want 1", versionCount)
+	}
 
 	// Step 4: unlike the version's stable first-snapshot contract, publication
 	// input is immutable statement data. Changing it under one key is a 409.
@@ -445,7 +461,30 @@ func TestHistoricalImportIdempotencyCoversTheFourWrites(t *testing.T) {
 		"version_id":%q,"historical_import":true}`, artifactID, version.VersionID)
 	firstPublication := historicalImportRequest(t, "publication-conflict", http.MethodPost,
 		"/api/content-publications", publicationBody)
-	firstPublication.Body.Close()
+	defer firstPublication.Body.Close()
+	var publication struct {
+		PublicationRecordID string `json:"publication_record_id"`
+	}
+	if firstPublication.StatusCode != http.StatusCreated || json.NewDecoder(firstPublication.Body).Decode(&publication) != nil || publication.PublicationRecordID == "" {
+		t.Fatalf("first publication = %d, record=%+v", firstPublication.StatusCode, publication)
+	}
+	replayedPublicationResponse := historicalImportRequest(t, "publication-conflict", http.MethodPost,
+		"/api/content-publications", publicationBody)
+	defer replayedPublicationResponse.Body.Close()
+	var replayedPublication struct {
+		PublicationRecordID string `json:"publication_record_id"`
+	}
+	if replayedPublicationResponse.StatusCode != http.StatusCreated || json.NewDecoder(replayedPublicationResponse.Body).Decode(&replayedPublication) != nil || replayedPublication.PublicationRecordID != publication.PublicationRecordID {
+		t.Fatalf("publication replay = %d, record=%+v, want %q", replayedPublicationResponse.StatusCode, replayedPublication, publication.PublicationRecordID)
+	}
+	var publicationCount int
+	if err := testPool.QueryRow(t.Context(), `SELECT count(*) FROM content_publication_record
+		WHERE workspace_id=$1 AND artifact_id=$2`, testWorkspaceID, artifactID).Scan(&publicationCount); err != nil {
+		t.Fatal(err)
+	}
+	if publicationCount != 1 {
+		t.Fatalf("publication replay side effects=%d, want 1", publicationCount)
+	}
 	changedPublication := historicalImportRequest(t, "publication-conflict", http.MethodPost,
 		"/api/content-publications", strings.Replace(publicationBody, "导入者", "另一位导入者", 1))
 	defer changedPublication.Body.Close()
@@ -470,6 +509,25 @@ func TestHistoricalImportIdempotencyCoversTheFourWrites(t *testing.T) {
 	if foreign.StatusCode != http.StatusNotFound {
 		payload, _ := io.ReadAll(foreign.Body)
 		t.Fatalf("outsider replay = %d, want 404: %s", foreign.StatusCode, payload)
+	}
+
+	// The same client key is scoped by workspace. A member of both workspaces
+	// receives two independent first writes rather than the other tenant's row.
+	otherWorkspace := fx.Workspace(t, "Historical Import Other", fmt.Sprintf("historical-import-other-%d", time.Now().UnixNano()))
+	fx.Member(t, otherWorkspace, testUserID, "owner")
+	fx.Cleanup(t, `DELETE FROM content_import_idempotency WHERE workspace_id=$1`, otherWorkspace)
+	fx.Cleanup(t, `DELETE FROM content_work WHERE workspace_id=$1`, otherWorkspace)
+	other, err := historicalImportHTTP("lost-work-response", http.MethodPost, "/api/content-works",
+		`{"topic_card_id":"","title":"丢失响应也可恢复","historical_import":true}`, testToken, otherWorkspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Body.Close()
+	var otherWork struct {
+		WorkID string `json:"work_id"`
+	}
+	if other.StatusCode != http.StatusCreated || json.NewDecoder(other.Body).Decode(&otherWork) != nil || otherWork.WorkID == work.WorkID {
+		t.Fatalf("same key in another authorized workspace = %d, work=%+v, original=%q", other.StatusCode, otherWork, work.WorkID)
 	}
 }
 
