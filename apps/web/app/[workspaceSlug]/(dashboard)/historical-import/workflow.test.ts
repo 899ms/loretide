@@ -117,6 +117,62 @@ describe("historical import workflow", () => {
     });
   });
 
+  it("reuses the same work key and payload after its response is lost", async () => {
+    const sent: Array<{ key: string; title: string }> = [];
+    const session = createImportSession("response-loss");
+    const responseLost = operations({
+      createWork: async ({ draft: input, idempotencyKey, checkpoint }) => {
+        sent.push({ key: idempotencyKey, title: deriveHistoricalImportTitle(input.title, input.body) });
+        checkpoint("work-after-commit");
+        throw new Error("response lost after commit");
+      },
+    });
+    const failed = await runHistoricalImport(draft, session, responseLost);
+    const retry = operations({
+      createWork: async ({ draft: input, idempotencyKey }) => {
+        sent.push({ key: idempotencyKey, title: deriveHistoricalImportTitle(input.title, input.body) });
+        return "work-after-commit";
+      },
+    });
+
+    const recovered = await runHistoricalImport(draft, failed, retry);
+    expect(sent).toEqual([
+      { key: "response-loss:work", title: draft.title },
+      { key: "response-loss:work", title: draft.title },
+    ]);
+    expect(recovered.outputs.workId).toBe("work-after-commit");
+    expect(recovered.steps[0]?.status).toBe("completed");
+  });
+
+  it("keeps a checkpointed input locked and reports a replay conflict as failed", async () => {
+    const first = await runHistoricalImport(
+      draft,
+      createImportSession("conflict-after-loss"),
+      operations({
+        createWork: async ({ checkpoint }) => {
+          checkpoint("work-after-commit");
+          throw new Error("response lost after commit");
+        },
+      }),
+    );
+    const later = vi.fn(async () => "must-not-run");
+    const retried = await runHistoricalImport(
+      { ...draft, title: "Changed after the committed request" },
+      first,
+      operations({
+        createWork: async () => {
+          throw new Error("409 Idempotency-Key conflicts with a different import request");
+        },
+        createArtifact: later,
+      }),
+    );
+
+    expect(editableHistoricalImportFields(first)).not.toContain("title");
+    expect(retried.steps[0]?.status).toBe("failed");
+    expect(retried.failure?.step).toBe("work");
+    expect(later).not.toHaveBeenCalled();
+  });
+
   it("uses a readable prefix of the pasted body when the title is blank", () => {
     const body = `  First paragraph with   ordinary spacing.\n\n${"x".repeat(100)}`;
     const title = deriveHistoricalImportTitle("   ", body);
@@ -158,6 +214,12 @@ describe("historical import workflow", () => {
       ...step,
       status: step.step === "publication" ? "failed" : "completed",
     }));
+    session.outputs = {
+      workId: "work-1",
+      artifactId: "artifact-1",
+      versionId: "version-1",
+      publicationRecordId: "",
+    };
 
     expect(editableHistoricalImportFields(session)).toEqual([
       "channel",

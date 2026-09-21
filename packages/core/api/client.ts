@@ -796,8 +796,8 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-works${query}`);
   }
 
-  async createContentWork(body: {topic_card_id: string; snapshot_id: string; title: string; historical_import?: boolean}): Promise<unknown> {
-    return this.fetch<unknown>("/api/content-works", {method: "POST", body: JSON.stringify(body)});
+  async createContentWork(body: {topic_card_id: string; snapshot_id: string; title: string; historical_import?: boolean}, idempotencyKey?: string): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-works", {method: "POST", body: JSON.stringify(body), headers: idempotencyKey ? {"Idempotency-Key": idempotencyKey} : undefined});
   }
 
   async getContentWork(workId: string): Promise<unknown> {
@@ -812,8 +812,8 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts`);
   }
 
-  async createContentArtifact(workId: string, body: {kind: string; title: string; position: number}): Promise<unknown> {
-    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts`, {method: "POST", body: JSON.stringify(body)});
+  async createContentArtifact(workId: string, body: {kind: string; title: string; position: number}, idempotencyKey?: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts`, {method: "POST", body: JSON.stringify(body), headers: idempotencyKey ? {"Idempotency-Key": idempotencyKey} : undefined});
   }
 
   // Autosave. Produces no version; only the editing copy moves.
@@ -829,8 +829,8 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts/${encodeURIComponent(artifactId)}/versions`, {method: "POST"});
   }
 
-  async importContentArtifactVersion(workId: string, artifactId: string): Promise<unknown> {
-    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts/${encodeURIComponent(artifactId)}/versions/import`, {method: "POST"});
+  async importContentArtifactVersion(workId: string, artifactId: string, idempotencyKey?: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts/${encodeURIComponent(artifactId)}/versions/import`, {method: "POST", headers: idempotencyKey ? {"Idempotency-Key": idempotencyKey} : undefined});
   }
 
   async getContentArtifactVersion(workId: string, artifactId: string, versionId: string): Promise<unknown> {
@@ -889,8 +889,8 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-publications${query}`);
   }
 
-  async recordContentPublication(body: Record<string, unknown>): Promise<unknown> {
-    return this.fetch<unknown>("/api/content-publications", {method: "POST", body: JSON.stringify(body)});
+  async recordContentPublication(body: Record<string, unknown>, idempotencyKey?: string): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-publications", {method: "POST", body: JSON.stringify(body), headers: idempotencyKey ? {"Idempotency-Key": idempotencyKey} : undefined});
   }
 
   // The material inbox (specs/028). No delete: archiving is a status.

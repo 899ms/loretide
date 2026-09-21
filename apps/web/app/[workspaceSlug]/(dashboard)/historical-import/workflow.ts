@@ -127,13 +127,14 @@ export function validateHistoricalImportDraft(
 export function editableHistoricalImportFields(
   session: HistoricalImportSession,
 ): HistoricalImportDraftField[] {
-  const completed = new Set(
-    session.steps.filter((step) => step.status === "completed").map((step) => step.step),
-  );
   const fields: HistoricalImportDraftField[] = [];
-  if (!completed.has("work")) fields.push("title");
-  if (!completed.has("artifact")) fields.push("body");
-  if (!completed.has("publication")) {
+  // A checkpoint is durable evidence that its request may already have
+  // committed even if the response was lost. Lock the inputs at that point:
+  // changing them under the same stable key must surface the server's 409, not
+  // create a misleading second client-side attempt.
+  if (!session.outputs.workId) fields.push("title");
+  if (!session.outputs.artifactId) fields.push("body");
+  if (!session.outputs.publicationRecordId) {
     fields.push("channel", "publishedAt", "platformAccount", "pageUrlOrContentId");
   }
   return fields;

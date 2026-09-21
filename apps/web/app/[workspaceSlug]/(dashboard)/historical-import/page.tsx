@@ -79,7 +79,7 @@ function HistoricalImportPage({ wsId }: { wsId: string }) {
   const [session, setSession] = useState<HistoricalImportSession>(newSession);
 
   const operations: HistoricalImportOperations = {
-    createWork: async ({ draft: input }) => {
+    createWork: async ({ draft: input, idempotencyKey }) => {
       const historicalWork = {
         topic_card_id: "",
         snapshot_id: "",
@@ -87,7 +87,7 @@ function HistoricalImportPage({ wsId }: { wsId: string }) {
         historical_import: true,
       };
       const work = parseWork(
-        await api.createContentWork(historicalWork),
+        await api.createContentWork(historicalWork, idempotencyKey),
       );
       await queryClient.invalidateQueries({ queryKey: workEditorKeys.all(wsId) });
       return work.workId;
@@ -99,16 +99,16 @@ function HistoricalImportPage({ wsId }: { wsId: string }) {
       });
       return artifactId;
     },
-    importVersion: async ({ outputs }) => {
+    importVersion: async ({ outputs, idempotencyKey }) => {
       const version = parseArtifactVersion(
-        await api.importContentArtifactVersion(outputs.workId, outputs.artifactId),
+        await api.importContentArtifactVersion(outputs.workId, outputs.artifactId, idempotencyKey),
       );
       await queryClient.invalidateQueries({
         queryKey: workEditorKeys.versions(wsId, outputs.workId, outputs.artifactId),
       });
       return version.versionId;
     },
-    createPublication: async ({ draft: input, outputs }) => {
+    createPublication: async ({ draft: input, outputs, idempotencyKey }) => {
       const publication = parsePublication(
         await api.recordContentPublication({
           artifact_id: outputs.artifactId,
@@ -126,7 +126,7 @@ function HistoricalImportPage({ wsId }: { wsId: string }) {
           version_match: "unknown",
           version_id: outputs.versionId,
           historical_import: true,
-        }),
+        }, idempotencyKey),
       );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["contentPublications", wsId] }),
@@ -315,16 +315,17 @@ async function ensureHistoricalArtifact({
   draft,
   outputs,
   outputId,
+  idempotencyKey,
   checkpoint,
 }: HistoricalImportOperationContext): Promise<string> {
   let artifactId = outputId;
   if (!artifactId) {
     const artifact = parseArtifact(
-      await api.createContentArtifact(outputs.workId, {
+    await api.createContentArtifact(outputs.workId, {
         kind: "body",
         title: deriveHistoricalImportTitle(draft.title, draft.body),
-        position: 0,
-      }),
+      position: 0,
+    }, idempotencyKey),
     );
     artifactId = artifact.artifactId;
     checkpoint(artifactId);
