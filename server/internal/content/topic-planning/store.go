@@ -36,6 +36,7 @@ type Store struct {
 	DB          Database
 	Diagnostics DiagnosticStore
 	Accounts    AccountReader
+	Sources     SourceReader
 	// Guard is workspace-core's delete/write fence. Every write transaction
 	// takes it as its first statement, so a workspace deletion that has
 	// already committed cannot be followed by an orphan card or brief. The
@@ -179,6 +180,29 @@ func (s *Store) Create(ctx context.Context, actor string, card TopicCard) (Topic
 		return TopicCard{}, ErrInvalid
 	}
 
+	fitSources, err := NormalizeSourceIDs("fit_source_ids", card.FitSourceIDs)
+	if err != nil {
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
+		return TopicCard{}, err
+	}
+	evidenceSources, err := NormalizeSourceIDs("evidence_source_ids", card.EvidenceSourceIDs)
+	if err != nil {
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
+		return TopicCard{}, err
+	}
+	card.FitSourceIDs = fitSources
+	card.EvidenceSourceIDs = evidenceSources
+	encodedFit, err := encodeStrings(card.FitSourceIDs)
+	if err != nil {
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", ErrInvalid)
+		return TopicCard{}, ErrInvalid
+	}
+	encodedEvidence, err := encodeStrings(card.EvidenceSourceIDs)
+	if err != nil {
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", ErrInvalid)
+		return TopicCard{}, ErrInvalid
+	}
+
 	tx, err := s.begin(ctx, card.WorkspaceID)
 	if err != nil {
 		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
@@ -191,17 +215,22 @@ func (s *Store) Create(ctx context.Context, actor string, card TopicCard) (Topic
 		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
 		return TopicCard{}, err
 	}
+	if err = s.checkSources(ctx, card.WorkspaceID, card.FitSourceIDs, card.EvidenceSourceIDs); err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
+		return TopicCard{}, err
+	}
 	err = tx.QueryRow(ctx, `
 		INSERT INTO content_topic_card (
 			topic_card_id, workspace_id, account_id, audience_problem_judgment,
 			ip_fit, timing, existing_content_relation, evidence_gaps_and_investment,
-			channels, recommended_action, status
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			channels, fit_source_ids, evidence_source_ids, recommended_action, status
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		RETURNING created_at, updated_at`,
 		card.TopicCardID, card.WorkspaceID, card.AccountID,
 		card.AudienceProblemJudgment, card.IPFit, card.Timing,
 		card.ExistingContentRelation, card.EvidenceGapsAndInvestment,
-		channels, card.RecommendedAction, card.Status,
+		channels, encodedFit, encodedEvidence, card.RecommendedAction, card.Status,
 	).Scan(&card.CreatedAt, &card.UpdatedAt)
 	if err != nil {
 		_ = tx.Rollback(ctx)
@@ -233,6 +262,39 @@ func (s *Store) checkAccount(ctx context.Context, workspaceID string, accountID 
 			return ErrNotFound
 		}
 		return ErrStorage
+	}
+	return nil
+}
+
+// checkSources refuses any source id that is not this brand's or does not exist.
+//
+// Empty list means no source references to validate. If source IDs are present,
+// Sources must be non-nil. A foreign or missing source is ErrNotFound, the same
+// answer a foreign card gets, so a refusal cannot be used to find out which source
+// ids exist across workspaces.
+func (s *Store) checkSources(ctx context.Context, workspaceID string, fitIDs, evidenceIDs []string) error {
+	allCount := len(fitIDs) + len(evidenceIDs)
+	if allCount == 0 {
+		return nil
+	}
+	if s == nil || s.Sources == nil {
+		return ErrStorage
+	}
+	seen := make(map[string]struct{}, allCount)
+	for _, id := range fitIDs {
+		seen[id] = struct{}{}
+	}
+	for _, id := range evidenceIDs {
+		seen[id] = struct{}{}
+	}
+	for id := range seen {
+		exists, err := s.Sources.Exists(ctx, workspaceID, id)
+		if err != nil {
+			return ErrStorage
+		}
+		if !exists {
+			return ErrNotFound
+		}
 	}
 	return nil
 }
@@ -288,6 +350,116 @@ func (s *Store) SetAccount(ctx context.Context, workspaceID, actor, topicCardID 
 		return TopicCard{}, ErrStorage
 	}
 	card.AccountID = accountID
+	return card, nil
+}
+
+// SetSources sets or clears the source references linked to a topic card.
+//
+// Its own entry point rather than a field on the four decision actions: those
+// change what happens to the card, this changes the materials that justify it
+// or provide evidence for it.
+//
+// Whole-column replacement: a provided slice replaces the column.
+// Absence != clear: nil input means "do not change this column". Clearing a column
+// requires an explicit empty slice.
+//
+// Runs inside the workspace delete fence, source validation included: a check taken
+// outside could be answered before the workspace is deleted and the write applied after.
+//
+// Does NOT touch status, decision_reason, decision_note, started_brief_revision_id,
+// account_id, or any of the seven free-text fields.
+func (s *Store) SetSources(ctx context.Context, workspaceID, actor, topicCardID string, fitSourceIDs, evidenceSourceIDs *[]string) (TopicCard, error) {
+	if workspaceID == "" || actor == "" || topicCardID == "" {
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-sources", ErrInvalid)
+		return TopicCard{}, ErrInvalid
+	}
+
+	var cleanedFit, cleanedEvidence []string
+	var err error
+	if fitSourceIDs != nil {
+		cleanedFit, err = NormalizeSourceIDs("fit_source_ids", *fitSourceIDs)
+		if err != nil {
+			s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-sources", err)
+			return TopicCard{}, err
+		}
+	}
+	if evidenceSourceIDs != nil {
+		cleanedEvidence, err = NormalizeSourceIDs("evidence_source_ids", *evidenceSourceIDs)
+		if err != nil {
+			s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-sources", err)
+			return TopicCard{}, err
+		}
+	}
+
+	tx, err := s.begin(ctx, workspaceID)
+	if err != nil {
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-sources", err)
+		return TopicCard{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	ctx, err = s.audit(ctx, tx, workspaceID, actor, topicCardID, "link-sources")
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-sources", err)
+		return TopicCard{}, err
+	}
+
+	checkFit := cleanedFit
+	if fitSourceIDs == nil {
+		checkFit = nil
+	}
+	checkEvidence := cleanedEvidence
+	if evidenceSourceIDs == nil {
+		checkEvidence = nil
+	}
+	if err = s.checkSources(ctx, workspaceID, checkFit, checkEvidence); err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-sources", err)
+		return TopicCard{}, err
+	}
+
+	card, err := scanTopicCard(tx.QueryRow(ctx, topicCardSelect+` WHERE workspace_id=$1 AND topic_card_id=$2 FOR UPDATE`, workspaceID, topicCardID))
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-sources", err)
+		return TopicCard{}, err
+	}
+
+	if fitSourceIDs != nil {
+		card.FitSourceIDs = cleanedFit
+	}
+	if evidenceSourceIDs != nil {
+		card.EvidenceSourceIDs = cleanedEvidence
+	}
+
+	encodedFit, err := encodeStrings(card.FitSourceIDs)
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-sources", err)
+		return TopicCard{}, ErrStorage
+	}
+	encodedEvidence, err := encodeStrings(card.EvidenceSourceIDs)
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-sources", err)
+		return TopicCard{}, ErrStorage
+	}
+
+	err = tx.QueryRow(ctx, `
+		UPDATE content_topic_card
+		SET fit_source_ids=$3, evidence_source_ids=$4, updated_at=now()
+		WHERE workspace_id=$1 AND topic_card_id=$2
+		RETURNING updated_at`, workspaceID, topicCardID, encodedFit, encodedEvidence).Scan(&card.UpdatedAt)
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-sources", err)
+		return TopicCard{}, ErrStorage
+	}
+	if err = tx.Commit(ctx); err != nil {
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "link-sources", err)
+		return TopicCard{}, ErrStorage
+	}
 	return card, nil
 }
 
@@ -552,20 +724,22 @@ func (s *Store) GetBrief(ctx context.Context, workspaceID, actor, topicCardID, r
 
 const topicCardSelect = `SELECT topic_card_id, workspace_id, account_id,
 	audience_problem_judgment, ip_fit, timing, existing_content_relation,
-	evidence_gaps_and_investment, channels, recommended_action, status,
-	decision_reason, decision_note, started_brief_revision_id, created_at, updated_at
+	evidence_gaps_and_investment, channels, fit_source_ids, evidence_source_ids,
+	recommended_action, status, decision_reason, decision_note,
+	started_brief_revision_id, created_at, updated_at
 	FROM content_topic_card`
 
 type scanner interface{ Scan(...any) error }
 
 func scanTopicCard(row scanner) (TopicCard, error) {
 	var card TopicCard
-	var channels []byte
+	var channels, fitSources, evidenceSources []byte
 	err := row.Scan(&card.TopicCardID, &card.WorkspaceID, &card.AccountID,
 		&card.AudienceProblemJudgment, &card.IPFit, &card.Timing,
 		&card.ExistingContentRelation, &card.EvidenceGapsAndInvestment,
-		&channels, &card.RecommendedAction, &card.Status, &card.DecisionReason,
-		&card.DecisionNote, &card.StartedBriefRevisionID, &card.CreatedAt, &card.UpdatedAt)
+		&channels, &fitSources, &evidenceSources, &card.RecommendedAction,
+		&card.Status, &card.DecisionReason, &card.DecisionNote,
+		&card.StartedBriefRevisionID, &card.CreatedAt, &card.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TopicCard{}, ErrNotFound
 	}
@@ -573,6 +747,14 @@ func scanTopicCard(row scanner) (TopicCard, error) {
 		return TopicCard{}, ErrStorage
 	}
 	card.Channels, err = decodeStrings(channels)
+	if err != nil {
+		return TopicCard{}, err
+	}
+	card.FitSourceIDs, err = decodeStrings(fitSources)
+	if err != nil {
+		return TopicCard{}, err
+	}
+	card.EvidenceSourceIDs, err = decodeStrings(evidenceSources)
 	if err != nil {
 		return TopicCard{}, err
 	}

@@ -165,3 +165,56 @@ func containsJSON(body, fragment string) bool {
 	}
 	return false
 }
+
+// 030: The snapshot records the card's source references at the moment of start
+// across two distinct extension fields (fit_sources and evidence_sources).
+// Contract: contracts/topic-source-refs.md §5; FR-015, FR-017, SC-009.
+func TestSnapshotSourceExtensionsAreRecordedSeparately(t *testing.T) {
+	inputs := completeInputs()
+	inputs.FitSources = []string{"src-fit-1", "src-fit-2"}
+	inputs.EvidenceSources = []string{"src-ev-1"}
+
+	stored := AssembleStored(inputs)
+	if !reflect.DeepEqual(stored.FitSources, []string{"src-fit-1", "src-fit-2"}) {
+		t.Errorf("fit_sources = %v, want [src-fit-1 src-fit-2]", stored.FitSources)
+	}
+	if !reflect.DeepEqual(stored.EvidenceSources, []string{"src-ev-1"}) {
+		t.Errorf("evidence_sources = %v, want [src-ev-1]", stored.EvidenceSources)
+	}
+
+	body, err := json.Marshal(stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsJSON(string(body), `"fit_sources":["src-fit-1","src-fit-2"]`) {
+		t.Errorf("marshalled snapshot lacks fit_sources: %s", body)
+	}
+	if !containsJSON(string(body), `"evidence_sources":["src-ev-1"]`) {
+		t.Errorf("marshalled snapshot lacks evidence_sources: %s", body)
+	}
+}
+
+func TestSnapshotSourceExtensionsMarshalAsEmptyArrayNotNull(t *testing.T) {
+	inputs := completeInputs()
+	inputs.FitSources = nil
+	inputs.EvidenceSources = nil
+
+	stored := AssembleStored(inputs)
+	if stored.FitSources == nil || len(stored.FitSources) != 0 {
+		t.Errorf("fit_sources = %v, want empty non-nil slice", stored.FitSources)
+	}
+	if stored.EvidenceSources == nil || len(stored.EvidenceSources) != 0 {
+		t.Errorf("evidence_sources = %v, want empty non-nil slice", stored.EvidenceSources)
+	}
+
+	body, err := json.Marshal(stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsJSON(string(body), `"fit_sources":[]`) {
+		t.Errorf("marshalled snapshot lacks empty fit_sources: %s", body)
+	}
+	if !containsJSON(string(body), `"evidence_sources":[]`) {
+		t.Errorf("marshalled snapshot lacks empty evidence_sources: %s", body)
+	}
+}

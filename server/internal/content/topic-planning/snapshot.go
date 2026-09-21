@@ -40,10 +40,13 @@ type SnapshotInputs struct {
 	// UsesNeutralExpression is 021's marker as it was read. Recorded, never a
 	// gate: 021 settled that it marks and does not block.
 	UsesNeutralExpression bool
+	// 030: the card's source references as they stood at this start.
+	FitSources      []string
+	EvidenceSources []string
 }
 
 // StoredSnapshot is what goes into the row: the sixteen aligned fields plus the
-// two extensions.
+// extensions.
 //
 // The extensions are declared rather than squeezed into one of the sixteen.
 // Each of those sixteen already means something else, and borrowing one would
@@ -52,8 +55,11 @@ type StoredSnapshot struct {
 	diagnostics.Snapshot
 	// AutoPrecheck and UsesNeutralExpression are topic-planning EXTENSIONS.
 	// They are not part of diagnostics.Snapshot and must not be read as such.
-	AutoPrecheck          bool `json:"auto_precheck"`
-	UsesNeutralExpression bool `json:"uses_neutral_expression"`
+	AutoPrecheck          bool     `json:"auto_precheck"`
+	UsesNeutralExpression bool     `json:"uses_neutral_expression"`
+	// 030: the card's source references as they stood at this start.
+	FitSources            []string `json:"fit_sources"`
+	EvidenceSources       []string `json:"evidence_sources"`
 }
 
 // AssembleSnapshot builds the sixteen aligned fields.
@@ -98,11 +104,21 @@ func AssembleSnapshot(inputs SnapshotInputs) diagnostics.Snapshot {
 	}
 }
 
-// AssembleStored adds the two extension keys.
+// AssembleStored adds the extension keys.
 func AssembleStored(inputs SnapshotInputs) StoredSnapshot {
+	fit := inputs.FitSources
+	if fit == nil {
+		fit = []string{}
+	}
+	evidence := inputs.EvidenceSources
+	if evidence == nil {
+		evidence = []string{}
+	}
 	return StoredSnapshot{
 		Snapshot:              AssembleSnapshot(inputs),
 		AutoPrecheck:          inputs.AutoPrecheck,
 		UsesNeutralExpression: inputs.UsesNeutralExpression,
+		FitSources:            fit,
+		EvidenceSources:       evidence,
 	}
 }

@@ -94,6 +94,32 @@ describe("parseStartSnapshot", () => {
     const empty = emptyInputSnapshot();
     expect(empty.auto_precheck).toBe(true);
     expect(empty.uses_neutral_expression).toBe(true);
+    expect(empty.fit_sources).toEqual([]);
+    expect(empty.evidence_sources).toEqual([]);
+  });
+
+  it("parses source extensions when present and defaults null to empty array", () => {
+    const withSources = parseStartSnapshot({
+      ...wire,
+      snapshot: {
+        ...wire.snapshot,
+        fit_sources: ["src-fit-1"],
+        evidence_sources: ["src-evi-1", "src-evi-2"],
+      },
+    });
+    expect(withSources.snapshot.fit_sources).toEqual(["src-fit-1"]);
+    expect(withSources.snapshot.evidence_sources).toEqual(["src-evi-1", "src-evi-2"]);
+
+    const withNullSources = parseStartSnapshot({
+      ...wire,
+      snapshot: {
+        ...wire.snapshot,
+        fit_sources: null,
+        evidence_sources: null,
+      },
+    });
+    expect(withNullSources.snapshot.fit_sources).toEqual([]);
+    expect(withNullSources.snapshot.evidence_sources).toEqual([]);
   });
 });
 

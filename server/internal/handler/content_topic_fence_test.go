@@ -123,6 +123,10 @@ func TestContentTopicWritesAreFencedByWorkspaceDeletion(t *testing.T) {
 			_, err := store.SetAccount(ctx, workspaceID, testUserID, created.TopicCardID, nil)
 			return err
 		}},
+		{"set-sources", func() error {
+			_, err := store.SetSources(ctx, workspaceID, testUserID, created.TopicCardID, nil, nil)
+			return err
+		}},
 	} {
 		t.Run(write.name, func(t *testing.T) {
 			if err := write.call(); !errors.Is(err, topicplanning.ErrNotFound) {

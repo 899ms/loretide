@@ -143,6 +143,20 @@ func (s *Store) Start(ctx context.Context, workspaceID, actor, topicCardID, revi
 		return StartSnapshot{}, ErrStorage
 	}
 
+	card, err := scanTopicCard(tx.QueryRow(ctx, topicCardSelect+
+		` WHERE workspace_id=$1 AND topic_card_id=$2`,
+		workspaceID, topicCardID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "start", ErrNotFound)
+		return StartSnapshot{}, ErrNotFound
+	}
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "start", err)
+		return StartSnapshot{}, ErrStorage
+	}
+
 	// The brief's own source_scope is SOP 5.3 prose and is NOT the controlled
 	// preference. It rides the revision and takes no part here; reading it as
 	// the scope would need a controlled set 022 deliberately does not have.
@@ -154,6 +168,8 @@ func (s *Store) Start(ctx context.Context, workspaceID, actor, topicCardID, revi
 		PersonaRef:            revision.RevisionID,
 		AutoPrecheck:          request.AutoPrecheck,
 		UsesNeutralExpression: ipprofile.UsesNeutralExpression(revision.Profile),
+		FitSources:            card.FitSourceIDs,
+		EvidenceSources:       card.EvidenceSourceIDs,
 	})
 	payload, err := json.Marshal(stored)
 	if err != nil {

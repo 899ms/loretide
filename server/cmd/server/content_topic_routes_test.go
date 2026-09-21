@@ -24,6 +24,7 @@ var contentTopicRoutes = []struct {
 	{http.MethodPost, "/api/content-topics/", "/api/content-topics"},
 	{http.MethodGet, "/api/content-topics/{id}/", "/api/content-topics/topic-1"},
 	{http.MethodPost, "/api/content-topics/{id}/account", "/api/content-topics/topic-1/account"},
+	{http.MethodPost, "/api/content-topics/{id}/sources", "/api/content-topics/topic-1/sources"},
 	{http.MethodPost, "/api/content-topics/{id}/actions", "/api/content-topics/topic-1/actions"},
 	{http.MethodGet, "/api/content-topics/{id}/briefs", "/api/content-topics/topic-1/briefs"},
 	{http.MethodPost, "/api/content-topics/{id}/briefs", "/api/content-topics/topic-1/briefs"},
@@ -244,3 +245,85 @@ func TestContentTopicAccountLinkUsesThePathIDBehindTheRealMiddleware(t *testing.
 		t.Fatalf("detached account = %v, want null", cleared.AccountID)
 	}
 }
+
+func TestContentTopicSourcesLinkUsesThePathIDBehindTheRealMiddleware(t *testing.T) {
+	if testPool == nil || testServer == nil {
+		t.Skip("database not available")
+	}
+	fx := testutil.New(testPool, testWorkspaceID, testUserID)
+	sourceID := "topic-link-source-" + fmt.Sprint(time.Now().UnixNano())
+	fx.InsertNoID(t, "content_source", testutil.Cols{
+		"source_id":    sourceID,
+		"workspace_id": testWorkspaceID,
+		"kind":         "pasted_text",
+		"recorded_by":  testUserID,
+		"title":        "素材标题",
+		"status":       "inbox",
+	}, "source_id=$1", sourceID)
+
+	response := accountAPIRequest(t, http.MethodPost, "/api/content-topics", `{
+		"audience_problem_judgment":"audience/problem/judgment",
+		"ip_fit":"fit",
+		"timing":"没有时效依据",
+		"existing_content_relation":"没有",
+		"evidence_gaps_and_investment":"没有现成证据",
+		"channels":["zhihu"],
+		"recommended_action":"start"
+	}`)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("create topic = %d, want 201", response.StatusCode)
+	}
+	var created struct {
+		TopicCardID string `json:"topic_card_id"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.TopicCardID == "" || created.TopicCardID == testWorkspaceID {
+		t.Fatalf("topic id %q cannot prove path/context separation", created.TopicCardID)
+	}
+	fx.Cleanup(t, `DELETE FROM content_operation_audit
+		WHERE workspace_id=$1 AND payload->>'object_id'=$2`, testWorkspaceID, created.TopicCardID)
+	fx.Cleanup(t, `DELETE FROM content_brief_revision WHERE topic_card_id=$1`, created.TopicCardID)
+	fx.Cleanup(t, `DELETE FROM content_topic_card WHERE topic_card_id=$1`, created.TopicCardID)
+
+	linked := accountAPIRequest(t, http.MethodPost,
+		"/api/content-topics/"+created.TopicCardID+"/sources",
+		`{"fit_source_ids":["`+sourceID+`"]}`)
+	defer linked.Body.Close()
+	if linked.StatusCode != http.StatusOK {
+		t.Fatalf("link sources = %d, want 200", linked.StatusCode)
+	}
+	var got struct {
+		TopicCardID       string   `json:"topic_card_id"`
+		FitSourceIDs      []string `json:"fit_source_ids"`
+		EvidenceSourceIDs []string `json:"evidence_source_ids"`
+	}
+	if err := json.NewDecoder(linked.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.TopicCardID != created.TopicCardID {
+		t.Fatalf("path named %q, response returned %q", created.TopicCardID, got.TopicCardID)
+	}
+	if len(got.FitSourceIDs) != 1 || got.FitSourceIDs[0] != sourceID {
+		t.Fatalf("linked fit sources = %v, want [%s]", got.FitSourceIDs, sourceID)
+	}
+
+	cleared := accountAPIRequest(t, http.MethodPost,
+		"/api/content-topics/"+created.TopicCardID+"/sources", `{"fit_source_ids":[]}`)
+	defer cleared.Body.Close()
+	if cleared.StatusCode != http.StatusOK {
+		t.Fatalf("clear = %d, want 200", cleared.StatusCode)
+	}
+	var clearedGot struct {
+		FitSourceIDs []string `json:"fit_source_ids"`
+	}
+	if err := json.NewDecoder(cleared.Body).Decode(&clearedGot); err != nil {
+		t.Fatal(err)
+	}
+	if len(clearedGot.FitSourceIDs) != 0 {
+		t.Fatalf("cleared fit sources = %v, want empty", clearedGot.FitSourceIDs)
+	}
+}
+

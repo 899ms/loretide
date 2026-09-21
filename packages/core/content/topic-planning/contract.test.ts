@@ -5,6 +5,7 @@ import {
   EMPTY_TOPIC_CARD,
   parseBriefRevision,
   parseTopicCard,
+  setContentTopicSourcesInputToWire,
   topicStatusLabel,
 } from "./contract";
 
@@ -79,5 +80,50 @@ describe("topic planning response parsing", () => {
     expect(parseBriefRevision({ ...validBrief(), revision: "2" })).toEqual(
       EMPTY_BRIEF_REVISION,
     );
+  });
+
+  it("parses valid source reference ids and defaults missing ones to empty array", () => {
+    const card = parseTopicCard({
+      ...validTopic(),
+      fit_source_ids: ["source-1", "source-2"],
+      evidence_source_ids: ["source-3"],
+    });
+    expect(card.fitSourceIds).toEqual(["source-1", "source-2"]);
+    expect(card.evidenceSourceIds).toEqual(["source-3"]);
+
+    const missing = parseTopicCard(validTopic());
+    expect(missing.fitSourceIds).toEqual([]);
+    expect(missing.evidenceSourceIds).toEqual([]);
+  });
+
+  it("catches malformed source arrays to empty array without degrading whole card", () => {
+    const card = parseTopicCard({
+      ...validTopic(),
+      fit_source_ids: "not-an-array",
+      evidence_source_ids: [123, null],
+    });
+    expect(card.topicCardId).toBe("topic-1");
+    expect(card.fitSourceIds).toEqual([]);
+    expect(card.evidenceSourceIds).toEqual([]);
+  });
+
+  it("converts SetContentTopicSourcesInput to wire with absence != clear", () => {
+    expect(
+      setContentTopicSourcesInputToWire({
+        fitSourceIds: ["s-1"],
+      }),
+    ).toEqual({
+      fit_source_ids: ["s-1"],
+    });
+
+    expect(
+      setContentTopicSourcesInputToWire({
+        fitSourceIds: [],
+        evidenceSourceIds: ["s-2"],
+      }),
+    ).toEqual({
+      fit_source_ids: [],
+      evidence_source_ids: ["s-2"],
+    });
   });
 });
