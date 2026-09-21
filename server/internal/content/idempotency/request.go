@@ -9,10 +9,9 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
-	publicapiv1 "github.com/multica-ai/multica/server/pkg/publicapi/v1"
 )
 
-const MaxKeyBytes = publicapiv1.MaxIdempotencyBytes
+const MaxKeyBytes = 255
 
 var (
 	ErrInvalid  = errors.New("invalid idempotency request")

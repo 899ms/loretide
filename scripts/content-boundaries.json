@@ -7,6 +7,7 @@
   ],
   "modules": {
     "diagnostics": [],
+    "idempotency": [],
     "workspace-core": [
       "diagnostics"
     ],
@@ -31,6 +32,7 @@
     ],
     "work-editor": [
       "workspace-core",
+      "idempotency",
       "diagnostics"
     ],
     "agent-workflow": [
@@ -45,6 +47,7 @@
       "workspace-core",
       "source-inbox",
       "work-editor",
+      "idempotency",
       "diagnostics"
     ],
     "feedback-learning": [
@@ -101,6 +104,7 @@
     "server/internal/handler/content_topic.go",
     "server/internal/handler/content_topic_start.go",
     "server/internal/handler/content_work.go",
+    "server/internal/handler/content_import_idempotency.go",
     "server/internal/handler/content_work_version.go",
     "server/internal/handler/content_review.go",
     "server/internal/handler/content_delivery.go",
