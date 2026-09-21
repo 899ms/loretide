@@ -6,8 +6,11 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/multica-ai/multica/server/internal/content/idempotency"
 	"github.com/multica-ai/multica/server/internal/testutil"
 )
 
@@ -140,19 +143,23 @@ func runTheImportChain(t *testing.T, fx *testutil.Fixture) (string, string, stri
 
 func historicalImportRequest(t *testing.T, key, method, path, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequest(method, testServer.URL+path, strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("build historical import request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+testToken)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Workspace-ID", testWorkspaceID)
-	req.Header.Set("Idempotency-Key", key)
-	response, err := http.DefaultClient.Do(req)
+	response, err := historicalImportHTTP(key, method, path, body, testToken, testWorkspaceID)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
 	return response
+}
+
+func historicalImportHTTP(key, method, path, body, token, workspace string) (*http.Response, error) {
+	req, err := http.NewRequest(method, testServer.URL+path, strings.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Workspace-ID", workspace)
+	req.Header.Set("Idempotency-Key", key)
+	return http.DefaultClient.Do(req)
 }
 
 func createHistoricalArtifactThroughTheAPI(t *testing.T, workID, key string) string {
@@ -273,6 +280,227 @@ func TestHistoricalImportWriteReplaysAndRejectsChangedInput(t *testing.T) {
 	if conflict.StatusCode != http.StatusConflict {
 		payload, _ := io.ReadAll(conflict.Body)
 		t.Fatalf("changed replay = %d, want 409: %s", conflict.StatusCode, payload)
+	}
+}
+
+func TestHistoricalArtifactWithoutIdempotencyKeyRemainsCompatible(t *testing.T) {
+	if testPool == nil || testServer == nil {
+		t.Skip("database not available")
+	}
+	fx := testutil.New(testPool, testWorkspaceID, testUserID)
+	fx.Cleanup(t, `DELETE FROM content_artifact WHERE workspace_id=$1`, testWorkspaceID)
+	fx.Cleanup(t, `DELETE FROM content_work WHERE workspace_id=$1`, testWorkspaceID)
+	created := historicalImportRequest(t, "compatible-historical-work", http.MethodPost, "/api/content-works",
+		`{"topic_card_id":"","title":"兼容既有文稿创建","historical_import":true}`)
+	defer created.Body.Close()
+	var work struct {
+		WorkID string `json:"work_id"`
+	}
+	if created.StatusCode != http.StatusCreated || json.NewDecoder(created.Body).Decode(&work) != nil {
+		t.Fatalf("create historical work = %d", created.StatusCode)
+	}
+
+	// Existing editor callers add a document to a historical work without this
+	// new header. They remain ordinary creates; a supplied key opts into replay.
+	artifact := accountAPIRequest(t, http.MethodPost,
+		"/api/content-works/"+work.WorkID+"/artifacts", `{"kind":"body","title":"既有调用方正文","position":1}`)
+	defer artifact.Body.Close()
+	if artifact.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(artifact.Body)
+		t.Fatalf("headerless historical artifact = %d, want 201: %s", artifact.StatusCode, payload)
+	}
+}
+
+// This is deliberately one real-router chain rather than four store-only
+// examples. The four historical-import writes are an adapter workflow, so each
+// one needs a live database proof of the failure mode it is responsible for:
+// a lost create response, concurrent artifact callers, a mutable draft after a
+// version response, and a changed publication request.
+func TestHistoricalImportIdempotencyCoversTheFourWrites(t *testing.T) {
+	if testPool == nil || testServer == nil {
+		t.Skip("database not available")
+	}
+	fx := testutil.New(testPool, testWorkspaceID, testUserID)
+	fx.Cleanup(t, `DELETE FROM content_import_idempotency WHERE workspace_id=$1`, testWorkspaceID)
+	fx.Cleanup(t, `DELETE FROM content_publication_record WHERE workspace_id=$1`, testWorkspaceID)
+	fx.Cleanup(t, `DELETE FROM content_artifact_version WHERE workspace_id=$1`, testWorkspaceID)
+	fx.Cleanup(t, `DELETE FROM content_artifact WHERE workspace_id=$1`, testWorkspaceID)
+	fx.Cleanup(t, `DELETE FROM content_work WHERE workspace_id=$1`, testWorkspaceID)
+
+	// Step 1: the process committed but the client never read the first body.
+	// Retrying the same key must recover that original response, not make work 2.
+	firstWork := historicalImportRequest(t, "lost-work-response", http.MethodPost, "/api/content-works",
+		`{"topic_card_id":"","title":"丢失响应也可恢复","historical_import":true}`)
+	if firstWork.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(firstWork.Body)
+		firstWork.Body.Close()
+		t.Fatalf("first work = %d, want 201: %s", firstWork.StatusCode, payload)
+	}
+	firstWork.Body.Close() // Simulate the response being lost after commit.
+	replayedWork := historicalImportRequest(t, "lost-work-response", http.MethodPost, "/api/content-works",
+		`{"topic_card_id":"","title":"丢失响应也可恢复","historical_import":true}`)
+	defer replayedWork.Body.Close()
+	var work struct {
+		WorkID string `json:"work_id"`
+	}
+	if err := json.NewDecoder(replayedWork.Body).Decode(&work); err != nil || work.WorkID == "" {
+		t.Fatalf("lost-response replay = %d, decode=%v, work=%+v", replayedWork.StatusCode, err, work)
+	}
+
+	// Step 2: simultaneous retries must all receive the one original artifact.
+	const callers = 6
+	type artifactResult struct {
+		status int
+		body   []byte
+		err    error
+	}
+	results := make(chan artifactResult, callers)
+	var wg sync.WaitGroup
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			response, err := historicalImportHTTP("concurrent-artifact", http.MethodPost,
+				"/api/content-works/"+work.WorkID+"/artifacts", `{"kind":"body","title":"并发导入正文","position":1}`,
+				testToken, testWorkspaceID)
+			if err != nil {
+				results <- artifactResult{err: err}
+				return
+			}
+			payload, readErr := io.ReadAll(response.Body)
+			response.Body.Close()
+			results <- artifactResult{status: response.StatusCode, body: payload, err: readErr}
+		}()
+	}
+	wg.Wait()
+	close(results)
+	artifactIDs := map[string]bool{}
+	for result := range results {
+		if result.err != nil {
+			t.Fatalf("concurrent artifact request: %v", result.err)
+		}
+		if result.status != http.StatusCreated {
+			t.Fatalf("concurrent artifact = %d, want 201: %s", result.status, result.body)
+		}
+		var artifact struct {
+			ArtifactID string `json:"artifact_id"`
+		}
+		if err := json.Unmarshal(result.body, &artifact); err != nil || artifact.ArtifactID == "" {
+			t.Fatalf("decode concurrent artifact: %v, %s", err, result.body)
+		}
+		artifactIDs[artifact.ArtifactID] = true
+	}
+	if len(artifactIDs) != 1 {
+		t.Fatalf("concurrent artifact ids = %v, want one", artifactIDs)
+	}
+	var artifactID string
+	for artifactID = range artifactIDs {
+	}
+	var artifactCount int
+	if err := testPool.QueryRow(t.Context(), `SELECT count(*) FROM content_artifact
+		WHERE workspace_id=$1 AND work_id=$2`, testWorkspaceID, work.WorkID).Scan(&artifactCount); err != nil {
+		t.Fatal(err)
+	}
+	if artifactCount != 1 {
+		t.Fatalf("concurrent artifact side effects=%d, want 1", artifactCount)
+	}
+
+	// Step 3: version import chooses the first snapshot as its replay contract.
+	// After the response, a person may continue editing; a retry must not turn
+	// that later draft into another imported version.
+	patch := accountAPIRequest(t, http.MethodPatch,
+		"/api/content-works/"+work.WorkID+"/artifacts/"+artifactID, `{"draft_body":"首次导入快照"}`)
+	patch.Body.Close()
+	firstVersion := historicalImportRequest(t, "version-first-snapshot", http.MethodPost,
+		"/api/content-works/"+work.WorkID+"/artifacts/"+artifactID+"/versions/import", "")
+	defer firstVersion.Body.Close()
+	var version struct {
+		VersionID string `json:"version_id"`
+		Body      string `json:"body"`
+	}
+	if firstVersion.StatusCode != http.StatusCreated || json.NewDecoder(firstVersion.Body).Decode(&version) != nil {
+		t.Fatalf("first import version = %d", firstVersion.StatusCode)
+	}
+	patch = accountAPIRequest(t, http.MethodPatch,
+		"/api/content-works/"+work.WorkID+"/artifacts/"+artifactID, `{"draft_body":"后来修改的草稿"}`)
+	patch.Body.Close()
+	replayedVersion := historicalImportRequest(t, "version-first-snapshot", http.MethodPost,
+		"/api/content-works/"+work.WorkID+"/artifacts/"+artifactID+"/versions/import", "")
+	defer replayedVersion.Body.Close()
+	var replayed struct {
+		VersionID string `json:"version_id"`
+		Body      string `json:"body"`
+	}
+	if replayedVersion.StatusCode != http.StatusCreated || json.NewDecoder(replayedVersion.Body).Decode(&replayed) != nil {
+		t.Fatalf("replayed import version = %d", replayedVersion.StatusCode)
+	}
+	if replayed.VersionID != version.VersionID || replayed.Body != "首次导入快照" {
+		t.Fatalf("changed-draft replay = %+v, want original %+v", replayed, version)
+	}
+
+	// Step 4: unlike the version's stable first-snapshot contract, publication
+	// input is immutable statement data. Changing it under one key is a 409.
+	publicationBody := fmt.Sprintf(`{"artifact_id":%q,"channel":"xiaohongshu","status":"reported_published",
+		"declared_by":"导入者","page_url_or_content_id":"https://example.test/idempotency",
+		"version_id":%q,"historical_import":true}`, artifactID, version.VersionID)
+	firstPublication := historicalImportRequest(t, "publication-conflict", http.MethodPost,
+		"/api/content-publications", publicationBody)
+	firstPublication.Body.Close()
+	changedPublication := historicalImportRequest(t, "publication-conflict", http.MethodPost,
+		"/api/content-publications", strings.Replace(publicationBody, "导入者", "另一位导入者", 1))
+	defer changedPublication.Body.Close()
+	if changedPublication.StatusCode != http.StatusConflict {
+		payload, _ := io.ReadAll(changedPublication.Body)
+		t.Fatalf("changed publication = %d, want 409: %s", changedPublication.StatusCode, payload)
+	}
+
+	// A non-member cannot use a known key to discover its completed response.
+	email := fmt.Sprintf("historical-import-outsider-%d@multica.test", time.Now().UnixNano())
+	outsider := fx.User(t, "Historical Import Outsider", email)
+	token, err := generateTestJWT(outsider, email, "Historical Import Outsider")
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreign, err := historicalImportHTTP("lost-work-response", http.MethodPost, "/api/content-works",
+		`{"topic_card_id":"","title":"丢失响应也可恢复","historical_import":true}`, token, testWorkspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer foreign.Body.Close()
+	if foreign.StatusCode != http.StatusNotFound {
+		payload, _ := io.ReadAll(foreign.Body)
+		t.Fatalf("outsider replay = %d, want 404: %s", foreign.StatusCode, payload)
+	}
+}
+
+func TestHistoricalImportIdempotencyClaimRollsBackWithItsWrite(t *testing.T) {
+	if testPool == nil {
+		t.Skip("database not available")
+	}
+	request, err := idempotency.NewRequest("create-artifact", "rollback-work", "rollback-key",
+		map[string]string{"title": "回滚正文"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := testPool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, replayed, err := idempotency.Claim(t.Context(), tx, testWorkspaceID, request); err != nil || replayed {
+		_ = tx.Rollback(t.Context())
+		t.Fatalf("claim = replayed=%v, err=%v", replayed, err)
+	}
+	if err := tx.Rollback(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var rows int
+	if err := testPool.QueryRow(t.Context(), `SELECT count(*) FROM content_import_idempotency
+		WHERE workspace_id=$1 AND operation='create-artifact' AND resource_scope='rollback-work'
+		  AND idempotency_key='rollback-key'`, testWorkspaceID).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 0 {
+		t.Fatalf("rolled-back import claim left %d replay rows", rows)
 	}
 }
 

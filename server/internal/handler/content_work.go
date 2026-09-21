@@ -162,7 +162,7 @@ func (h *Handler) CreateContentWork(w http.ResponseWriter, r *http.Request) {
 	var request idempotency.Request
 	if body.HistoricalImport {
 		var requestErr error
-		request, requestErr = historicalImportRequest(r, "create-work", "", body)
+		request, _, requestErr = historicalImportRequest(r, "create-work", "", body)
 		if requestErr != nil {
 			h.workError(w, requestErr)
 			return
@@ -171,7 +171,7 @@ func (h *Handler) CreateContentWork(w http.ResponseWriter, r *http.Request) {
 	created, err := h.workEditorStore().CreateWork(r.Context(), workspace, actor, workeditor.Work{
 		TopicCardID: body.TopicCardID, SnapshotID: body.SnapshotID, Title: body.Title,
 		HistoricalImport: body.HistoricalImport,
-	}, optionalIdempotencyRequest(body.HistoricalImport, request)...)
+	}, optionalIdempotencyRequest(request.Key != "", request)...)
 	if err != nil {
 		h.workError(w, err)
 		return
@@ -267,7 +267,7 @@ func (h *Handler) CreateContentArtifact(w http.ResponseWriter, r *http.Request) 
 	var request idempotency.Request
 	if historical {
 		var requestErr error
-		request, requestErr = historicalImportRequest(r, "create-artifact", workIDFromURL(r), body)
+		request, _, requestErr = historicalImportRequest(r, "create-artifact", workIDFromURL(r), body)
 		if requestErr != nil {
 			h.workError(w, requestErr)
 			return
@@ -276,7 +276,7 @@ func (h *Handler) CreateContentArtifact(w http.ResponseWriter, r *http.Request) 
 	created, err := h.workEditorStore().CreateArtifact(r.Context(), workspace, actor, workIDFromURL(r),
 		workeditor.Artifact{
 			Kind: workeditor.Kind(body.Kind), Title: body.Title, Position: body.Position,
-		}, optionalIdempotencyRequest(historical, request)...)
+		}, optionalIdempotencyRequest(request.Key != "", request)...)
 	if err != nil {
 		h.workError(w, err)
 		return

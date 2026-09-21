@@ -381,6 +381,47 @@ WHERE storage_key = $1
 	}
 }
 
+// Historical-import replay rows are not protected by a foreign key: the
+// workspace delete transaction owns their cleanup explicitly. Exercise the
+// real owner-delete path so a manifest-only assertion cannot hide an orphan.
+func TestDeleteWorkspaceRemovesHistoricalImportIdempotencyRows(t *testing.T) {
+	ctx := context.Background()
+	target := dbfx.Insert(t, "workspace", testutil.Cols{
+		"name": "Historical import delete target", "slug": "handler-import-idempotency-target",
+	})
+	neighbor := dbfx.Insert(t, "workspace", testutil.Cols{
+		"name": "Historical import delete neighbor", "slug": "handler-import-idempotency-neighbor",
+	})
+	dbfx.Member(t, target, testUserID, "owner")
+	dbfx.Exec(t, `
+INSERT INTO content_import_idempotency
+	(workspace_id, operation, resource_scope, idempotency_key, request_fingerprint, completed, response_body)
+VALUES
+	($1, 'create-work', '', 'delete-target', 'target-fingerprint', true, '{"work_id":"target"}'::jsonb),
+	($2, 'create-work', '', 'delete-neighbor', 'neighbor-fingerprint', true, '{"work_id":"neighbor"}'::jsonb)
+`, target, neighbor)
+
+	request := newRequest(http.MethodDelete, "/api/workspaces/"+target, nil)
+	request = withURLParam(request, "id", target)
+	testutil.Call(t, testHandler.DeleteWorkspace, request).Want(http.StatusNoContent)
+
+	var targetRows, neighborRows int
+	if err := testPool.QueryRow(ctx,
+		`SELECT count(*) FROM content_import_idempotency WHERE workspace_id=$1`, target).Scan(&targetRows); err != nil {
+		t.Fatalf("count target replay rows: %v", err)
+	}
+	if err := testPool.QueryRow(ctx,
+		`SELECT count(*) FROM content_import_idempotency WHERE workspace_id=$1`, neighbor).Scan(&neighborRows); err != nil {
+		t.Fatalf("count neighbor replay rows: %v", err)
+	}
+	if targetRows != 0 {
+		t.Fatalf("deleted workspace left %d historical-import replay rows", targetRows)
+	}
+	if neighborRows != 1 {
+		t.Fatalf("workspace delete removed %d neighbor replay rows, want 1", neighborRows)
+	}
+}
+
 func TestDeleteWorkspace_DirtyTriggersHaveTeardownGuard(t *testing.T) {
 	for _, triggerName := range []string{
 		"trg_atq_dirty_hourly",

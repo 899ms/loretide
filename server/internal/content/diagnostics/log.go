@@ -101,7 +101,7 @@ var nonModuleComponents = []string{"web", "api", "database", "queue", "daemon", 
 // and the export could not tell one content module's events from another's -
 // and neither could a test that wanted to count them.
 var contentModuleComponents = []string{
-	"diagnostics", "workspace-core", "ip-profile", "source-inbox",
+	"diagnostics", "idempotency", "workspace-core", "ip-profile", "source-inbox",
 	"knowledge-base", "topic-planning", "work-editor", "agent-workflow",
 	"review-delivery", "feedback-learning", "project-collab", "agent-gateway",
 }

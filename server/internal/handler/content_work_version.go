@@ -2,7 +2,15 @@ package handler
 
 import (
 	"net/http"
+
+	"github.com/multica-ai/multica/server/internal/content/idempotency"
 )
+
+// importVersionReplayContract intentionally captures a stable policy rather
+// than the mutable draft. A repeated key returns the first imported snapshot.
+type importVersionReplayContract struct {
+	Snapshot string `json:"snapshot"`
+}
 
 // A document's version history (specs/024).
 //
@@ -37,14 +45,21 @@ func (h *Handler) ImportContentArtifactVersion(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	request, requestErr := historicalImportRequest(r, "import-version",
-		workIDFromURL(r)+":"+artifactIDFromURL(r), struct{}{})
+	// The draft can change after the server committed an import but before a
+	// client receives the response. Its key therefore fingerprints the stable
+	// replay contract, not the draft's current contents.
+	request, replay, requestErr := historicalImportRequest(r, "import-version",
+		workIDFromURL(r)+":"+artifactIDFromURL(r), importVersionReplayContract{Snapshot: "first-imported"})
 	if requestErr != nil {
 		h.workError(w, requestErr)
 		return
 	}
+	var requests []idempotency.Request
+	if replay {
+		requests = []idempotency.Request{request}
+	}
 	version, err := h.workEditorStore().ImportVersion(r.Context(), workspace, actor,
-		workIDFromURL(r), artifactIDFromURL(r), request)
+		workIDFromURL(r), artifactIDFromURL(r), requests...)
 	if err != nil {
 		h.workError(w, err)
 		return

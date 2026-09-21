@@ -175,7 +175,7 @@ func (h *Handler) RecordContentPublication(w http.ResponseWriter, r *http.Reques
 	var request idempotency.Request
 	if body.HistoricalImport {
 		var requestErr error
-		request, requestErr = historicalImportRequest(r, "record-publication", body.ArtifactID, body)
+		request, _, requestErr = historicalImportRequest(r, "record-publication", body.ArtifactID, body)
 		if requestErr != nil {
 			h.reviewError(w, requestErr)
 			return
@@ -192,7 +192,7 @@ func (h *Handler) RecordContentPublication(w http.ResponseWriter, r *http.Reques
 			PlatformEdited: body.PlatformEdited, EditNote: body.EditNote,
 			VersionMatch: reviewdelivery.VersionMatch(body.VersionMatch),
 			VersionID:    body.VersionID, HistoricalImport: body.HistoricalImport,
-		}, optionalIdempotencyRequest(body.HistoricalImport, request)...)
+		}, optionalIdempotencyRequest(request.Key != "", request)...)
 	if err != nil {
 		h.reviewError(w, err)
 		return
