@@ -7,10 +7,12 @@ import {
   parseTopicActionResult,
   parseTopicCard,
   parseTopicCards,
+  setContentTopicSourcesInputToWire,
   topicActionInputToWire,
   topicCardInputToWire,
   type BriefRevision,
   type BriefRevisionInput,
+  type SetContentTopicSourcesInput,
   type TopicActionInput,
   type TopicCard,
   type TopicCardInput,
@@ -188,6 +190,28 @@ export function useSetContentTopicAccount(workspaceId: string) {
     }) =>
       parseTopicCard(
         await api.setContentTopicAccount(input.topicCardId, input.accountId),
+      ),
+    onSuccess: () =>
+      client.invalidateQueries({
+        queryKey: topicPlanningKeys.all(workspaceId),
+      }),
+  });
+}
+
+// Whole-column replacement of the card's referenced material sources
+// (specs/030).
+export function useSetContentTopicSources(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      topicCardId: string;
+      sources: SetContentTopicSourcesInput;
+    }) =>
+      parseTopicCard(
+        await api.setContentTopicSources(
+          input.topicCardId,
+          setContentTopicSourcesInputToWire(input.sources),
+        ),
       ),
     onSuccess: () =>
       client.invalidateQueries({

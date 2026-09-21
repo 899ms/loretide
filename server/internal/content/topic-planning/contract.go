@@ -13,6 +13,15 @@ var (
 	ErrStorage  = errors.New("topic planning storage unavailable")
 )
 
+// FieldError names the field that was wrong, so a 400 can say which one.
+type FieldError struct {
+	Field  string `json:"field"`
+	Reason string `json:"reason,omitempty"`
+}
+
+func (e FieldError) Error() string { return e.Reason + ": " + e.Field }
+func (e FieldError) Unwrap() error { return ErrInvalid }
+
 type Status string
 
 const (
@@ -64,6 +73,10 @@ type TopicCard struct {
 	ExistingContentRelation   string    `json:"existing_content_relation"`
 	EvidenceGapsAndInvestment string    `json:"evidence_gaps_and_investment"`
 	Channels                  []string  `json:"channels"`
+	// SOP 5.2 item 2: "为什么适合这个 IP，引用哪些素材和过去的经营结论".
+	FitSourceIDs              []string  `json:"fit_source_ids"`
+	// SOP 5.2 item 5: "证据是否充分，存在什么缺口，需要多少研究或制作投入".
+	EvidenceSourceIDs         []string  `json:"evidence_source_ids"`
 	RecommendedAction         string    `json:"recommended_action"`
 	Status                    Status    `json:"status"`
 	DecisionReason            string    `json:"decision_reason"`

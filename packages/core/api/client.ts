@@ -718,6 +718,16 @@ export class ApiClient {
     });
   }
 
+  // Whole-column replacement of the card's referenced material sources
+  // (specs/030). Absence != clear: omitted keys leave the column unchanged;
+  // sending [] clears it.
+  async setContentTopicSources(topicCardId: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}/sources`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
   async getContentTopic(topicCardId: string): Promise<unknown> {
     return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}`);
   }

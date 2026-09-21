@@ -86,6 +86,16 @@ func (r testAccountReader) CurrentPersonaRevision(ctx context.Context, workspace
 	return revision, nil
 }
 
+type testSourceReader struct{ pool *pgxpool.Pool }
+
+func (r testSourceReader) Exists(ctx context.Context, workspaceID, sourceID string) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS(
+		SELECT 1 FROM content_source WHERE workspace_id=$1 AND source_id=$2
+	)`, workspaceID, sourceID).Scan(&exists)
+	return exists, err
+}
+
 func newTopicFixture(t *testing.T) topicFixture {
 	t.Helper()
 	url := os.Getenv("LORETIDE_TOPIC_TEST_DATABASE_URL")
@@ -139,6 +149,10 @@ func newTopicFixture(t *testing.T) topicFixture {
 		"491_content_start_snapshot_id_unique_idx.up.sql",
 		"492_content_start_snapshot_workspace_idx.up.sql",
 		"493_content_start_snapshot_card_idx.up.sql",
+		"516_content_source.up.sql",
+		"517_content_source_id_unique_idx.up.sql",
+		"536_content_topic_card_fit_source_ids.up.sql",
+		"537_content_topic_card_evidence_source_ids.up.sql",
 	} {
 		sql, readErr := os.ReadFile(filepath.Join(migrations, name))
 		if readErr != nil {
@@ -151,6 +165,7 @@ func newTopicFixture(t *testing.T) topicFixture {
 	diagnosticStore := diagnostics.NewStore(pool, topicTestGuard{})
 	return topicFixture{
 		store: &Store{DB: pool, Diagnostics: diagnosticStore, Accounts: testAccountReader{pool},
+			Sources: testSourceReader{pool},
 			Guard: topicTestGuard{}, Build: "test"},
 		db: testutil.New(pool, "", ""),
 	}
@@ -831,3 +846,195 @@ func TestListFiltersByAccount(t *testing.T) {
 }
 
 func stringPointer(value string) *string { return &value }
+
+func insertTestSource(t *testing.T, fx topicFixture, workspace, actor, sourceID, status string) {
+	t.Helper()
+	fx.db.InsertNoID(t, "content_source", testutil.Cols{
+		"source_id":    sourceID,
+		"workspace_id": workspace,
+		"kind":         "pasted_text",
+		"recorded_by":  actor,
+		"title":        "Test Source " + sourceID,
+		"status":       status,
+	}, "source_id=$1", sourceID)
+}
+
+func TestTopicCardSourceReferencesRoundTrip(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, actor = "workspace-sources", "actor-a"
+	insertTestSource(t, fx, workspace, actor, "src-1", "inbox")
+	insertTestSource(t, fx, workspace, actor, "src-2", "inbox")
+
+	cardInput := completeCard(workspace)
+	cardInput.FitSourceIDs = []string{"src-1"}
+	cardInput.EvidenceSourceIDs = []string{"src-2"}
+
+	created, err := fx.store.Create(ctx, actor, cardInput)
+	if err != nil {
+		t.Fatalf("Create card with sources: %v", err)
+	}
+	if !reflect.DeepEqual(created.FitSourceIDs, []string{"src-1"}) {
+		t.Errorf("created.FitSourceIDs = %v, want [src-1]", created.FitSourceIDs)
+	}
+	if !reflect.DeepEqual(created.EvidenceSourceIDs, []string{"src-2"}) {
+		t.Errorf("created.EvidenceSourceIDs = %v, want [src-2]", created.EvidenceSourceIDs)
+	}
+
+	fetched, err := fx.store.Get(ctx, workspace, actor, created.TopicCardID)
+	if err != nil {
+		t.Fatalf("Get card: %v", err)
+	}
+	if !reflect.DeepEqual(fetched.FitSourceIDs, []string{"src-1"}) {
+		t.Errorf("fetched.FitSourceIDs = %v, want [src-1]", fetched.FitSourceIDs)
+	}
+	if !reflect.DeepEqual(fetched.EvidenceSourceIDs, []string{"src-2"}) {
+		t.Errorf("fetched.EvidenceSourceIDs = %v, want [src-2]", fetched.EvidenceSourceIDs)
+	}
+
+	// Update with SetSources: replace fit with ["src-2"], and clear evidence with []
+	newFit := []string{"src-2"}
+	clearEvidence := []string{}
+	updated, err := fx.store.SetSources(ctx, workspace, actor, created.TopicCardID, &newFit, &clearEvidence)
+	if err != nil {
+		t.Fatalf("SetSources: %v", err)
+	}
+	if !reflect.DeepEqual(updated.FitSourceIDs, []string{"src-2"}) {
+		t.Errorf("updated.FitSourceIDs = %v, want [src-2]", updated.FitSourceIDs)
+	}
+	if updated.EvidenceSourceIDs == nil || len(updated.EvidenceSourceIDs) != 0 {
+		t.Errorf("updated.EvidenceSourceIDs = %v, want empty non-nil slice", updated.EvidenceSourceIDs)
+	}
+}
+
+func TestSetSourcesDefaultDoesNotClear(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, actor = "workspace-default", "actor-a"
+	insertTestSource(t, fx, workspace, actor, "src-1", "inbox")
+	insertTestSource(t, fx, workspace, actor, "src-2", "inbox")
+
+	cardInput := completeCard(workspace)
+	cardInput.FitSourceIDs = []string{"src-1"}
+	cardInput.EvidenceSourceIDs = []string{"src-2"}
+	created, err := fx.store.Create(ctx, actor, cardInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// fitSourceIDs provided as ["src-2"], evidenceSourceIDs omitted (nil).
+	// Evidence column must NOT be cleared.
+	newFit := []string{"src-2"}
+	updated, err := fx.store.SetSources(ctx, workspace, actor, created.TopicCardID, &newFit, nil)
+	if err != nil {
+		t.Fatalf("SetSources: %v", err)
+	}
+	if !reflect.DeepEqual(updated.FitSourceIDs, []string{"src-2"}) {
+		t.Errorf("updated.FitSourceIDs = %v, want [src-2]", updated.FitSourceIDs)
+	}
+	if !reflect.DeepEqual(updated.EvidenceSourceIDs, []string{"src-2"}) {
+		t.Errorf("updated.EvidenceSourceIDs = %v, want [src-2] (should remain untouched)", updated.EvidenceSourceIDs)
+	}
+
+	// Verify status and other card fields have not changed.
+	if updated.Status != created.Status {
+		t.Errorf("status = %v, want %v", updated.Status, created.Status)
+	}
+	if updated.AudienceProblemJudgment != created.AudienceProblemJudgment {
+		t.Errorf("text fields altered unexpectedly")
+	}
+}
+
+func TestSetSourcesRejectsForeignOrMissingSource(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspaceA, workspaceB, actor = "workspace-a", "workspace-b", "actor-a"
+	insertTestSource(t, fx, workspaceA, actor, "src-local", "inbox")
+	insertTestSource(t, fx, workspaceB, actor, "src-foreign", "inbox")
+
+	card, err := fx.store.Create(ctx, actor, completeCard(workspaceA))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Foreign workspace source ID -> ErrNotFound (404)
+	foreignFit := []string{"src-foreign"}
+	_, err = fx.store.SetSources(ctx, workspaceA, actor, card.TopicCardID, &foreignFit, nil)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("foreign source err = %v, want ErrNotFound", err)
+	}
+
+	// 2. Non-existent source ID -> ErrNotFound (404)
+	missingFit := []string{"src-does-not-exist"}
+	_, err = fx.store.SetSources(ctx, workspaceA, actor, card.TopicCardID, &missingFit, nil)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing source err = %v, want ErrNotFound", err)
+	}
+
+	// 3. All-or-nothing: one valid, one invalid -> whole write rejected, 0 rows written
+	mixedFit := []string{"src-local", "src-does-not-exist"}
+	_, err = fx.store.SetSources(ctx, workspaceA, actor, card.TopicCardID, &mixedFit, nil)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("mixed sources err = %v, want ErrNotFound", err)
+	}
+
+	// Confirm card still has 0 sources linked
+	fetched, err := fx.store.Get(ctx, workspaceA, actor, card.TopicCardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fetched.FitSourceIDs) != 0 || len(fetched.EvidenceSourceIDs) != 0 {
+		t.Fatalf("card has sources after rollback: fit=%v, ev=%v", fetched.FitSourceIDs, fetched.EvidenceSourceIDs)
+	}
+}
+
+func TestDecisionActionsDoNotTouchSourceReferences(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, actor = "workspace-actions", "actor-a"
+	insertTestSource(t, fx, workspace, actor, "src-1", "inbox")
+	insertTestSource(t, fx, workspace, actor, "src-2", "inbox")
+
+	cardInput := completeCard(workspace)
+	cardInput.FitSourceIDs = []string{"src-1"}
+	cardInput.EvidenceSourceIDs = []string{"src-2"}
+	card, err := fx.store.Create(ctx, actor, cardInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, action := range []Action{ActionSave, ActionDefer, ActionDrop} {
+		result, actErr := fx.store.Act(ctx, workspace, actor, card.TopicCardID, ActionRequest{Action: action})
+		if actErr != nil {
+			t.Fatalf("Act(%s): %v", action, actErr)
+		}
+		if !reflect.DeepEqual(result.TopicCard.FitSourceIDs, []string{"src-1"}) {
+			t.Errorf("Act(%s) changed FitSourceIDs: %v", action, result.TopicCard.FitSourceIDs)
+		}
+		if !reflect.DeepEqual(result.TopicCard.EvidenceSourceIDs, []string{"src-2"}) {
+			t.Errorf("Act(%s) changed EvidenceSourceIDs: %v", action, result.TopicCard.EvidenceSourceIDs)
+		}
+	}
+}
+
+func TestSetSourcesAcceptsArchivedSource(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, actor = "workspace-archived", "actor-a"
+	insertTestSource(t, fx, workspace, actor, "src-archived", "archived")
+
+	card, err := fx.store.Create(ctx, actor, completeCard(workspace))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Archived source can be referenced (validation only asks workspace & existence)
+	archivedFit := []string{"src-archived"}
+	updated, err := fx.store.SetSources(ctx, workspace, actor, card.TopicCardID, &archivedFit, nil)
+	if err != nil {
+		t.Fatalf("SetSources with archived source: %v", err)
+	}
+	if !reflect.DeepEqual(updated.FitSourceIDs, []string{"src-archived"}) {
+		t.Errorf("updated.FitSourceIDs = %v, want [src-archived]", updated.FitSourceIDs)
+	}
+}

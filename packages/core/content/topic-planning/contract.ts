@@ -18,6 +18,8 @@ export const topicCardSchema = z
     evidence_gaps_and_investment: z.string(),
     channels: z.array(z.string()),
     recommended_action: z.string(),
+    fit_source_ids: z.array(z.string()).catch([]),
+    evidence_source_ids: z.array(z.string()).catch([]),
     status: topicStatusSchema,
     decision_reason: z.string(),
     decision_note: z.string(),
@@ -37,6 +39,8 @@ export const topicCardSchema = z
     evidenceGapsAndInvestment: card.evidence_gaps_and_investment,
     channels: card.channels,
     recommendedAction: card.recommended_action,
+    fitSourceIds: card.fit_source_ids,
+    evidenceSourceIds: card.evidence_source_ids,
     status: card.status,
     decisionReason: card.decision_reason,
     decisionNote: card.decision_note,
@@ -119,6 +123,13 @@ export interface TopicCardInput {
   evidenceGapsAndInvestment: string;
   channels: string[];
   recommendedAction: string;
+  fitSourceIds?: string[];
+  evidenceSourceIds?: string[];
+}
+
+export interface SetContentTopicSourcesInput {
+  fitSourceIds?: string[];
+  evidenceSourceIds?: string[];
 }
 
 export interface BriefRevisionInput {
@@ -145,7 +156,7 @@ export interface TopicActionInput {
 export function topicCardInputToWire(
   input: TopicCardInput,
 ): Record<string, unknown> {
-  return {
+  const wire: Record<string, unknown> = {
     account_id: input.accountId ?? null,
     audience_problem_judgment: input.audienceProblemJudgment,
     ip_fit: input.ipFit,
@@ -155,6 +166,26 @@ export function topicCardInputToWire(
     channels: input.channels,
     recommended_action: input.recommendedAction,
   };
+  if (input.fitSourceIds !== undefined) {
+    wire.fit_source_ids = input.fitSourceIds;
+  }
+  if (input.evidenceSourceIds !== undefined) {
+    wire.evidence_source_ids = input.evidenceSourceIds;
+  }
+  return wire;
+}
+
+export function setContentTopicSourcesInputToWire(
+  input: SetContentTopicSourcesInput,
+): Record<string, unknown> {
+  const wire: Record<string, unknown> = {};
+  if (input.fitSourceIds !== undefined) {
+    wire.fit_source_ids = input.fitSourceIds;
+  }
+  if (input.evidenceSourceIds !== undefined) {
+    wire.evidence_source_ids = input.evidenceSourceIds;
+  }
+  return wire;
 }
 
 export function briefRevisionInputToWire(
@@ -197,6 +228,8 @@ export const EMPTY_TOPIC_CARD: TopicCard = {
   evidenceGapsAndInvestment: "",
   channels: [],
   recommendedAction: "",
+  fitSourceIds: [],
+  evidenceSourceIds: [],
   status: "draft",
   decisionReason: "",
   decisionNote: "",

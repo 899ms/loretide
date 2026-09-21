@@ -90,6 +90,10 @@ func TestWritesFailClosedWithoutTheWorkspaceFence(t *testing.T) {
 			_, err := store.SetAccount(t.Context(), "workspace-a", "actor-a", "topic-a", nil)
 			return err
 		},
+		"set-sources": func() error {
+			_, err := store.SetSources(t.Context(), "workspace-a", "actor-a", "topic-a", nil, nil)
+			return err
+		},
 	}
 	for name, write := range writes {
 		t.Run(name, func(t *testing.T) {

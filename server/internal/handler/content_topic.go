@@ -60,6 +60,24 @@ type errorRow struct{ err error }
 
 func (r errorRow) Scan(...any) error { return r.err }
 
+type topicSourceReader struct {
+	db dbExecutor
+}
+
+func (r topicSourceReader) Exists(ctx context.Context, workspaceID, sourceID string) (bool, error) {
+	if r.db == nil {
+		return false, topicplanning.ErrStorage
+	}
+	var exists bool
+	err := r.db.QueryRow(ctx, `SELECT EXISTS(
+		SELECT 1 FROM content_source WHERE workspace_id=$1 AND source_id=$2
+	)`, workspaceID, sourceID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 func (h *Handler) topicPlanningStore() *topicplanning.Store {
 	var diagnosticStore topicplanning.DiagnosticStore
 	build := ""
@@ -71,6 +89,7 @@ func (h *Handler) topicPlanningStore() *topicplanning.Store {
 		DB:          topicDatabase{dbExecutor: h.DB, txStarter: h.TxStarter},
 		Diagnostics: diagnosticStore,
 		Accounts:    h.contentAccountService(),
+		Sources:     topicSourceReader{db: h.DB},
 		// The same guard the diagnostics store holds, handed over directly so
 		// the topic write transaction takes the workspace delete fence itself
 		// instead of inheriting it from whether it happened to audit first.
@@ -166,6 +185,34 @@ func (h *Handler) SetContentTopicAccount(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, card)
 }
 
+type setTopicSourcesRequest struct {
+	FitSourceIDs      *[]string `json:"fit_source_ids"`
+	EvidenceSourceIDs *[]string `json:"evidence_source_ids"`
+}
+
+// SetContentTopicSources updates or clears the material references justifying
+// a topic card or serving as evidence. Its own endpoint rather than a field
+// on the action body, so changing sources does not advance or mutate card state.
+func (h *Handler) SetContentTopicSources(w http.ResponseWriter, r *http.Request) {
+	workspace, actor, ok := h.topicScope(w, r)
+	if !ok {
+		return
+	}
+	var body setTopicSourcesRequest
+	if !decodeTopicBody(w, r, &body) {
+		h.topicError(w, topicplanning.ErrInvalid)
+		return
+	}
+	topicID := topicCardIDFromURL(r)
+	card, err := h.topicPlanningStore().SetSources(r.Context(), workspace, actor,
+		topicID, body.FitSourceIDs, body.EvidenceSourceIDs)
+	if err != nil {
+		h.topicError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, card)
+}
+
 func (h *Handler) ActOnContentTopic(w http.ResponseWriter, r *http.Request) {
 	workspace, actor, ok := h.topicScope(w, r)
 	if !ok {
@@ -230,7 +277,19 @@ func (h *Handler) GetContentBrief(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) topicError(w http.ResponseWriter, err error) {
+	var fieldErr topicplanning.FieldError
 	switch {
+	case errors.As(err, &fieldErr):
+		event := diagnostics.Sanitize(diagnostics.Event{
+			Code: "INPUT_CONFLICT", Component: "topic-planning",
+			Trace: w.Header().Get("X-Diagnostic-Trace"),
+		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": event.Message, "code": event.Code, "trace_id": event.Trace,
+			"component": event.Component, "retryable": event.Retryable,
+			"next_action": event.Next,
+			"field": fieldErr.Field, "reason": fieldErr.Reason,
+		})
 	case errors.Is(err, topicplanning.ErrInvalid):
 		event := diagnostics.Sanitize(diagnostics.Event{
 			Code: "INPUT_CONFLICT", Component: "topic-planning",

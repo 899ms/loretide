@@ -39,6 +39,10 @@ export interface InputSnapshot {
   auto_precheck: boolean;
   /** topic-planning extension, not part of the aligned sixteen. */
   uses_neutral_expression: boolean;
+  /** topic-planning extension, not part of the aligned sixteen. */
+  fit_sources: string[];
+  /** topic-planning extension, not part of the aligned sixteen. */
+  evidence_sources: string[];
 }
 
 export interface StartSnapshot {
@@ -75,6 +79,8 @@ const snapshotBodySchema = z.object({
   timeout_ms: z.number().catch(0),
   auto_precheck: z.boolean().catch(true),
   uses_neutral_expression: z.boolean().catch(true),
+  fit_sources: z.array(z.string()).nullable().catch(null),
+  evidence_sources: z.array(z.string()).nullable().catch(null),
 });
 
 export const startSnapshotSchema = z.object({
@@ -117,6 +123,8 @@ export function emptyInputSnapshot(): InputSnapshot {
     // "be more careful", and neither claims a permission nobody granted.
     auto_precheck: true,
     uses_neutral_expression: true,
+    fit_sources: [],
+    evidence_sources: [],
   };
 }
 
@@ -155,6 +163,8 @@ function toSnapshot(wire: SnapshotWire): StartSnapshot {
       excluded_sources: body.excluded_sources ?? empty.excluded_sources,
       grants: body.grants ?? empty.grants,
       file_hashes: body.file_hashes ?? empty.file_hashes,
+      fit_sources: body.fit_sources ?? empty.fit_sources,
+      evidence_sources: body.evidence_sources ?? empty.evidence_sources,
     },
     createdAt: wire.created_at ?? "",
   };
