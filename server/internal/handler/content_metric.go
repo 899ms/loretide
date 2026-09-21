@@ -62,10 +62,21 @@ func (d feedbackDatabase) QueryRow(ctx context.Context, sql string, args ...any)
 // feedbackPublications answers the two questions feedback-learning would
 // otherwise have to import review-delivery for.
 //
-// The version takes two hops - publication record to delivery task to review
-// request - because 025's publication record deliberately carries no
-// version_id. A record entered for history has no delivery task, so there is
-// nothing to walk, and "" is the honest answer rather than an error: the
+// The version is looked for in two places, in this order:
+//
+//  1. The record's own version_id - SOP 3.3's 发布后快照 (migration 534). A
+//     historical import sets it, because it has no delivery task and no review
+//     request to walk and inventing them would be the "虚构版本链" §3.3
+//     forbids.
+//  2. Failing that, the two hops: publication record to delivery task to
+//     review request, which is how every record made before 534 answers.
+//
+// The order is not interchangeable. A record that has BOTH a delivery task and
+// a direct pointer is answered by the pointer, because the pointer is what
+// somebody stated about this publication; the two hops only infer it from the
+// task that produced it.
+//
+// "" remains the honest answer when neither works, and never an error: the
 // numbers are real, we just do not know which version they belong to.
 type feedbackPublications struct{ db dbExecutor }
 
@@ -73,12 +84,15 @@ func (p feedbackPublications) Resolve(ctx context.Context, workspaceID, publicat
 	if p.db == nil || workspaceID == "" || publicationRecordID == "" {
 		return "", "", "", feedbacklearning.ErrNotFound
 	}
-	var workID, artifactID, deliveryTaskID string
-	if err := p.db.QueryRow(ctx, `SELECT work_id, artifact_id, delivery_task_id
+	var workID, artifactID, deliveryTaskID, directVersionID string
+	if err := p.db.QueryRow(ctx, `SELECT work_id, artifact_id, delivery_task_id, version_id
 		FROM content_publication_record
 		WHERE workspace_id=$1 AND publication_record_id=$2`,
-		workspaceID, publicationRecordID).Scan(&workID, &artifactID, &deliveryTaskID); err != nil {
+		workspaceID, publicationRecordID).Scan(&workID, &artifactID, &deliveryTaskID, &directVersionID); err != nil {
 		return "", "", "", feedbacklearning.ErrNotFound
+	}
+	if directVersionID != "" {
+		return workID, artifactID, directVersionID, nil
 	}
 	if deliveryTaskID == "" {
 		return workID, artifactID, "", nil

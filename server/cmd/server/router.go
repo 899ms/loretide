@@ -1919,6 +1919,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Patch("/artifacts/{artifactId}", h.PatchContentArtifact)
 				r.Get("/artifacts/{artifactId}/versions", h.ListContentArtifactVersions)
 				r.Post("/artifacts/{artifactId}/versions", h.SaveContentArtifactVersion)
+				// A separate entry point, not a flag on the one above: which
+				// endpoint was called is what the server records as the
+				// version's provenance (SOP 3.3's historical import).
+				r.Post("/artifacts/{artifactId}/versions/import", h.ImportContentArtifactVersion)
 				r.Get("/artifacts/{artifactId}/versions/{versionId}", h.GetContentArtifactVersion)
 				r.Post("/artifacts/{artifactId}/versions/{versionId}/restore", h.RestoreContentArtifactVersion)
 				r.Post("/artifacts/{artifactId}/versions/{versionId}/adopt", h.AdoptContentArtifactVersion)

@@ -52,6 +52,29 @@ func (s *Store) AdoptVersion(ctx context.Context, workspaceID, actor, workID, ar
 	})
 }
 
+// ImportVersion appends the one and only version of a work imported from
+// something already published (SOP 3.3).
+//
+// (source, action) = (edited, imported). The source stays edited because the
+// body is still what a person wrote - years ago, elsewhere, but a person. The
+// action is what is different: nobody wrote this today.
+//
+// fromVersionID is left empty, so restored_from and adopted_from are both "".
+// That is §3.3's "不虚构版本链" in one line: there is no earlier version to
+// point at, and pointing at anything would be inventing one. An imported
+// document has exactly one version and no chain behind it.
+//
+// created_at comes from the column default, so it is the moment of the import.
+// The historical publication date lives on the publication record's
+// published_at and nowhere else. Backdating this would be the tempting version
+// - the list would sort "correctly" - and would put a row in the database
+// claiming to be two years old that the audit log contradicts.
+func (s *Store) ImportVersion(ctx context.Context, workspaceID, actor, workID, artifactID string) (ArtifactVersion, error) {
+	return s.appendVersion(ctx, workspaceID, actor, workID, artifactID, versionIntent{
+		step: "import-version", source: SourceEdited, action: ActionImported,
+	})
+}
+
 type versionIntent struct {
 	step   string
 	source Source

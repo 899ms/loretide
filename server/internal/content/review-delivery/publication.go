@@ -38,6 +38,14 @@ type RecordRequest struct {
 	PlatformEdited     bool              `json:"platform_edited"`
 	EditNote           string            `json:"edit_note"`
 	VersionMatch       VersionMatch      `json:"version_match"`
+	// VersionID is SOP 3.3's 发布后快照, set when the caller knows which
+	// version was published without there being a delivery task to walk. A
+	// caller that went through the normal flow leaves it empty and the two
+	// hops answer instead.
+	VersionID string `json:"version_id"`
+	// HistoricalImport is set by the import path. It cannot be un-set later
+	// because there is no update path to this table at all.
+	HistoricalImport bool `json:"historical_import"`
 }
 
 // Record appends one publication record.
@@ -71,6 +79,8 @@ func (s *Store) Record(ctx context.Context, workspaceID, actor string, request R
 		PlatformEdited:     request.PlatformEdited,
 		EditNote:           request.EditNote,
 		VersionMatch:       request.VersionMatch,
+		VersionID:          request.VersionID,
+		HistoricalImport:   request.HistoricalImport,
 	}
 	if record.VersionMatch == "" {
 		// SOP 9.1's own default for "I could not get the full text".
@@ -113,14 +123,15 @@ func (s *Store) Record(ctx context.Context, workspaceID, actor string, request R
 		(publication_record_id, workspace_id, work_id, artifact_id, delivery_task_id,
 		 channel, status, actor_id, declared_by, page_url_or_content_id, receipt_note,
 		 verification_note, published_at, platform_account, platform_edited,
-		 edit_note, version_match)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+		 edit_note, version_match, version_id, historical_import)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 		RETURNING created_at`,
 		record.PublicationRecordID, workspaceID, record.WorkID, record.ArtifactID,
 		record.DeliveryTaskID, string(record.Channel), string(record.Status),
 		record.ActorID, record.DeclaredBy, record.PageURLOrContentID, record.ReceiptNote,
 		record.VerificationNote, record.PublishedAt, record.PlatformAccount,
-		record.PlatformEdited, record.EditNote, string(record.VersionMatch)).
+		record.PlatformEdited, record.EditNote, string(record.VersionMatch),
+		record.VersionID, record.HistoricalImport).
 		Scan(&record.CreatedAt); err != nil {
 		_ = tx.Rollback(ctx)
 		s.reportFailure(ctx, workspaceID, actor, record.PublicationRecordID, "record-publication", err)

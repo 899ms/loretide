@@ -127,6 +127,10 @@ func newReviewFixture(t *testing.T) reviewFixture {
 		"513_content_publication_record.up.sql",
 		"514_content_publication_record_id_unique_idx.up.sql",
 		"515_content_publication_record_artifact_idx.up.sql",
+		// specs/031: the historical import flag and the direct version pointer
+		// (发布后快照).
+		"533_content_publication_record_historical_import.up.sql",
+		"534_content_publication_record_version_id.up.sql",
 	} {
 		sql, readErr := os.ReadFile(filepath.Join(migrations, name))
 		if readErr != nil {

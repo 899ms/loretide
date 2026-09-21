@@ -126,7 +126,7 @@ func (s *Store) reportFailure(ctx context.Context, workspaceID, actor, objectID,
 }
 
 const workSelect = `SELECT work_id, workspace_id, topic_card_id, snapshot_id,
-	title, created_at, updated_at FROM content_work`
+	title, historical_import, created_at, updated_at FROM content_work`
 
 const artifactSelect = `SELECT artifact_id, work_id, workspace_id, kind, title,
 	position, draft_body, draft_status, draft_saved_at, created_at, updated_at
@@ -139,7 +139,8 @@ const versionSelect = `SELECT version_id, artifact_id, work_id, workspace_id,
 func scanWork(row scanner) (Work, error) {
 	var work Work
 	err := row.Scan(&work.WorkID, &work.WorkspaceID, &work.TopicCardID,
-		&work.SnapshotID, &work.Title, &work.CreatedAt, &work.UpdatedAt)
+		&work.SnapshotID, &work.Title, &work.HistoricalImport,
+		&work.CreatedAt, &work.UpdatedAt)
 	return work, err
 }
 
@@ -170,7 +171,15 @@ func (s *Store) CreateWork(ctx context.Context, workspaceID, actor string, work 
 	if s == nil {
 		return Work{}, ErrStorage
 	}
-	if workspaceID == "" || actor == "" || work.TopicCardID == "" {
+	// topic_card_id is NOT required. A work imported from something already
+	// published (SOP 3.3) has no topic card: it had a body first, and
+	// everything else after. "" is a real state here for the same reason it is
+	// for snapshot_id one line below - see content_work's own column comment.
+	//
+	// The cost is that "the works of this card" can no longer be expressed as
+	// "not filtered by card", and every by-card read path has to say so. See
+	// ListWorks.
+	if workspaceID == "" || actor == "" {
 		s.reportFailure(ctx, workspaceID, actor, "", "create-work", ErrInvalid)
 		return Work{}, ErrInvalid
 	}
@@ -188,6 +197,9 @@ func (s *Store) CreateWork(ctx context.Context, workspaceID, actor string, work 
 	created := Work{
 		WorkID: s.newID(), WorkspaceID: workspaceID,
 		TopicCardID: work.TopicCardID, SnapshotID: work.SnapshotID, Title: work.Title,
+		// Written once, here. No update path names this column, and a guard
+		// test asserts none ever does.
+		HistoricalImport: work.HistoricalImport,
 	}
 	ctx, err = s.audit(ctx, tx, workspaceID, actor, created.WorkID, "create-work")
 	if err != nil {
@@ -196,9 +208,10 @@ func (s *Store) CreateWork(ctx context.Context, workspaceID, actor string, work 
 		return Work{}, err
 	}
 	if err = tx.QueryRow(ctx, `INSERT INTO content_work
-		(work_id, workspace_id, topic_card_id, snapshot_id, title)
-		VALUES ($1,$2,$3,$4,$5) RETURNING created_at, updated_at`,
-		created.WorkID, workspaceID, created.TopicCardID, created.SnapshotID, created.Title).
+		(work_id, workspace_id, topic_card_id, snapshot_id, title, historical_import)
+		VALUES ($1,$2,$3,$4,$5,$6) RETURNING created_at, updated_at`,
+		created.WorkID, workspaceID, created.TopicCardID, created.SnapshotID,
+		created.Title, created.HistoricalImport).
 		Scan(&created.CreatedAt, &created.UpdatedAt); err != nil {
 		_ = tx.Rollback(ctx)
 		s.reportFailure(ctx, workspaceID, actor, created.WorkID, "create-work", err)
@@ -224,6 +237,17 @@ func (s *Store) ListWorks(ctx context.Context, workspaceID, actor, topicCardID s
 		s.reportFailure(ctx, workspaceID, actor, "", "list-works", ErrInvalid)
 		return nil, ErrInvalid
 	}
+	// topic_card_id='' is now a real state (an imported work has no card), so
+	// "$2='' OR topic_card_id=$2" has two readings and only one is wanted:
+	// with a card named, a work with no card must NOT match. It does not,
+	// because '' is never equal to a non-empty id - but that is the whole of
+	// specs/031 FR-034 resting on an expression nobody wrote for this, so
+	// TestAnImportedWorkIsNotListedUnderAnyTopicCard proves it rather than
+	// assuming it.
+	//
+	// With $2='' the list is the workspace's works, imported ones included.
+	// That is deliberate (FR-036): they are real works here. What is excluded
+	// is the BY-CARD reading, not the work.
 	rows, err := s.DB.Query(ctx, workSelect+
 		` WHERE workspace_id=$1 AND ($2='' OR topic_card_id=$2)
 		  ORDER BY created_at DESC, work_id`, workspaceID, topicCardID)
@@ -300,7 +324,8 @@ func (s *Store) RenameWork(ctx context.Context, workspaceID, actor, workID, titl
 	}
 	work, err := scanWork(tx.QueryRow(ctx, `UPDATE content_work SET title=$3, updated_at=now()
 		WHERE workspace_id=$1 AND work_id=$2
-		RETURNING work_id, workspace_id, topic_card_id, snapshot_id, title, created_at, updated_at`,
+		RETURNING work_id, workspace_id, topic_card_id, snapshot_id, title,
+			historical_import, created_at, updated_at`,
 		workspaceID, workID, title))
 	if errors.Is(err, pgx.ErrNoRows) {
 		_ = tx.Rollback(ctx)

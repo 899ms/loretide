@@ -286,7 +286,31 @@ type PublicationRecord struct {
 	PlatformEdited     bool         `json:"platform_edited"`
 	EditNote           string       `json:"edit_note"`
 	VersionMatch       VersionMatch `json:"version_match"`
-	CreatedAt          time.Time    `json:"created_at"`
+	// VersionID is SOP 3.3's 发布后快照: which version of the body this
+	// publication is of, pointed at directly.
+	//
+	// A piece that went through the normal flow does not need it - the version
+	// is two hops away through the delivery task and the review request. A
+	// historical import has neither hop, and inventing a review request to
+	// hang the version off would be the "虚构版本链" §3.3 forbids. So the
+	// record can say it itself.
+	//
+	// "" means "not stated here", the same real state DeliveryTaskID's "" is;
+	// a reader falls back to the two hops. The row is append-only, so this
+	// points at one version forever: a later save on the same document does
+	// not move it, which is the point - the publication is of what was
+	// published, not of whatever the document says now.
+	VersionID string `json:"version_id"`
+	// HistoricalImport marks a record entered for something published before
+	// this system was in use (SOP 3.3).
+	//
+	// It is carried here and NOT resolved by joining back to the work on
+	// purpose. When SOP 10.2's aggregates land, this is the only thing that
+	// tells a number copied off a platform three years ago from one recorded
+	// last week - and the join that would have prevented mixing them is
+	// exactly the join nobody remembers to write.
+	HistoricalImport bool      `json:"historical_import"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 // oneOf accepts an exact match only: no trimming, no case folding. Tolerating

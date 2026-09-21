@@ -30,6 +30,9 @@ var contentWorkRoutes = []struct {
 	{http.MethodPatch, "/api/content-works/{id}/artifacts/{artifactId}", "/api/content-works/work-1/artifacts/art-1"},
 	{http.MethodGet, "/api/content-works/{id}/artifacts/{artifactId}/versions", "/api/content-works/work-1/artifacts/art-1/versions"},
 	{http.MethodPost, "/api/content-works/{id}/artifacts/{artifactId}/versions", "/api/content-works/work-1/artifacts/art-1/versions"},
+	// specs/031: a separate entry point, because which one was called is what
+	// the server records as the version's provenance.
+	{http.MethodPost, "/api/content-works/{id}/artifacts/{artifactId}/versions/import", "/api/content-works/work-1/artifacts/art-1/versions/import"},
 	{http.MethodGet, "/api/content-works/{id}/artifacts/{artifactId}/versions/{versionId}", "/api/content-works/work-1/artifacts/art-1/versions/ver-1"},
 	{http.MethodPost, "/api/content-works/{id}/artifacts/{artifactId}/versions/{versionId}/restore", "/api/content-works/work-1/artifacts/art-1/versions/ver-1/restore"},
 	{http.MethodPost, "/api/content-works/{id}/artifacts/{artifactId}/versions/{versionId}/adopt", "/api/content-works/work-1/artifacts/art-1/versions/ver-1/adopt"},

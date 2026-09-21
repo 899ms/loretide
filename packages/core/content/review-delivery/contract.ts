@@ -138,6 +138,14 @@ export interface PublicationRecord {
   platformEdited: boolean;
   editNote: string;
   versionMatch: string;
+  /** SOP 3.3's 发布后快照: the version this publication is of, stated
+   *  directly. "" when it was not stated and the version has to be found
+   *  through the delivery task instead. */
+  versionId: string;
+  /** SOP 3.3's 历史导入标识: this record is for something published before
+   *  this system was in use. Carried on the record itself so a later
+   *  aggregate can tell historical numbers from new ones without a join. */
+  historicalImport: boolean;
   createdAt: string;
 }
 
@@ -220,6 +228,8 @@ const publicationSchema = z.object({
   platform_edited: z.boolean().optional(),
   edit_note: z.string().optional(),
   version_match: z.string().optional(),
+  version_id: z.string().optional(),
+  historical_import: z.boolean().optional(),
   created_at: z.string().optional(),
 });
 
@@ -335,6 +345,10 @@ function toPublication(wire: z.infer<typeof publicationSchema>): PublicationReco
     platformEdited: wire.platform_edited === true,
     editNote: wire.edit_note ?? "",
     versionMatch: wire.version_match ?? "",
+    versionId: wire.version_id ?? "",
+    // === true, not truthiness: a backend deployed without migration 533
+    // sends nothing, and "absent" means "not an import".
+    historicalImport: wire.historical_import === true,
     createdAt: wire.created_at ?? "",
   };
 }

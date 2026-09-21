@@ -34,6 +34,10 @@ export interface WorkLike {
   topicCardId: string;
   title: string;
   updatedAt: string;
+  /** SOP 3.3's 历史导入标识. Optional so that a caller reading from a backend
+   *  deployed without migration 532 still type-checks; absent reads as false,
+   *  which is the same answer that backend would have given. */
+  historicalImport?: boolean;
 }
 
 /** A document's editing copy, as work-editor's contract returns it. */

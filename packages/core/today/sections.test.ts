@@ -225,6 +225,62 @@ describe("worksInProgress", () => {
     const section = worksInProgress([work()], new Map(), new Set(["work-1"]));
     expect(section.shown[0]).toMatchObject({ workId: "work-1", failed: true });
   });
+
+  // NEGATIVE TEST - specs/031 FR-034 / FR-035.
+  //
+  // A historical import qualifies on every other count: it has a document, the
+  // document has an editing copy, and its updated_at is today because it was
+  // just pasted in. Nothing in the section's own logic would exclude it, which
+  // is exactly why this is asserted rather than assumed - §2's question is
+  // "what am I still writing", and a piece published two years ago is not an
+  // answer to it.
+  it("excludes a historical import even when its document is being edited", () => {
+    const imported = work({
+      workId: "imported-1", topicCardId: "", historicalImport: true,
+      updatedAt: "2026-09-20T00:00:00Z",
+    });
+    const section = worksInProgress(
+      [imported, work()],
+      new Map([
+        ["imported-1", [artifact({ artifactId: "imported-art" })]],
+        ["work-1", [artifact()]],
+      ]),
+    );
+    expect(section.shown.map((entry) => entry.workId)).not.toContain("imported-1");
+    // The positive half. Without it this passes against a section that
+    // returns nothing at all.
+    expect(section.shown.map((entry) => entry.workId)).toContain("work-1");
+  });
+
+  // The flag decides, not the empty topic card id. They are two different
+  // facts, and a work could carry one without the other - a card deleted out
+  // from under an ordinary work would leave it card-less and still very much
+  // in progress.
+  it("keeps a work that has no topic card but was not imported", () => {
+    const orphan = work({ workId: "orphan-1", topicCardId: "" });
+    const section = worksInProgress([orphan], new Map([["orphan-1", [artifact()]]]));
+    expect(section.shown.map((entry) => entry.workId)).toContain("orphan-1");
+  });
+
+  // A backend deployed without migration 532 sends no flag at all. Absent must
+  // read as "not an import", or every work on that deployment would vanish
+  // from the block.
+  it("treats a missing flag as not an import", () => {
+    const section = worksInProgress([work()], new Map([["work-1", [artifact()]]]));
+    expect(section.shown).toHaveLength(1);
+  });
+
+  // The input array is not reordered in place. worksInProgress used to slice
+  // before sorting for this reason; the filter now returns the fresh array,
+  // and that is easy to undo by accident.
+  it("does not reorder its caller's array", () => {
+    const works = [
+      work({ workId: "older", updatedAt: "2026-09-01T00:00:00Z" }),
+      work({ workId: "newer", updatedAt: "2026-09-09T00:00:00Z" }),
+    ];
+    worksInProgress(works, new Map());
+    expect(works.map((entry) => entry.workId)).toEqual(["older", "newer"]);
+  });
 });
 
 describe("reviewsNeedingAttention", () => {

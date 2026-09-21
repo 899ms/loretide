@@ -134,6 +134,20 @@ func TestWorkEditorWritesAreFencedByWorkspaceDeletion(t *testing.T) {
 				artifact.ArtifactID, version.VersionID)
 			return err
 		}},
+		// specs/031. A work with no topic card is the one create path that no
+		// longer fails its own input validation first, so without this case
+		// the import could be the write that slips past a committed delete.
+		{"create-imported-work", func() error {
+			_, err := store.CreateWork(ctx, workspaceID, testUserID, workeditor.Work{
+				Title: "历史作品", HistoricalImport: true,
+			})
+			return err
+		}},
+		{"import-version", func() error {
+			_, err := store.ImportVersion(ctx, workspaceID, testUserID, work.WorkID,
+				artifact.ArtifactID)
+			return err
+		}},
 	} {
 		t.Run(write.name, func(t *testing.T) {
 			if err := write.call(); !errors.Is(err, workeditor.ErrNotFound) {

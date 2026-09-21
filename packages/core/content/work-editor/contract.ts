@@ -23,8 +23,11 @@ export const VERSION_SOURCES = ["generated", "edited", "adopted"] as const;
 export type VersionSource = (typeof VERSION_SOURCES)[number];
 
 /** What was done, recorded beside the source. Restoring is HERE, not in the
- *  source set: what comes back is still what a person wrote. */
-export const VERSION_ACTIONS = ["saved", "restored", "adopted"] as const;
+ *  source set: what comes back is still what a person wrote - and so is
+ *  `imported`, which is a piece pasted back in from where it was published
+ *  (SOP 3.3). Its source is still `edited`; what differs is that nobody wrote
+ *  it today. */
+export const VERSION_ACTIONS = ["saved", "restored", "adopted", "imported"] as const;
 export type VersionAction = (typeof VERSION_ACTIONS)[number];
 
 export interface Work {
@@ -35,6 +38,12 @@ export interface Work {
    *  requires writing to work with nothing else in place. */
   snapshotId: string;
   title: string;
+  /** SOP 3.3's 历史导入标识: this work was pasted in from something already
+   *  published elsewhere. Decided when the work is created and never changed.
+   *
+   *  A work with this set has no topicCardId, which is why by-card lists have
+   *  to exclude it explicitly - see `worksInProgress` in core/today. */
+  historicalImport: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,6 +88,7 @@ const workSchema = z.object({
   topic_card_id: z.string().optional(),
   snapshot_id: z.string().optional(),
   title: z.string().optional(),
+  historical_import: z.boolean().optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
 });
@@ -118,7 +128,7 @@ const versionListSchema = z.object({ versions: z.array(versionSchema).nullable()
 
 const EMPTY_WORK: Work = {
   workId: "", workspaceId: "", topicCardId: "", snapshotId: "",
-  title: "", createdAt: "", updatedAt: "",
+  title: "", historicalImport: false, createdAt: "", updatedAt: "",
 };
 
 const EMPTY_ARTIFACT: Artifact = {
@@ -143,6 +153,10 @@ function toWork(wire: z.infer<typeof workSchema>): Work {
     topicCardId: wire.topic_card_id ?? "",
     snapshotId: wire.snapshot_id ?? "",
     title: wire.title ?? "",
+    // === true, not truthiness. A backend that has not been deployed with
+    // migration 532 sends nothing, and "absent" must read as "not an import"
+    // rather than as a value to be coerced.
+    historicalImport: wire.historical_import === true,
     createdAt: wire.created_at ?? "",
     updatedAt: wire.updated_at ?? "",
   };

@@ -92,6 +92,9 @@ func newWorkFixture(t *testing.T) workFixture {
 		"501_content_artifact_version_id_unique_idx.up.sql",
 		"502_content_artifact_version_unique_idx.up.sql",
 		"503_content_artifact_version_workspace_idx.up.sql",
+		// specs/031: the historical import column and the fourth action.
+		"532_content_work_historical_import.up.sql",
+		"535_content_artifact_version_action_imported.up.sql",
 	} {
 		sql, readErr := os.ReadFile(filepath.Join(migrations, name))
 		if readErr != nil {

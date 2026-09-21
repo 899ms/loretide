@@ -212,4 +212,43 @@ describe("publication records", () => {
   it.each([...HANDOFF_METHODS])("does not treat %s as a publication", (method) => {
     expect(handoffMeansPublished(method)).toBe(false);
   });
+
+  // SOP 3.3's 发布后快照 and 历史导入标识.
+  it("keeps a stated version id and the import flag", () => {
+    const [record] = parsePublications({
+      publications: [{
+        publication_record_id: "p4", status: "reported_published",
+        version_id: "version-imported", historical_import: true, delivery_task_id: "",
+      }],
+    });
+    expect(record?.versionId).toBe("version-imported");
+    expect(record?.historicalImport).toBe(true);
+    // No delivery task is a real state for an import, not a missing value.
+    expect(record?.deliveryTaskId).toBe("");
+  });
+
+  it("degrades the two new fields rather than inventing them", () => {
+    // A backend deployed without migrations 533/534 sends neither. "" must
+    // read as "the version was not stated" - the caller then falls back the
+    // way it always did - and absent must read as "not an import", because a
+    // record wrongly labelled historical would be excluded from the next
+    // aggregate that filters them out.
+    const [older] = parsePublications({
+      publications: [{ publication_record_id: "p5", status: "reported_published" }],
+    });
+    expect(older?.versionId).toBe("");
+    expect(older?.historicalImport).toBe(false);
+
+    // A wrongly TYPED field is a different case from an absent one, and the
+    // module already answers it the same way for every other field: the list
+    // schema rejects the row, parseWithFallback returns the fallback, and the
+    // page renders an empty list rather than a record with invented values.
+    // Asserted here so that adding two fields did not quietly change it.
+    expect(parsePublications({
+      publications: [{
+        publication_record_id: "p6", status: "reported_published",
+        version_id: 42, historical_import: "true",
+      }],
+    })).toEqual([]);
+  });
 });

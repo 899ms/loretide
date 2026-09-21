@@ -22,7 +22,7 @@ func TestTheControlledSetsAreExactlyWhatSOP71Gives(t *testing.T) {
 		{"kind", asStrings(Kinds), []string{"body", "channel_draft"}},
 		{"draft_status", asStrings(DraftStatuses), []string{"working", "saved"}},
 		{"source", asStrings(Sources), []string{"generated", "edited", "adopted"}},
-		{"action", asStrings(Actions), []string{"saved", "restored", "adopted"}},
+		{"action", asStrings(Actions), []string{"saved", "restored", "adopted", "imported"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if len(tc.got) != len(tc.want) {

@@ -112,6 +112,14 @@ export function worthWritingTopics(
  * Section 2 - works with at least one document still being written.
  *
  * A work with no documents is not "in progress": there is nothing to continue.
+ *
+ * Historical imports are excluded (specs/031 FR-034). They arrive here through
+ * the same workspace-wide fetch as everything else, and they qualify on every
+ * other count - a document, an editing copy, a recent updated_at. But §2's
+ * question is "what am I still writing", and a piece published two years ago
+ * is not an answer to it. Excluded by the FLAG rather than by the empty topic
+ * card id, because "no card" and "already published" are two different facts
+ * and only the second one is what this section is about.
  */
 export function worksInProgress(
   works: WorkLike[],
@@ -121,7 +129,9 @@ export function worksInProgress(
   const entries: WorkEntry[] = [];
   // Most recently touched first, decided before mapping so the entry list is
   // already in order.
-  const ordered = works.slice().sort((a, b) => compareDesc(a.updatedAt, b.updatedAt));
+  const ordered = works
+    .filter((work) => work.historicalImport !== true)
+    .sort((a, b) => compareDesc(a.updatedAt, b.updatedAt));
   for (const work of ordered) {
     const list = artifacts.get(work.workId) ?? [];
     const working = list.filter((item) => item.draftStatus === ARTIFACT_STATUS_IN_PROGRESS);
