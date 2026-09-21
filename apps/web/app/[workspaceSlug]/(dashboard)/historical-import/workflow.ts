@@ -48,6 +48,7 @@ export interface HistoricalImportFailure {
 
 export interface HistoricalImportSession {
   sessionId: string;
+  declaredBy: string;
   steps: HistoricalImportStepState[];
   outputs: HistoricalImportOutputs;
   validationError: HistoricalImportProblem | null;
@@ -59,6 +60,7 @@ export interface HistoricalImportOperationContext {
   outputs: HistoricalImportOutputs;
   outputId: string;
   idempotencyKey: string;
+  declaredBy: string;
   checkpoint: (outputId: string) => void;
 }
 
@@ -86,9 +88,10 @@ const OPERATION_FIELDS: Record<
   publication: "createPublication",
 };
 
-export function createImportSession(sessionId: string): HistoricalImportSession {
+export function createImportSession(sessionId: string, declaredBy = ""): HistoricalImportSession {
   return {
     sessionId,
+    declaredBy,
     steps: HISTORICAL_IMPORT_STEPS.map((step) => ({
       step,
       status: "not_started",
@@ -139,7 +142,7 @@ export function editableHistoricalImportFields(
     session.steps.find((entry) => entry.step === step)?.input !== null &&
     !(canCorrect && session.failure?.step === step);
   if (!session.outputs.workId && !frozen("work")) fields.push("title");
-  if (!session.outputs.artifactId && !frozen("artifact")) fields.push("body");
+  if (!session.outputs.artifactId && !frozen("work") && !frozen("artifact")) fields.push("body");
   if (!session.outputs.publicationRecordId && !frozen("publication")) {
     fields.push("channel", "publishedAt", "platformAccount", "pageUrlOrContentId");
   }
@@ -149,7 +152,8 @@ export function editableHistoricalImportFields(
 function isKnownClientFailure(error: unknown): boolean {
   return !!error && typeof error === "object" &&
     typeof (error as { status?: unknown }).status === "number" &&
-    (error as { status: number }).status >= 400 && (error as { status: number }).status < 500;
+    (error as { status: number }).status >= 400 && (error as { status: number }).status < 500 &&
+    (error as { status: number }).status !== 409;
 }
 
 export function deriveHistoricalImportTitle(title: string, body: string): string {
@@ -176,7 +180,6 @@ export async function runHistoricalImport(
   let current: HistoricalImportSession = {
     ...session,
     validationError: null,
-    failure: null,
   };
 
   for (const step of HISTORICAL_IMPORT_STEPS) {
@@ -211,6 +214,7 @@ export async function runHistoricalImport(
         outputs: current.outputs,
         outputId: current.outputs[outputField],
         idempotencyKey: stepState.idempotencyKey,
+        declaredBy: current.declaredBy,
         checkpoint,
       });
       if (!outputId) throw new Error(`${step} returned no id`);

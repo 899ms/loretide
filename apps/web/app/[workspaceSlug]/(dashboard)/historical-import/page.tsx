@@ -63,9 +63,9 @@ const EMPTY_DRAFT: HistoricalImportDraft = {
 
 type Translate = ReturnType<typeof useT<"common">>["t"];
 
-function newSession(): HistoricalImportSession {
+function newSession(declaredBy = ""): HistoricalImportSession {
   const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-  return createImportSession(random);
+  return createImportSession(random, declaredBy);
 }
 export default function Page() {
   const wsId = useWorkspaceId();
@@ -76,7 +76,8 @@ function HistoricalImportPage({ wsId }: { wsId: string }) {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const [draft, setDraft] = useState<HistoricalImportDraft>(EMPTY_DRAFT);
-  const [session, setSession] = useState<HistoricalImportSession>(newSession);
+  const declaredBy = user?.name || user?.email || user?.id || "";
+  const [session, setSession] = useState<HistoricalImportSession>(() => newSession(declaredBy));
 
   const operations: HistoricalImportOperations = {
     createWork: async ({ draft: input, idempotencyKey }) => {
@@ -108,14 +109,14 @@ function HistoricalImportPage({ wsId }: { wsId: string }) {
       });
       return version.versionId;
     },
-    createPublication: async ({ draft: input, outputs, idempotencyKey }) => {
+    createPublication: async ({ draft: input, outputs, idempotencyKey, declaredBy: frozenDeclaredBy }) => {
       const publication = parsePublication(
         await api.recordContentPublication({
           artifact_id: outputs.artifactId,
           delivery_task_id: "",
           channel: input.channel,
           status: "reported_published",
-          declared_by: user?.name || user?.email || user?.id || "",
+          declared_by: frozenDeclaredBy,
           page_url_or_content_id: input.pageUrlOrContentId,
           receipt_note: "",
           verification_note: "",
@@ -286,7 +287,7 @@ function HistoricalImportPage({ wsId }: { wsId: string }) {
                       variant="outline"
                       onClick={() => {
                         setDraft(EMPTY_DRAFT);
-                        setSession(newSession());
+                        setSession(newSession(declaredBy));
                       }}
                     >
                       {t(($) => $.historicalImport.importAnother)}

@@ -172,6 +172,31 @@ describe("historical import workflow", () => {
     expect(later).not.toHaveBeenCalled();
   });
 
+  it("replaces a failed 400 snapshot with corrected publication input", async () => {
+    const sent: string[] = [];
+    const session = createImportSession("correct-400");
+    session.steps = session.steps.map((step) => ({
+      ...step,
+      status: step.step === "publication" ? "not_started" : "completed",
+    }));
+    session.outputs = { workId: "work-1", artifactId: "artifact-1", versionId: "version-1", publicationRecordId: "" };
+    const bad = { ...draft, pageUrlOrContentId: "" };
+    const failed = await runHistoricalImport(bad, session, operations({
+      createPublication: async ({ draft: input }) => {
+        sent.push(input.pageUrlOrContentId);
+        throw Object.assign(new Error("missing page url"), { status: 400 });
+      },
+    }));
+    const corrected = await runHistoricalImport({ ...bad, pageUrlOrContentId: "post-42" }, failed, operations({
+      createPublication: async ({ draft: input }) => {
+        sent.push(input.pageUrlOrContentId);
+        return "publication-1";
+      },
+    }));
+    expect(sent).toEqual(["", "post-42"]);
+    expect(corrected.steps[3]?.status).toBe("completed");
+  });
+
   it("uses a readable prefix of the pasted body when the title is blank", () => {
     const body = `  First paragraph with   ordinary spacing.\n\n${"x".repeat(100)}`;
     const title = deriveHistoricalImportTitle("   ", body);
