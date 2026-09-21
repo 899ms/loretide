@@ -218,18 +218,22 @@ describe("historical import workflow", () => {
   });
 
   it("does not replace an unknown response-loss or 409 request snapshot", async () => {
+    const sent: string[] = [];
     const loss = await runHistoricalImport(draft, createImportSession("loss-snapshot"), operations({
       createWork: async () => { throw new Error("response lost"); },
     }));
-    await runHistoricalImport({ ...draft, title: "changed" }, loss, operations({
-      createWork: async ({ draft: input }) => { expect(input.title).toBe(draft.title); return "w"; },
+    const lossRecovered = await runHistoricalImport({ ...draft, title: "changed" }, loss, operations({
+      createWork: async ({ draft: input }) => { sent.push(input.title); return "w"; },
     }));
     const conflict = await runHistoricalImport(draft, createImportSession("conflict-snapshot"), operations({
       createWork: async () => { throw Object.assign(new Error("conflict"), { status: 409 }); },
     }));
-    await runHistoricalImport({ ...draft, title: "changed" }, conflict, operations({
-      createWork: async ({ draft: input }) => { expect(input.title).toBe(draft.title); return "w"; },
+    const conflictRecovered = await runHistoricalImport({ ...draft, title: "changed" }, conflict, operations({
+      createWork: async ({ draft: input }) => { sent.push(input.title); return "w"; },
     }));
+    expect(sent).toEqual([draft.title, draft.title]);
+    expect(lossRecovered.steps[0]?.status).toBe("completed");
+    expect(conflictRecovered.steps[0]?.status).toBe("completed");
   });
 
   it("uses a readable prefix of the pasted body when the title is blank", () => {
