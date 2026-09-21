@@ -234,6 +234,16 @@ describe("topic source references", () => {
     expect(topicSourceDraftToInput(cleared)).toEqual({ evidenceSourceIds: [] });
   });
 
+  it("can clear a stored reference that is no longer a candidate", () => {
+    const cleared = removeTopicSource(
+      {},
+      "fitSourceIds",
+      "archived-or-missing-source",
+      ["archived-or-missing-source"],
+    );
+    expect(topicSourceDraftToInput(cleared)).toEqual({ fitSourceIds: [] });
+  });
+
   it("does not create a write when a draft returns to the stored value", () => {
     const draft = addTopicSource({}, "fitSourceIds", "fit-1", []);
     expect(topicSourceDraftDiffers(draft, card)).toBe(false);

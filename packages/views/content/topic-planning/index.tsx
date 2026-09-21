@@ -587,6 +587,7 @@ function CreateTopicSection({
           sources={sources}
           sourcesLoading={sourcesLoading}
           sourcesFailed={sourcesFailed}
+          disabled={create.isPending}
           currentFitSourceIds={[]}
           currentEvidenceSourceIds={[]}
           onChange={edit}
@@ -832,6 +833,7 @@ function TopicSourceSelectorRows({
   sources,
   sourcesLoading,
   sourcesFailed,
+  disabled,
   currentFitSourceIds,
   currentEvidenceSourceIds,
   onChange,
@@ -840,6 +842,7 @@ function TopicSourceSelectorRows({
   sources: TopicSourceCandidate[];
   sourcesLoading: boolean;
   sourcesFailed: boolean;
+  disabled: boolean;
   currentFitSourceIds: readonly string[];
   currentEvidenceSourceIds: readonly string[];
   onChange: (patch: TopicSourceDraft) => void;
@@ -867,6 +870,9 @@ function TopicSourceSelectorRows({
     <>
       {fields.map(({ field, label, currentIds }) => {
         const selectedIds = topicSourceSelectionOf(draft, field, currentIds);
+        const retainedIds = selectedIds.filter(
+          (sourceId) => !candidates.some((source) => source.sourceId === sourceId),
+        );
         return (
           <SettingsRow
             key={field}
@@ -875,48 +881,77 @@ function TopicSourceSelectorRows({
             size="text"
             align="start"
           >
-            {sourcesLoading ? (
-              <span className="text-body text-muted-foreground">
-                {t(($) => $.contentTopics.sourceReferences.loading)}
-              </span>
-            ) : sourcesFailed ? (
-              <span className="text-body text-muted-foreground">
-                {t(($) => $.contentTopics.sourceReferences.loadFailed)}
-              </span>
-            ) : candidates.length === 0 ? (
-              <span className="text-body text-muted-foreground">
-                {t(($) => $.contentTopics.sourceReferences.candidatesEmpty)}
-              </span>
-            ) : (
-              <div className="space-y-2">
-                {candidates.map((source) => {
-                  const checked = selectedIds.includes(source.sourceId);
-                  return (
-                    <label
-                      key={source.sourceId}
-                      className="flex items-start gap-3 text-body text-muted-foreground"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={(value) =>
-                          onChange(
-                            value === true
-                              ? addTopicSource(draft, field, source.sourceId, currentIds)
-                              : removeTopicSource(draft, field, source.sourceId, currentIds),
-                          )
-                        }
-                        aria-label={t(($) => $.contentTopics.sourceReferences.select, {
-                          source: sourceLabel(source, source.sourceId),
-                        })}
-                      />
-                      <span className="break-words">
-                        {sourceLabel(source, source.sourceId)} · {sourceStatusLabel(t, source.status)}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            )}
+            <div className="space-y-2">
+              {retainedIds.map((sourceId) => {
+                const source = sources.find((item) => item.sourceId === sourceId);
+                return (
+                  <label
+                    key={sourceId}
+                    className="flex items-start gap-3 text-body text-muted-foreground"
+                  >
+                    <Checkbox
+                      checked
+                      disabled={disabled}
+                      onCheckedChange={(value) => {
+                        if (value !== false) return;
+                        onChange(
+                          removeTopicSource(draft, field, sourceId, currentIds),
+                        );
+                      }}
+                      aria-label={t(($) => $.contentTopics.sourceReferences.select, {
+                        source: sourceLabel(source, sourceId),
+                      })}
+                    />
+                    <span className="break-words">
+                      {sourceLabel(source, sourceId)} · {sourceStatusLabel(t, source?.status ?? "")}
+                    </span>
+                  </label>
+                );
+              })}
+              {sourcesLoading ? (
+                <span className="text-body text-muted-foreground">
+                  {t(($) => $.contentTopics.sourceReferences.loading)}
+                </span>
+              ) : sourcesFailed ? (
+                <span className="text-body text-muted-foreground">
+                  {t(($) => $.contentTopics.sourceReferences.loadFailed)}
+                </span>
+              ) : candidates.length === 0 ? (
+                <span className="text-body text-muted-foreground">
+                  {t(($) => $.contentTopics.sourceReferences.candidatesEmpty)}
+                </span>
+              ) : (
+                <div className="space-y-2">
+                  {candidates.map((source) => {
+                    const checked = selectedIds.includes(source.sourceId);
+                    return (
+                      <label
+                        key={source.sourceId}
+                        className="flex items-start gap-3 text-body text-muted-foreground"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          disabled={disabled}
+                          onCheckedChange={(value) =>
+                            onChange(
+                              value === true
+                                ? addTopicSource(draft, field, source.sourceId, currentIds)
+                                : removeTopicSource(draft, field, source.sourceId, currentIds),
+                            )
+                          }
+                          aria-label={t(($) => $.contentTopics.sourceReferences.select, {
+                            source: sourceLabel(source, source.sourceId),
+                          })}
+                        />
+                        <span className="break-words">
+                          {sourceLabel(source, source.sourceId)} · {sourceStatusLabel(t, source.status)}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </SettingsRow>
         );
       })}
@@ -982,6 +1017,7 @@ function TopicSourceReferenceSection({
           sources={sources}
           sourcesLoading={sourcesLoading}
           sourcesFailed={sourcesFailed}
+          disabled={setSources.isPending}
           currentFitSourceIds={card.fitSourceIds}
           currentEvidenceSourceIds={card.evidenceSourceIds}
           onChange={setDraft}
