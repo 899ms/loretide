@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { LogOut } from "lucide-react";
 import { Input } from "@multica/ui/components/ui/input";
 import { Textarea } from "@multica/ui/components/ui/textarea";
@@ -15,7 +15,6 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@multica/ui/components/ui/alert-dialog";
-import { OperatingRulesSections } from "@multica/views/content/workspace-core";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@multica/core/auth";
@@ -85,7 +84,32 @@ function workspaceDetailsEqual(
   );
 }
 
-export function WorkspaceTab() {
+/** What a brand-specific section rendered inside this tab is given. */
+export interface WorkspaceTabExtrasContext {
+  wsId: string;
+  /** False while the viewer cannot change workspace settings. Derived here
+   *  because it comes from this tab's member query; a caller supplying the
+   *  section has no other way to know it. */
+  canManage: boolean;
+}
+
+export interface WorkspaceTabProps {
+  /**
+   * An extra block rendered after this file's own sections.
+   *
+   * A slot rather than an import, for the same reason review-delivery takes
+   * `renderPublicationExtras`: this is a shared upstream component, and the
+   * section that goes here fetches and mutates through its own hooks. Wiring
+   * it in directly made this file's render depend on a downstream module's
+   * data layer - which is how eight tests in this file's own suite came to
+   * fail against a react-query mock that never needed `useMutation` before
+   * (Issue #208). Who fills the slot is the app's decision; this file only
+   * says where it goes and what it gets.
+   */
+  renderExtras?: (context: WorkspaceTabExtrasContext) => ReactNode;
+}
+
+export function WorkspaceTab({ renderExtras }: WorkspaceTabProps = {}) {
   const { t } = useT("settings");
   const user = useAuthStore((s) => s.user);
   const workspace = useCurrentWorkspace();
@@ -600,10 +624,10 @@ export function WorkspaceTab() {
         </SettingsCard>
       </SettingsSection>
 
-      {/* SOP §3.2's operating rules (specs/029). A Loretide section rendered
-          from its own module, so nothing about it lives in this shared file
-          beyond this line. */}
-      <OperatingRulesSections wsId={workspace.id} canManage={canManageWorkspace} />
+      {/* Where a brand-specific section goes - today SOP §3.2's operating
+          rules (specs/029), supplied by the app layer. Nothing about it is
+          named here. */}
+      {renderExtras?.({ wsId: workspace.id, canManage: canManageWorkspace })}
 
       {/* Danger Zone — gated on the member query settling so the owner-only
           Delete button and the sole-owner Leave guidance don't flash in

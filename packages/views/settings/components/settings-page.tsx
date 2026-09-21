@@ -32,7 +32,7 @@ import { AccountTab } from "./account-tab";
 import { SettingsContent } from "./settings-layout";
 import { PreferencesTab } from "./preferences-tab";
 import { TokensTab } from "./tokens-tab";
-import { WorkspaceTab } from "./workspace-tab";
+import { WorkspaceTab, type WorkspaceTabProps } from "./workspace-tab";
 import { MembersTab } from "./members-tab";
 import { RepositoriesTab } from "./repositories-tab";
 import { IntegrationsTab } from "./integrations-tab";
@@ -58,11 +58,18 @@ export interface ExtraSettingsTab {
 interface SettingsPageProps {
   /** Device settings supplied by the desktop platform. */
   extraDeviceTabs?: ExtraSettingsTab[];
+  /** Brand-specific sections for the workspace tab, supplied by the app
+   *  layer. Forwarded verbatim; see `WorkspaceTabProps.renderExtras` for why
+   *  the section is injected rather than imported. */
+  renderWorkspaceExtras?: WorkspaceTabProps["renderExtras"];
 }
 
 type SettingsEntry = ExtraSettingsTab & { wide?: boolean };
 
-export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
+export function SettingsPage({
+  extraDeviceTabs = [],
+  renderWorkspaceExtras,
+}: SettingsPageProps = {}) {
   const { t } = useT("settings");
   const workspaceName =
     useCurrentWorkspace()?.name ?? t(($) => $.page.workspace_fallback);
@@ -126,7 +133,7 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
           "workspace",
           t(($) => $.page.tabs.general),
           Settings,
-          <WorkspaceTab />,
+          <WorkspaceTab renderExtras={renderWorkspaceExtras} />,
         ),
         entry(
           "members",

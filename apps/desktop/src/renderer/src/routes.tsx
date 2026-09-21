@@ -30,6 +30,7 @@ import { SquadsPage, SquadDetailPage as SquadDetailPageView } from "@multica/vie
 import { InboxPage } from "@multica/views/inbox";
 import { ChatPage } from "@multica/views/chat";
 import { SettingsPage } from "@multica/views/settings";
+import { OperatingRulesSections } from "@multica/views/content/workspace-core";
 import { useT } from "@multica/views/i18n";
 import { Download, Server } from "lucide-react";
 import { DaemonSettingsTab } from "./components/daemon-settings-tab";
@@ -46,6 +47,12 @@ function DesktopSettingsRoute() {
   const { t } = useT("settings");
   return (
     <SettingsPage
+      // Same wiring the web settings route does, for the same reason: the
+      // shared workspace tab takes this section as a slot so its own render
+      // does not depend on a downstream module's data hooks (Issue #208).
+      renderWorkspaceExtras={({ wsId, canManage }) => (
+        <OperatingRulesSections wsId={wsId} canManage={canManage} />
+      )}
       extraDeviceTabs={[
         {
           value: "daemon",
