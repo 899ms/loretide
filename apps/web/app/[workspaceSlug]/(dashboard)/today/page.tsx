@@ -28,13 +28,16 @@ import {
 } from "@multica/core/content/work-editor";
 import {
   useContentDeliveries,
+  useContentPublications,
   useContentReviews,
 } from "@multica/core/content/review-delivery";
 import { useContentSources } from "@multica/core/content/source-inbox";
 import {
   describePending,
+  personalPerformance,
   pendingDueNote,
   pendingFeedbackSummary,
+  useContentMetrics,
   usePendingFeedback,
   type PendingFeedback,
 } from "@multica/core/content/feedback-learning";
@@ -108,9 +111,17 @@ function TodayPage({ wsId }: { wsId: string }) {
           // point of "quick" - putting it beside the list would mean scrolling
           // past six sections to note something down.
           action={
-            <Button variant="outline" onClick={() => navigation.push(links.sources)}>
-              {t(($) => $.contentToday.quickCapture)}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => navigation.push(links.historicalImport)}
+              >
+                {t(($) => $.historicalImport.entryPoint)}
+              </Button>
+              <Button variant="outline" onClick={() => navigation.push(links.sources)}>
+                {t(($) => $.contentToday.quickCapture)}
+              </Button>
+            </div>
           }
         >
           {/* SOP §2's five, in the sentence's own order, then the two
@@ -166,19 +177,26 @@ function TopicsSection({ wsId, links }: SectionProps) {
   const { t } = useT("common");
   const navigation = useNavigation();
   const topics = useContentTopics(wsId);
+  const metrics = useContentMetrics(wsId);
   const cards = topics.data ?? [];
   const accountIds = uniq(
     cards.filter((card) => card.status === "draft").map((card) => card.accountId ?? ""),
   ).filter(Boolean);
   const { profiles, failed, pending } = useAccountProfiles(wsId, accountIds);
   const section = worthWritingTopics(cards, profiles, failed);
+  const performance = personalPerformance(metrics.data?.length ?? 0);
+  const descriptions = [t(($) => $.contentToday.topics.unavailableHint)];
+  if (metrics.isError) descriptions.push(t(($) => $.contentPerformance.loadFailed));
+  else if (!metrics.isPending && performance.noData) {
+    descriptions.push(t(($) => $.contentPerformance.noData));
+  }
 
   return (
     <SectionShell
       title={t(($) => $.contentToday.topics.title)}
       // EP-04c is not here, so nothing on this page recommends anything. Saying
       // so is the only honest thing to put where the recommendations would be.
-      description={t(($) => $.contentToday.topics.unavailableHint)}
+      description={descriptions.join(" · ")}
       state={queryState(topics.isPending || pending, topics.isError)}
       section={section}
       t={t}
@@ -355,6 +373,13 @@ function FeedbackSection({ wsId, links }: SectionProps) {
   const { t } = useT("common");
   const navigation = useNavigation();
   const pending = usePendingFeedback(wsId);
+  const publications = useContentPublications(wsId);
+  const historical = new Map(
+    (publications.data ?? []).map((record) => [
+      record.publicationRecordId,
+      record.historicalImport,
+    ]),
+  );
   const summary = pendingFeedbackSummary(pending.data ?? [], SECTION_LIMIT);
   const section = {
     shown: summary.items,
@@ -366,7 +391,10 @@ function FeedbackSection({ wsId, links }: SectionProps) {
     <SectionShell
       title={t(($) => $.contentToday.feedback.title)}
       description={t(($) => $.contentToday.feedback.derivation)}
-      state={queryState(pending.isPending, pending.isError)}
+      state={queryState(
+        pending.isPending || publications.isPending,
+        pending.isError || publications.isError,
+      )}
       section={section}
       t={t}
       onSeeAll={() => navigation.push(links.topics)}
@@ -377,7 +405,11 @@ function FeedbackSection({ wsId, links }: SectionProps) {
           // Why this row is here, not just that it is. An elapsed window and
           // an absent one read differently, and a build that was told neither
           // falls back to the plain "no numbers yet" rather than inventing one.
-          description={feedbackRowNote(t, entry.due)}
+          description={feedbackRowNote(
+            t,
+            entry.due,
+            historical.get(entry.publicationRecordId) === true,
+          )}
         >
           <Button variant="outline" onClick={() => navigation.push(links.topics)}>
             {t(($) => $.contentToday.open)}
@@ -388,15 +420,20 @@ function FeedbackSection({ wsId, links }: SectionProps) {
   );
 }
 
-function feedbackRowNote(t: Translate, due: string): string {
+function feedbackRowNote(t: Translate, due: string, historicalImport: boolean): string {
+  const parts: string[] = [];
   switch (pendingDueNote(due)) {
     case "passed":
-      return t(($) => $.contentFeedback.pendingDuePassed);
+      parts.push(t(($) => $.contentFeedback.pendingDuePassed));
+      break;
     case "unknown":
-      return t(($) => $.contentFeedback.pendingDueUnknown);
+      parts.push(t(($) => $.contentFeedback.pendingDueUnknown));
+      break;
     default:
-      return t(($) => $.contentToday.feedback.noMetrics);
+      parts.push(t(($) => $.contentToday.feedback.noMetrics));
   }
+  if (historicalImport) parts.push(t(($) => $.contentWorks.historicalLabel));
+  return parts.join(" · ");
 }
 
 // ---------------------------------------------------------------- section 6

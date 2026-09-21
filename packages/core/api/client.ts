@@ -796,7 +796,7 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-works${query}`);
   }
 
-  async createContentWork(body: {topic_card_id: string; snapshot_id: string; title: string}): Promise<unknown> {
+  async createContentWork(body: {topic_card_id: string; snapshot_id: string; title: string; historical_import?: boolean}): Promise<unknown> {
     return this.fetch<unknown>("/api/content-works", {method: "POST", body: JSON.stringify(body)});
   }
 
@@ -827,6 +827,10 @@ export class ApiClient {
 
   async saveContentArtifactVersion(workId: string, artifactId: string): Promise<unknown> {
     return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts/${encodeURIComponent(artifactId)}/versions`, {method: "POST"});
+  }
+
+  async importContentArtifactVersion(workId: string, artifactId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-works/${encodeURIComponent(workId)}/artifacts/${encodeURIComponent(artifactId)}/versions/import`, {method: "POST"});
   }
 
   async getContentArtifactVersion(workId: string, artifactId: string, versionId: string): Promise<unknown> {

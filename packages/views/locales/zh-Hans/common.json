@@ -626,7 +626,8 @@
     "actions": {
       "saved": "存为一版",
       "restored": "恢复",
-      "adopted": "采用为基线"
+      "adopted": "采用为基线",
+      "imported": "历史导入"
     },
     "fromLabel": "来自",
     "restore": "恢复这一版",
@@ -646,7 +647,66 @@
       "candidateVersions": "候选版本"
     },
     "failed": "操作失败",
-    "conflict": "有人同时存了一版，再存一次即可"
+    "conflict": "有人同时存了一版，再存一次即可",
+    "historicalLabel": "历史导入"
+  },
+  "contentPerformance": {
+    "title": "个人表现数据",
+    "noData": "暂无个人表现数据",
+    "loading": "正在读取个人表现数据",
+    "loadFailed": "无法读取个人表现数据"
+  },
+  "historicalImport": {
+    "title": "导入已发表作品",
+    "description": "粘贴少量在使用本工作区前已经发表的作品。这里只记录你填写的内容，不抓取平台，也不虚构版本历史。",
+    "entryPoint": "导入已发表作品",
+    "formTitle": "已发表作品",
+    "formDescription": "作品、文档、版本和发布记录依次保存。后一步失败时，已完成的步骤会保留。",
+    "titleLabel": "标题（选填）",
+    "titlePlaceholder": "留空则取正文开头",
+    "bodyLabel": "已发表正文",
+    "bodyHint": "粘贴发布后的正文，最多 200000 个字符。",
+    "bodyPlaceholder": "粘贴已发表的正文",
+    "bodyTooLong": "正文超过 200000 个字符，尚未创建任何对象。",
+    "required": "必填",
+    "channelLabel": "渠道",
+    "channelPlaceholder": "选择渠道",
+    "publishedAtLabel": "发布时间",
+    "platformAccountLabel": "平台账号",
+    "platformAccountPlaceholder": "账号名称或标识",
+    "pageUrlLabel": "链接或平台内容 id",
+    "pageUrlHint": "最后创建发布记录时，由发布服务校验这个字段。",
+    "pageUrlPlaceholder": "https://... 或平台内容 id",
+    "pageUrlRequired": "发布记录要求填写链接或平台内容 id。",
+    "submit": "导入",
+    "retry": "从失败步骤重试",
+    "running": "导入中",
+    "completed": "已导入",
+    "failed": "导入失败",
+    "importAnother": "再导入一篇",
+    "progressTitle": "导入进度",
+    "progressDescription": "重试会从失败步骤开始，已完成的步骤不会重复提交。",
+    "failureTitle": "导入已停止",
+    "failureHint": "尚未创建任何对象。修改上面的字段后重试。",
+    "partialFailureHint": "已建出的对象会保留。作品与文档可以照常打开和编辑，也可以稍后补一条发布记录。",
+    "failedAt": "停在：{{step}}",
+    "steps": {
+      "work": "创建作品",
+      "artifact": "创建文档并保存正文",
+      "version": "创建导入版本",
+      "publication": "创建发布记录"
+    },
+    "status": {
+      "notStarted": "未开始",
+      "completed": "已完成",
+      "failed": "失败"
+    },
+    "channels": {
+      "xiaohongshu": "小红书",
+      "wechat_mp": "微信公众号",
+      "douyin": "抖音",
+      "shipinhao": "视频号"
+    }
   },
   "contentReviews": {
     "sectionTitle": "审核",

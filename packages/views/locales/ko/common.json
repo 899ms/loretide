@@ -626,7 +626,8 @@
     "actions": {
       "saved": "버전으로 저장",
       "restored": "복원",
-      "adopted": "기준으로 채택"
+      "adopted": "기준으로 채택",
+      "imported": "과거 기록에서 가져옴"
     },
     "fromLabel": "원본",
     "restore": "이 버전으로 복원",
@@ -646,7 +647,66 @@
       "candidateVersions": "후보 버전"
     },
     "failed": "작업에 실패했습니다",
-    "conflict": "같은 순간에 다른 버전이 저장되었습니다. 다시 저장하세요"
+    "conflict": "같은 순간에 다른 버전이 저장되었습니다. 다시 저장하세요",
+    "historicalLabel": "과거 기록에서 가져옴"
+  },
+  "contentPerformance": {
+    "title": "개인 성과 데이터",
+    "noData": "아직 개인 성과 데이터가 없습니다",
+    "loading": "개인 성과 데이터를 불러오는 중",
+    "loadFailed": "개인 성과 데이터를 불러오지 못했습니다"
+  },
+  "historicalImport": {
+    "title": "게시된 작품 가져오기",
+    "description": "이 워크스페이스를 쓰기 전에 게시한 소수의 작품을 붙여 넣습니다. 입력한 내용만 기록하며 플랫폼을 조회하거나 버전 기록을 만들어 내지 않습니다.",
+    "entryPoint": "게시된 작품 가져오기",
+    "formTitle": "게시된 작품",
+    "formDescription": "작품, 문서, 버전, 게시 기록 순서로 저장합니다. 이후 단계가 실패해도 완료된 단계는 남습니다.",
+    "titleLabel": "제목(선택)",
+    "titlePlaceholder": "비워 두면 본문 앞부분을 사용합니다",
+    "bodyLabel": "게시된 본문",
+    "bodyHint": "게시 후의 본문을 붙여 넣으세요. 최대 200,000자입니다.",
+    "bodyPlaceholder": "게시된 본문 붙여 넣기",
+    "bodyTooLong": "본문이 200,000자를 넘습니다. 아직 아무것도 만들지 않았습니다.",
+    "required": "필수",
+    "channelLabel": "채널",
+    "channelPlaceholder": "채널 선택",
+    "publishedAtLabel": "게시 시각",
+    "platformAccountLabel": "플랫폼 계정",
+    "platformAccountPlaceholder": "계정 이름 또는 식별자",
+    "pageUrlLabel": "링크 또는 플랫폼 콘텐츠 ID",
+    "pageUrlHint": "마지막 게시 기록을 만들 때 게시 서비스가 이 필드를 검사합니다.",
+    "pageUrlPlaceholder": "https://... 또는 콘텐츠 ID",
+    "pageUrlRequired": "게시 기록에는 링크 또는 콘텐츠 ID가 필요합니다.",
+    "submit": "가져오기",
+    "retry": "실패한 단계부터 다시 시도",
+    "running": "가져오는 중",
+    "completed": "가져옴",
+    "failed": "가져오기에 실패했습니다",
+    "importAnother": "다른 작품 가져오기",
+    "progressTitle": "가져오기 진행 상황",
+    "progressDescription": "다시 시도하면 실패한 단계부터 시작하며 완료된 단계는 다시 보내지 않습니다.",
+    "failureTitle": "가져오기가 중단되었습니다",
+    "failureHint": "아직 아무것도 만들지 않았습니다. 위 필드를 고친 뒤 다시 시도하세요.",
+    "partialFailureHint": "이미 만든 객체는 남습니다. 작품과 문서는 평소처럼 열고 편집할 수 있고 게시 기록은 나중에 추가할 수 있습니다.",
+    "failedAt": "중단된 단계: {{step}}",
+    "steps": {
+      "work": "작품 만들기",
+      "artifact": "문서를 만들고 본문 저장",
+      "version": "가져온 버전 만들기",
+      "publication": "게시 기록 만들기"
+    },
+    "status": {
+      "notStarted": "시작 전",
+      "completed": "완료",
+      "failed": "실패"
+    },
+    "channels": {
+      "xiaohongshu": "샤오홍슈",
+      "wechat_mp": "WeChat 공식 계정",
+      "douyin": "Douyin",
+      "shipinhao": "WeChat Channels"
+    }
   },
   "contentReviews": {
     "sectionTitle": "검토",

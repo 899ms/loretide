@@ -10,6 +10,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("ApiClient historical import transport", () => {
+  it("sends the historical work marker and uses the dedicated import-version endpoint", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () =>
+      new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ApiClient("https://api.example.test");
+    await client.createContentWork({ topic_card_id: "", snapshot_id: "", title: "Older post", historical_import: true });
+    await client.importContentArtifactVersion("work/1", "artifact 1");
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.example.test/api/content-works");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ topic_card_id: "", snapshot_id: "", title: "Older post", historical_import: true });
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("https://api.example.test/api/content-works/work%2F1/artifacts/artifact%201/versions/import");
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("POST");
+  });
+});
+
 describe("ApiClient agent conversation-starter compatibility", () => {
   const prompt = {
     label: "Review a PR",
