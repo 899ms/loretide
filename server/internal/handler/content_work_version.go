@@ -1,6 +1,8 @@
 package handler
 
-import "net/http"
+import (
+	"net/http"
+)
 
 // A document's version history (specs/024).
 //
@@ -35,8 +37,14 @@ func (h *Handler) ImportContentArtifactVersion(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
+	request, requestErr := historicalImportRequest(r, "import-version",
+		workIDFromURL(r)+":"+artifactIDFromURL(r), struct{}{})
+	if requestErr != nil {
+		h.workError(w, requestErr)
+		return
+	}
 	version, err := h.workEditorStore().ImportVersion(r.Context(), workspace, actor,
-		workIDFromURL(r), artifactIDFromURL(r))
+		workIDFromURL(r), artifactIDFromURL(r), request)
 	if err != nil {
 		h.workError(w, err)
 		return

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/multica-ai/multica/server/internal/testutil"
@@ -25,7 +26,7 @@ func runTheImportChain(t *testing.T, fx *testutil.Fixture) (string, string, stri
 
 	// Step 1: a work with NO topic card. This is the request that used to be
 	// refused.
-	created := accountAPIRequest(t, http.MethodPost, "/api/content-works",
+	created := historicalImportRequest(t, "work", http.MethodPost, "/api/content-works",
 		`{"topic_card_id":"","snapshot_id":"","title":"两年前发的那篇","historical_import":true}`)
 	defer created.Body.Close()
 	if created.StatusCode != http.StatusCreated {
@@ -48,7 +49,7 @@ func runTheImportChain(t *testing.T, fx *testutil.Fixture) (string, string, stri
 		WHERE workspace_id=$1 AND payload->>'object_id'=$2`, testWorkspaceID, work.WorkID)
 
 	// Step 2: the document, and the pasted body into its editing copy.
-	artifactID := createArtifactThroughTheAPI(t, work.WorkID)
+	artifactID := createHistoricalArtifactThroughTheAPI(t, work.WorkID, "artifact")
 	patch := accountAPIRequest(t, http.MethodPatch,
 		"/api/content-works/"+work.WorkID+"/artifacts/"+artifactID,
 		`{"draft_body":"这是两年前发出去的正文"}`)
@@ -58,7 +59,7 @@ func runTheImportChain(t *testing.T, fx *testutil.Fixture) (string, string, stri
 	}
 
 	// Step 3: the import endpoint. Not the save endpoint with a flag.
-	imported := accountAPIRequest(t, http.MethodPost,
+	imported := historicalImportRequest(t, "version", http.MethodPost,
 		"/api/content-works/"+work.WorkID+"/artifacts/"+artifactID+"/versions/import", "")
 	defer imported.Body.Close()
 	if imported.StatusCode != http.StatusCreated {
@@ -98,7 +99,7 @@ func runTheImportChain(t *testing.T, fx *testutil.Fixture) (string, string, stri
 	// Step 4: the publication record, pointing straight at that version, with
 	// no review request and no delivery task anywhere.
 	fx.Cleanup(t, `DELETE FROM content_publication_record WHERE workspace_id=$1`, testWorkspaceID)
-	recorded := accountAPIRequest(t, http.MethodPost, "/api/content-publications",
+	recorded := historicalImportRequest(t, "publication", http.MethodPost, "/api/content-publications",
 		fmt.Sprintf(`{"artifact_id":%q,"channel":"xiaohongshu","status":"reported_published",
 			"declared_by":"导入者本人","page_url_or_content_id":"https://example.test/note/31",
 			"published_at":"2024-05-01T08:00:00Z","platform_account":"我的号",
@@ -135,6 +136,41 @@ func runTheImportChain(t *testing.T, fx *testutil.Fixture) (string, string, stri
 		t.Errorf("work_id = %q, want %q: the record resolved the wrong work", record.WorkID, work.WorkID)
 	}
 	return work.WorkID, artifactID, version.VersionID, record.PublicationRecordID
+}
+
+func historicalImportRequest(t *testing.T, key, method, path, body string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(method, testServer.URL+path, strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("build historical import request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Workspace-ID", testWorkspaceID)
+	req.Header.Set("Idempotency-Key", key)
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	return response
+}
+
+func createHistoricalArtifactThroughTheAPI(t *testing.T, workID, key string) string {
+	t.Helper()
+	response := historicalImportRequest(t, key, http.MethodPost,
+		"/api/content-works/"+workID+"/artifacts", `{"kind":"body","title":"正文","position":1}`)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("create historical artifact = %d, want 201: %s", response.StatusCode, body)
+	}
+	var created struct {
+		ArtifactID string `json:"artifact_id"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	return created.ArtifactID
 }
 
 func TestAHistoricalImportGoesThroughTheExistingEndpoints(t *testing.T) {
@@ -185,6 +221,58 @@ func TestAHistoricalImportGoesThroughTheExistingEndpoints(t *testing.T) {
 		if len(generic[probe.key]) != 0 {
 			t.Errorf("%s returned %d rows; an import creates neither", probe.path, len(generic[probe.key]))
 		}
+	}
+}
+
+func TestHistoricalImportWriteReplaysAndRejectsChangedInput(t *testing.T) {
+	if testPool == nil || testServer == nil {
+		t.Skip("database not available")
+	}
+	fx := testutil.New(testPool, testWorkspaceID, testUserID)
+	fx.Cleanup(t, `DELETE FROM content_import_idempotency WHERE workspace_id=$1`, testWorkspaceID)
+	fx.Cleanup(t, `DELETE FROM content_work WHERE workspace_id=$1`, testWorkspaceID)
+	body := `{"topic_card_id":"","title":"可重放历史作品","historical_import":true}`
+	first := historicalImportRequest(t, "replay-work", http.MethodPost, "/api/content-works", body)
+	defer first.Body.Close()
+	if first.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(first.Body)
+		t.Fatalf("first import work = %d, want 201: %s", first.StatusCode, payload)
+	}
+	var firstWork struct {
+		WorkID string `json:"work_id"`
+	}
+	if err := json.NewDecoder(first.Body).Decode(&firstWork); err != nil {
+		t.Fatal(err)
+	}
+	second := historicalImportRequest(t, "replay-work", http.MethodPost, "/api/content-works", body)
+	defer second.Body.Close()
+	if second.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(second.Body)
+		t.Fatalf("replayed import work = %d, want 201: %s", second.StatusCode, payload)
+	}
+	var secondWork struct {
+		WorkID string `json:"work_id"`
+	}
+	if err := json.NewDecoder(second.Body).Decode(&secondWork); err != nil {
+		t.Fatal(err)
+	}
+	if secondWork.WorkID != firstWork.WorkID {
+		t.Fatalf("replay work_id=%q, want original %q", secondWork.WorkID, firstWork.WorkID)
+	}
+	var count int
+	if err := testPool.QueryRow(t.Context(), `SELECT count(*) FROM content_work
+		WHERE workspace_id=$1 AND title='可重放历史作品'`, testWorkspaceID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("historical work side effects=%d, want 1", count)
+	}
+	conflict := historicalImportRequest(t, "replay-work", http.MethodPost, "/api/content-works",
+		`{"topic_card_id":"","title":"changed","historical_import":true}`)
+	defer conflict.Body.Close()
+	if conflict.StatusCode != http.StatusConflict {
+		payload, _ := io.ReadAll(conflict.Body)
+		t.Fatalf("changed replay = %d, want 409: %s", conflict.StatusCode, payload)
 	}
 }
 
@@ -279,7 +367,7 @@ func TestTheImportEndpointIgnoresAnyProvenanceInTheBody(t *testing.T) {
 	fx.Cleanup(t, `DELETE FROM content_artifact WHERE workspace_id=$1`, testWorkspaceID)
 	fx.Cleanup(t, `DELETE FROM content_work WHERE workspace_id=$1`, testWorkspaceID)
 
-	created := accountAPIRequest(t, http.MethodPost, "/api/content-works",
+	created := historicalImportRequest(t, "ignored-provenance-work", http.MethodPost, "/api/content-works",
 		`{"topic_card_id":"","title":"历史作品","historical_import":true}`)
 	var work struct {
 		WorkID string `json:"work_id"`
@@ -290,12 +378,12 @@ func TestTheImportEndpointIgnoresAnyProvenanceInTheBody(t *testing.T) {
 	created.Body.Close()
 	fx.Cleanup(t, `DELETE FROM content_operation_audit
 		WHERE workspace_id=$1 AND payload->>'object_id'=$2`, testWorkspaceID, work.WorkID)
-	artifactID := createArtifactThroughTheAPI(t, work.WorkID)
+	artifactID := createHistoricalArtifactThroughTheAPI(t, work.WorkID, "ignored-provenance-artifact")
 	patch := accountAPIRequest(t, http.MethodPatch,
 		"/api/content-works/"+work.WorkID+"/artifacts/"+artifactID, `{"draft_body":"正文"}`)
 	patch.Body.Close()
 
-	response := accountAPIRequest(t, http.MethodPost,
+	response := historicalImportRequest(t, "ignored-provenance-version", http.MethodPost,
 		"/api/content-works/"+work.WorkID+"/artifacts/"+artifactID+"/versions/import",
 		`{"source":"generated","action":"adopted","created_at":"2024-01-01T00:00:00Z"}`)
 	defer response.Body.Close()

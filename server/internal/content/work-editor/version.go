@@ -2,9 +2,11 @@ package workeditor
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/multica-ai/multica/server/internal/content/idempotency"
 )
 
 // The append-only version history.
@@ -69,10 +71,10 @@ func (s *Store) AdoptVersion(ctx context.Context, workspaceID, actor, workID, ar
 // published_at and nowhere else. Backdating this would be the tempting version
 // - the list would sort "correctly" - and would put a row in the database
 // claiming to be two years old that the audit log contradicts.
-func (s *Store) ImportVersion(ctx context.Context, workspaceID, actor, workID, artifactID string) (ArtifactVersion, error) {
+func (s *Store) ImportVersion(ctx context.Context, workspaceID, actor, workID, artifactID string, requests ...idempotency.Request) (ArtifactVersion, error) {
 	return s.appendVersion(ctx, workspaceID, actor, workID, artifactID, versionIntent{
 		step: "import-version", source: SourceEdited, action: ActionImported,
-	})
+	}, requests...)
 }
 
 type versionIntent struct {
@@ -95,7 +97,7 @@ type versionIntent struct {
 // error. topic-planning shipped the other order and it cost Issue #109; the
 // second statement starts after the lock is granted, so its snapshot includes
 // whatever the winner wrote.
-func (s *Store) appendVersion(ctx context.Context, workspaceID, actor, workID, artifactID string, intent versionIntent) (ArtifactVersion, error) {
+func (s *Store) appendVersion(ctx context.Context, workspaceID, actor, workID, artifactID string, intent versionIntent, requests ...idempotency.Request) (ArtifactVersion, error) {
 	if s == nil {
 		return ArtifactVersion{}, ErrStorage
 	}
@@ -123,6 +125,22 @@ func (s *Store) appendVersion(ctx context.Context, workspaceID, actor, workID, a
 		return ArtifactVersion{}, err
 	}
 	defer tx.Rollback(ctx)
+	var request idempotency.Request
+	if len(requests) > 0 {
+		request = requests[0]
+		replay, replayed, claimErr := idempotency.Claim(ctx, tx, workspaceID, request)
+		if claimErr != nil {
+			s.reportFailure(ctx, workspaceID, actor, artifactID, intent.step, claimErr)
+			return ArtifactVersion{}, claimErr
+		}
+		if replayed {
+			var prior ArtifactVersion
+			if json.Unmarshal(replay, &prior) != nil {
+				return ArtifactVersion{}, idempotency.ErrStorage
+			}
+			return prior, nil
+		}
+	}
 	ctx, err = s.audit(ctx, tx, workspaceID, actor, artifactID, intent.step)
 	if err != nil {
 		_ = tx.Rollback(ctx)
@@ -215,6 +233,13 @@ func (s *Store) appendVersion(ctx context.Context, workspaceID, actor, workID, a
 		_ = tx.Rollback(ctx)
 		s.reportFailure(ctx, workspaceID, actor, artifactID, intent.step, err)
 		return ArtifactVersion{}, ErrStorage
+	}
+	if len(requests) > 0 {
+		if err = idempotency.Complete(ctx, tx, workspaceID, request, version); err != nil {
+			_ = tx.Rollback(ctx)
+			s.reportFailure(ctx, workspaceID, actor, artifactID, intent.step, err)
+			return ArtifactVersion{}, ErrStorage
+		}
 	}
 
 	if err = tx.Commit(ctx); err != nil {

@@ -131,6 +131,8 @@ func newReviewFixture(t *testing.T) reviewFixture {
 		// (发布后快照).
 		"533_content_publication_record_historical_import.up.sql",
 		"534_content_publication_record_version_id.up.sql",
+		"538_content_import_idempotency.up.sql",
+		"539_content_import_idempotency_scope_key_idx.up.sql",
 	} {
 		sql, readErr := os.ReadFile(filepath.Join(migrations, name))
 		if readErr != nil {

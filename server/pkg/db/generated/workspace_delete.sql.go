@@ -330,6 +330,9 @@ deleted_content_artifacts AS (
 deleted_content_works AS (
     DELETE FROM content_work WHERE workspace_id = $1::text
 ),
+deleted_content_import_idempotency AS (
+    DELETE FROM content_import_idempotency WHERE workspace_id = $1::text
+),
 deleted_content_publication_records AS (
     DELETE FROM content_publication_record WHERE workspace_id = $1::text
 ),
@@ -568,6 +571,8 @@ WHERE channel_media_pending_object.workspace_id = $1
 // foreign key (specs/024). Registered in the deletion manifest test alongside
 // this: doing only one of the two leaves either orphaned rows or a drifting
 // manifest.
+// Historical-import replay data is workspace-owned. This runs before the
+// parent workspace row disappears, so a completed request cannot outlive it.
 // Review requests, their frozen delivery snapshots, the append-only transition
 // log, delivery tasks and publication records. The transition log and the
 // publication records are append-only everywhere else; these statements are the

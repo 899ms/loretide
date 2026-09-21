@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/multica-ai/multica/server/internal/content/idempotency"
 	reviewdelivery "github.com/multica-ai/multica/server/internal/content/review-delivery"
 )
 
@@ -171,6 +172,15 @@ func (h *Handler) RecordContentPublication(w http.ResponseWriter, r *http.Reques
 		h.reviewError(w, reviewdelivery.ErrInvalid)
 		return
 	}
+	var request idempotency.Request
+	if body.HistoricalImport {
+		var requestErr error
+		request, requestErr = historicalImportRequest(r, "record-publication", body.ArtifactID, body)
+		if requestErr != nil {
+			h.reviewError(w, requestErr)
+			return
+		}
+	}
 	record, err := h.reviewDeliveryStore().Record(r.Context(), workspace, actor,
 		reviewdelivery.RecordRequest{
 			ArtifactID: body.ArtifactID, DeliveryTaskID: body.DeliveryTaskID,
@@ -182,7 +192,7 @@ func (h *Handler) RecordContentPublication(w http.ResponseWriter, r *http.Reques
 			PlatformEdited: body.PlatformEdited, EditNote: body.EditNote,
 			VersionMatch: reviewdelivery.VersionMatch(body.VersionMatch),
 			VersionID:    body.VersionID, HistoricalImport: body.HistoricalImport,
-		})
+		}, optionalIdempotencyRequest(body.HistoricalImport, request)...)
 	if err != nil {
 		h.reviewError(w, err)
 		return
