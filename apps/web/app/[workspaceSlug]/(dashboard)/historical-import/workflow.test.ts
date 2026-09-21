@@ -197,6 +197,41 @@ describe("historical import workflow", () => {
     expect(corrected.steps[3]?.status).toBe("completed");
   });
 
+  it("keeps a server 400 recoverable through a local validation miss", async () => {
+    const session = createImportSession("recover-after-local-error");
+    session.steps = session.steps.map((step) => ({ ...step, status: step.step === "publication" ? "not_started" : "completed" }));
+    session.outputs = { workId: "w", artifactId: "a", versionId: "v", publicationRecordId: "" };
+    const failed = await runHistoricalImport({ ...draft, pageUrlOrContentId: "" }, session, operations({
+      createPublication: async () => { throw Object.assign(new Error("missing link"), { status: 400 }); },
+    }));
+    const locallyInvalid = await runHistoricalImport({ ...draft, pageUrlOrContentId: "fixed", channel: "" }, failed, operations());
+    expect(locallyInvalid.failure?.step).toBe("publication");
+    expect(editableHistoricalImportFields(locallyInvalid)).toContain("pageUrlOrContentId");
+    const recovered = await runHistoricalImport({ ...draft, pageUrlOrContentId: "fixed" }, locallyInvalid, operations({
+      createPublication: async ({ draft: input, idempotencyKey }) => {
+        expect(input.pageUrlOrContentId).toBe("fixed");
+        expect(idempotencyKey).toBe("recover-after-local-error:publication");
+        return "p";
+      },
+    }));
+    expect(recovered.steps[3]?.status).toBe("completed");
+  });
+
+  it("does not replace an unknown response-loss or 409 request snapshot", async () => {
+    const loss = await runHistoricalImport(draft, createImportSession("loss-snapshot"), operations({
+      createWork: async () => { throw new Error("response lost"); },
+    }));
+    await runHistoricalImport({ ...draft, title: "changed" }, loss, operations({
+      createWork: async ({ draft: input }) => { expect(input.title).toBe(draft.title); return "w"; },
+    }));
+    const conflict = await runHistoricalImport(draft, createImportSession("conflict-snapshot"), operations({
+      createWork: async () => { throw Object.assign(new Error("conflict"), { status: 409 }); },
+    }));
+    await runHistoricalImport({ ...draft, title: "changed" }, conflict, operations({
+      createWork: async ({ draft: input }) => { expect(input.title).toBe(draft.title); return "w"; },
+    }));
+  });
+
   it("uses a readable prefix of the pasted body when the title is blank", () => {
     const body = `  First paragraph with   ordinary spacing.\n\n${"x".repeat(100)}`;
     const title = deriveHistoricalImportTitle("   ", body);

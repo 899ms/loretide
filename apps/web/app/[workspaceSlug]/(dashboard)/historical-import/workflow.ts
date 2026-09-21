@@ -172,7 +172,10 @@ export async function runHistoricalImport(
 ): Promise<HistoricalImportSession> {
   const validationError = validateHistoricalImportDraft(draft);
   if (validationError) {
-    const invalid = { ...session, validationError, failure: null };
+    // Keep the server failure that owns a frozen request snapshot. A local
+    // validation miss while correcting that request must not erase the fact
+    // that its fields remain eligible for a corrected retry.
+    const invalid = { ...session, validationError };
     onChange(invalid);
     return invalid;
   }
