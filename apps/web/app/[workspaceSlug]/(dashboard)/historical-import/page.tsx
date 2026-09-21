@@ -70,7 +70,6 @@ export default function Page() {
   const wsId = useWorkspaceId();
   return <HistoricalImportPage key={wsId} wsId={wsId} />;
 }
-
 function HistoricalImportPage({ wsId }: { wsId: string }) {
   const { t } = useT("common");
   const queryClient = useQueryClient();
@@ -416,4 +415,3 @@ function channelLabel(t: Translate, channel: string): string {
       return channel;
   }
 }
-
