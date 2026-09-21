@@ -20,6 +20,8 @@ export interface HistoricalImportDraft {
   pageUrlOrContentId: string;
 }
 
+export type HistoricalImportDraftField = keyof HistoricalImportDraft;
+
 export interface HistoricalImportOutputs {
   workId: string;
   artifactId: string;
@@ -115,6 +117,26 @@ export function validateHistoricalImportDraft(
     return { field: "platform_account", reason: "missing" };
   }
   return null;
+}
+
+/**
+ * Keeps a retry honest: once a step has created an object, its input cannot
+ * silently change while a later step is retried. Inputs not used yet remain
+ * editable so the operator can correct the failed step.
+ */
+export function editableHistoricalImportFields(
+  session: HistoricalImportSession,
+): HistoricalImportDraftField[] {
+  const completed = new Set(
+    session.steps.filter((step) => step.status === "completed").map((step) => step.step),
+  );
+  const fields: HistoricalImportDraftField[] = [];
+  if (!completed.has("work")) fields.push("title");
+  if (!completed.has("artifact")) fields.push("body");
+  if (!completed.has("publication")) {
+    fields.push("channel", "publishedAt", "platformAccount", "pageUrlOrContentId");
+  }
+  return fields;
 }
 
 export function deriveHistoricalImportTitle(title: string, body: string): string {

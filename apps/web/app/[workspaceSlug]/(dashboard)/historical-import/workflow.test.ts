@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createImportSession,
   deriveHistoricalImportTitle,
+  editableHistoricalImportFields,
   runHistoricalImport,
   validateHistoricalImportDraft,
   type HistoricalImportDraft,
@@ -149,5 +150,20 @@ describe("historical import workflow", () => {
 
   it("does not duplicate the publication link rule in local validation", () => {
     expect(validateHistoricalImportDraft({ ...draft, pageUrlOrContentId: "" })).toBeNull();
+  });
+
+  it("locks only inputs already used by completed steps after a later failure", () => {
+    const session = createImportSession("session-4");
+    session.steps = session.steps.map((step) => ({
+      ...step,
+      status: step.step === "publication" ? "failed" : "completed",
+    }));
+
+    expect(editableHistoricalImportFields(session)).toEqual([
+      "channel",
+      "publishedAt",
+      "platformAccount",
+      "pageUrlOrContentId",
+    ]);
   });
 });

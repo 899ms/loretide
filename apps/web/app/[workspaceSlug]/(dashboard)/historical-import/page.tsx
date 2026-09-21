@@ -41,6 +41,7 @@ import {
   HISTORICAL_IMPORT_STEPS,
   createImportSession,
   deriveHistoricalImportTitle,
+  editableHistoricalImportFields,
   runHistoricalImport,
   validateHistoricalImportDraft,
   type HistoricalImportDraft,
@@ -148,6 +149,7 @@ function HistoricalImportPage({ wsId }: { wsId: string }) {
 
   const validation = validateHistoricalImportDraft(draft);
   const finished = session.steps.every((step) => step.status === "completed");
+  const editableFields = new Set(editableHistoricalImportFields(session));
   const failedField = errorField(session.failure?.error);
   const submit = () => run.mutate({ submittedDraft: draft, current: session });
 
@@ -174,7 +176,7 @@ function HistoricalImportPage({ wsId }: { wsId: string }) {
                   onChange={(event) => setDraft({ ...draft, title: event.target.value })}
                   placeholder={t(($) => $.historicalImport.titlePlaceholder)}
                   aria-label={t(($) => $.historicalImport.titleLabel)}
-                  disabled={run.isPending || finished}
+                  disabled={run.isPending || finished || !editableFields.has("title")}
                 />
               </SettingsRow>
               <SettingsRow
@@ -196,7 +198,7 @@ function HistoricalImportPage({ wsId }: { wsId: string }) {
                   aria-label={t(($) => $.historicalImport.bodyLabel)}
                   aria-invalid={validation?.field === "body"}
                   rows={12}
-                  disabled={run.isPending || finished}
+                  disabled={run.isPending || finished || !editableFields.has("body")}
                 />
               </SettingsRow>
               <SettingsRow label={t(($) => $.historicalImport.channelLabel)} size="select-wide">
@@ -204,7 +206,7 @@ function HistoricalImportPage({ wsId }: { wsId: string }) {
                   items={CHANNELS.map((value) => ({ value, label: channelLabel(t, value) }))}
                   value={draft.channel}
                   onValueChange={(value) => setDraft({ ...draft, channel: value ?? "" })}
-                  disabled={run.isPending || finished}
+                  disabled={run.isPending || finished || !editableFields.has("channel")}
                 >
                   <SelectTrigger
                     aria-label={t(($) => $.historicalImport.channelLabel)}
@@ -228,7 +230,7 @@ function HistoricalImportPage({ wsId }: { wsId: string }) {
                   onChange={(event) => setDraft({ ...draft, publishedAt: event.target.value })}
                   aria-label={t(($) => $.historicalImport.publishedAtLabel)}
                   aria-invalid={validation?.field === "published_at"}
-                  disabled={run.isPending || finished}
+                  disabled={run.isPending || finished || !editableFields.has("publishedAt")}
                 />
               </SettingsRow>
               <SettingsRow label={t(($) => $.historicalImport.platformAccountLabel)} size="text">
@@ -240,7 +242,7 @@ function HistoricalImportPage({ wsId }: { wsId: string }) {
                   placeholder={t(($) => $.historicalImport.platformAccountPlaceholder)}
                   aria-label={t(($) => $.historicalImport.platformAccountLabel)}
                   aria-invalid={validation?.field === "platform_account"}
-                  disabled={run.isPending || finished}
+                  disabled={run.isPending || finished || !editableFields.has("platformAccount")}
                 />
               </SettingsRow>
               <SettingsRow
@@ -260,7 +262,7 @@ function HistoricalImportPage({ wsId }: { wsId: string }) {
                   placeholder={t(($) => $.historicalImport.pageUrlPlaceholder)}
                   aria-label={t(($) => $.historicalImport.pageUrlLabel)}
                   aria-invalid={failedField === "page_url_or_content_id"}
-                  disabled={run.isPending || finished}
+                  disabled={run.isPending || finished || !editableFields.has("pageUrlOrContentId")}
                 />
               </SettingsRow>
               <SettingsRow label={t(($) => $.historicalImport.submit)}>
