@@ -2,9 +2,11 @@ package workeditor
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/multica-ai/multica/server/internal/content/idempotency"
 )
 
 // Documents and their editing copies.
@@ -14,7 +16,7 @@ import (
 // and a history that grows on every keystroke is one nobody can restore from.
 
 // CreateArtifact adds a document to a work.
-func (s *Store) CreateArtifact(ctx context.Context, workspaceID, actor, workID string, input Artifact) (Artifact, error) {
+func (s *Store) CreateArtifact(ctx context.Context, workspaceID, actor, workID string, input Artifact, requests ...idempotency.Request) (Artifact, error) {
 	if s == nil {
 		return Artifact{}, ErrStorage
 	}
@@ -37,6 +39,22 @@ func (s *Store) CreateArtifact(ctx context.Context, workspaceID, actor, workID s
 		return Artifact{}, err
 	}
 	defer tx.Rollback(ctx)
+	var request idempotency.Request
+	if len(requests) > 0 {
+		request = requests[0]
+		replay, replayed, claimErr := idempotency.Claim(ctx, tx, workspaceID, request)
+		if claimErr != nil {
+			s.reportFailure(ctx, workspaceID, actor, workID, "create-artifact", claimErr)
+			return Artifact{}, claimErr
+		}
+		if replayed {
+			var prior Artifact
+			if json.Unmarshal(replay, &prior) != nil {
+				return Artifact{}, idempotency.ErrStorage
+			}
+			return prior, nil
+		}
+	}
 	created := Artifact{
 		ArtifactID: s.newID(), WorkID: workID, WorkspaceID: workspaceID,
 		Kind: input.Kind, Title: input.Title, Position: input.Position,
@@ -76,6 +94,13 @@ func (s *Store) CreateArtifact(ctx context.Context, workspaceID, actor, workID s
 		_ = tx.Rollback(ctx)
 		s.reportFailure(ctx, workspaceID, actor, created.ArtifactID, "create-artifact", err)
 		return Artifact{}, ErrStorage
+	}
+	if len(requests) > 0 {
+		if err = idempotency.Complete(ctx, tx, workspaceID, request, created); err != nil {
+			_ = tx.Rollback(ctx)
+			s.reportFailure(ctx, workspaceID, actor, created.ArtifactID, "create-artifact", err)
+			return Artifact{}, ErrStorage
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		s.reportFailure(ctx, workspaceID, actor, created.ArtifactID, "create-artifact", err)

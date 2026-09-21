@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
+	"github.com/multica-ai/multica/server/internal/content/idempotency"
 	reviewdelivery "github.com/multica-ai/multica/server/internal/content/review-delivery"
 	workspacecore "github.com/multica-ai/multica/server/internal/content/workspace-core"
 )
@@ -127,6 +128,10 @@ func (h *Handler) reviewError(w http.ResponseWriter, err error) {
 	var fieldErr reviewdelivery.FieldError
 	var transitionErr reviewdelivery.TransitionError
 	switch {
+	case errors.Is(err, idempotency.ErrInvalid):
+		writeError(w, http.StatusBadRequest, "Idempotency-Key is required and must be at most 255 bytes")
+	case errors.Is(err, idempotency.ErrConflict):
+		writeError(w, http.StatusConflict, "Idempotency-Key conflicts with a different import request")
 	case errors.As(err, &fieldErr):
 		h.reviewDiagnosticError(w, http.StatusBadRequest, map[string]any{
 			"field": fieldErr.Field, "reason": fieldErr.Reason,

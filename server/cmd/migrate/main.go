@@ -346,6 +346,7 @@ var concurrentIndexCleanups = map[string]string{
 	"512_content_delivery_task_workspace_idx":      "content_delivery_task_workspace_idx",
 	"514_content_publication_record_id_unique_idx": "content_publication_record_id_unique_idx",
 	"515_content_publication_record_artifact_idx":  "content_publication_record_artifact_idx",
+	"539_content_import_idempotency_scope_key_idx": "content_import_idempotency_scope_key_idx",
 
 	// specs/028 source-inbox. Its own block for the same reason the one above
 	// has one: gofmt aligns a map literal in runs separated by blank lines, so

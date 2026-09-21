@@ -1,4 +1,11 @@
 {
   "version": 1,
-  "exemptions": []
+  "exemptions": [
+    {
+      "module": "idempotency",
+      "reason": "This shared transaction primitive records no business operation itself; its callers retain the fenced audit and technical-log responsibilities.",
+      "where": "server/internal/content/idempotency",
+      "expires": "2026-12-31"
+    }
+  ]
 }

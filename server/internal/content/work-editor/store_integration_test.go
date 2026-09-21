@@ -95,6 +95,8 @@ func newWorkFixture(t *testing.T) workFixture {
 		// specs/031: the historical import column and the fourth action.
 		"532_content_work_historical_import.up.sql",
 		"535_content_artifact_version_action_imported.up.sql",
+		"538_content_import_idempotency.up.sql",
+		"539_content_import_idempotency_scope_key_idx.up.sql",
 	} {
 		sql, readErr := os.ReadFile(filepath.Join(migrations, name))
 		if readErr != nil {

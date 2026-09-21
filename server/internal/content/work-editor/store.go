@@ -2,12 +2,14 @@ package workeditor
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
+	"github.com/multica-ai/multica/server/internal/content/idempotency"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -167,7 +169,7 @@ func scanVersion(row scanner) (ArtifactVersion, error) {
 // topic-planning: the only question it would ask is "does this card exist
 // here", and the adapter answers that. Importing the package to ask one
 // question widens the module dependency graph for good.
-func (s *Store) CreateWork(ctx context.Context, workspaceID, actor string, work Work) (Work, error) {
+func (s *Store) CreateWork(ctx context.Context, workspaceID, actor string, work Work, requests ...idempotency.Request) (Work, error) {
 	if s == nil {
 		return Work{}, ErrStorage
 	}
@@ -194,6 +196,22 @@ func (s *Store) CreateWork(ctx context.Context, workspaceID, actor string, work 
 		return Work{}, err
 	}
 	defer tx.Rollback(ctx)
+	var request idempotency.Request
+	if len(requests) > 0 {
+		request = requests[0]
+		replay, replayed, claimErr := idempotency.Claim(ctx, tx, workspaceID, request)
+		if claimErr != nil {
+			s.reportFailure(ctx, workspaceID, actor, "", "create-work", claimErr)
+			return Work{}, claimErr
+		}
+		if replayed {
+			var prior Work
+			if json.Unmarshal(replay, &prior) != nil {
+				return Work{}, idempotency.ErrStorage
+			}
+			return prior, nil
+		}
+	}
 	created := Work{
 		WorkID: s.newID(), WorkspaceID: workspaceID,
 		TopicCardID: work.TopicCardID, SnapshotID: work.SnapshotID, Title: work.Title,
@@ -216,6 +234,13 @@ func (s *Store) CreateWork(ctx context.Context, workspaceID, actor string, work 
 		_ = tx.Rollback(ctx)
 		s.reportFailure(ctx, workspaceID, actor, created.WorkID, "create-work", err)
 		return Work{}, ErrStorage
+	}
+	if len(requests) > 0 {
+		if err = idempotency.Complete(ctx, tx, workspaceID, request, created); err != nil {
+			_ = tx.Rollback(ctx)
+			s.reportFailure(ctx, workspaceID, actor, created.WorkID, "create-work", err)
+			return Work{}, ErrStorage
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		s.reportFailure(ctx, workspaceID, actor, created.WorkID, "create-work", err)
