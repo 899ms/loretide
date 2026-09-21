@@ -14,6 +14,7 @@ export interface TodayLinks {
   topics: string;
   accounts: string;
   sources: string;
+  historicalImport: string;
 }
 
 /**
@@ -29,5 +30,6 @@ export function todayLinks(slug: string): TodayLinks {
     topics: workspace.topics(),
     accounts: workspace.accounts(),
     sources: workspace.sources(),
+    historicalImport: workspace.historicalImport(),
   };
 }
