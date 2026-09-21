@@ -507,6 +507,25 @@
     "filterByAccount": "Filter by account",
     "filterByAccountHint": "Narrow the list to one account, or to the cards with none.",
     "filterAll": "All cards",
+    "sourceReferences": {
+      "title": "Manually selected sources",
+      "description": "These sources were selected by a person. They are not system-generated related material.",
+      "fit": "Sources for why this fits this IP",
+      "evidence": "Sources for evidence and gaps",
+      "selectorHint": "Manually select material collected for this brand. It is not system-generated related material; archived material is not offered here.",
+      "select": "Select {{source}}",
+      "empty": "No sources selected",
+      "candidatesEmpty": "No active source material is available",
+      "loading": "Loading source material",
+      "loadFailed": "Could not load source material",
+      "save": "Save sources",
+      "statuses": {
+        "inbox": "Inbox",
+        "organized": "Organized",
+        "archived": "Archived",
+        "unknown": "Unknown status"
+      }
+    },
     "start": {
       "title": "Start a run",
       "description": "Fix the configuration this piece of work begins from. What is fixed here does not change afterwards.",

@@ -20,6 +20,11 @@ import {
   accountSelectionChanged,
   accountSelectionOf,
   accountSelectionToWire,
+  addTopicSource,
+  removeTopicSource,
+  topicSourceDraftDiffers,
+  topicSourceDraftToInput,
+  topicSourceSelectionOf,
   TOPIC_ACCOUNT_FILTER_ALL,
   TOPIC_ACCOUNT_FILTER_NONE,
   TOPIC_ACTIONS,
@@ -187,5 +192,50 @@ describe("account selection", () => {
     expect(TOPIC_ACCOUNT_FILTER_ALL).toBe("");
     expect(TOPIC_ACCOUNT_FILTER_NONE).toBe("none");
     expect(TOPIC_ACCOUNT_FILTER_NONE).not.toBe(TOPIC_ACCOUNT_FILTER_ALL);
+  });
+});
+
+describe("topic source references", () => {
+  const card = {
+    ...EMPTY_TOPIC_CARD,
+    fitSourceIds: ["fit-1"],
+    evidenceSourceIds: ["evidence-1"],
+  };
+
+  it("keeps an untouched column absent rather than clearing it", () => {
+    const draft = addTopicSource({}, "fitSourceIds", " fit-2 ", card.fitSourceIds);
+    expect(topicSourceSelectionOf(draft, "fitSourceIds", card.fitSourceIds)).toEqual([
+      "fit-1",
+      "fit-2",
+    ]);
+    expect(topicSourceDraftToInput(draft)).toEqual({
+      fitSourceIds: ["fit-1", "fit-2"],
+    });
+    expect(topicSourceDraftDiffers(draft, card)).toBe(true);
+  });
+
+  it("normalizes duplicates and makes removing the last source an explicit clear", () => {
+    const selected = addTopicSource({}, "evidenceSourceIds", " evidence-1 ", []);
+    const deduplicated = addTopicSource(
+      selected,
+      "evidenceSourceIds",
+      "evidence-1",
+      [],
+    );
+    expect(topicSourceDraftToInput(deduplicated)).toEqual({
+      evidenceSourceIds: ["evidence-1"],
+    });
+    const cleared = removeTopicSource(
+      deduplicated,
+      "evidenceSourceIds",
+      "evidence-1",
+      [],
+    );
+    expect(topicSourceDraftToInput(cleared)).toEqual({ evidenceSourceIds: [] });
+  });
+
+  it("does not create a write when a draft returns to the stored value", () => {
+    const draft = addTopicSource({}, "fitSourceIds", "fit-1", []);
+    expect(topicSourceDraftDiffers(draft, card)).toBe(false);
   });
 });

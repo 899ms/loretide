@@ -13,6 +13,7 @@ import {
   type TopicActionInput,
   type TopicCard,
   type TopicCardInput,
+  type SetContentTopicSourcesInput,
 } from "./contract";
 
 /**
@@ -120,8 +121,108 @@ export function accountSelectionChanged(
   return accountSelectionToWire(selection) !== (accountId ?? null);
 }
 
+/** The two independent source-reference columns on a topic card (specs/030). */
+export type TopicSourceField = "fitSourceIds" | "evidenceSourceIds";
+
+/**
+ * A partial edit of a card's source references.
+ *
+ * An omitted property deliberately means "leave that column alone". An empty
+ * array means "clear that column". Keeping that distinction in the draft is
+ * necessary because the endpoint applies it independently to each column.
+ */
+export interface TopicSourceDraft {
+  fitSourceIds?: string[];
+  evidenceSourceIds?: string[];
+}
+
+function normalizeSourceIds(ids: readonly string[] | undefined): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const value of ids ?? []) {
+    const id = value.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    normalized.push(id);
+  }
+  return normalized;
+}
+
+function sourceIdsEqual(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
+
+/** The selected ids for one field, falling back to the card until it is edited. */
+export function topicSourceSelectionOf(
+  draft: TopicSourceDraft,
+  field: TopicSourceField,
+  currentIds: readonly string[],
+): string[] {
+  return normalizeSourceIds(draft[field] ?? currentIds);
+}
+
+/** Adds one source to a column without changing the other column. */
+export function addTopicSource(
+  draft: TopicSourceDraft,
+  field: TopicSourceField,
+  sourceId: string,
+  currentIds: readonly string[],
+): TopicSourceDraft {
+  return {
+    ...draft,
+    [field]: normalizeSourceIds([
+      ...topicSourceSelectionOf(draft, field, currentIds),
+      sourceId,
+    ]),
+  };
+}
+
+/** Removes one source. Removing the last selected source is an explicit clear. */
+export function removeTopicSource(
+  draft: TopicSourceDraft,
+  field: TopicSourceField,
+  sourceId: string,
+  currentIds: readonly string[],
+): TopicSourceDraft {
+  const id = sourceId.trim();
+  return {
+    ...draft,
+    [field]: topicSourceSelectionOf(draft, field, currentIds).filter(
+      (current) => current !== id,
+    ),
+  };
+}
+
+/** Converts only edited fields to the wire shape; omission is not a clear. */
+export function topicSourceDraftToInput(
+  draft: TopicSourceDraft,
+): SetContentTopicSourcesInput {
+  const input: SetContentTopicSourcesInput = {};
+  if (draft.fitSourceIds !== undefined) {
+    input.fitSourceIds = normalizeSourceIds(draft.fitSourceIds);
+  }
+  if (draft.evidenceSourceIds !== undefined) {
+    input.evidenceSourceIds = normalizeSourceIds(draft.evidenceSourceIds);
+  }
+  return input;
+}
+
+/** Whether an edited draft would change either stored source-reference column. */
+export function topicSourceDraftDiffers(
+  draft: TopicSourceDraft,
+  card: Pick<TopicCard, "fitSourceIds" | "evidenceSourceIds">,
+): boolean {
+  const input = topicSourceDraftToInput(draft);
+  return (
+    (input.fitSourceIds !== undefined &&
+      !sourceIdsEqual(input.fitSourceIds, normalizeSourceIds(card.fitSourceIds))) ||
+    (input.evidenceSourceIds !== undefined &&
+      !sourceIdsEqual(input.evidenceSourceIds, normalizeSourceIds(card.evidenceSourceIds)))
+  );
+}
+
 /** The seven items of docs/01 §5.2, as the form holds them. */
-export interface TopicCardDraft {
+export interface TopicCardDraft extends TopicSourceDraft {
   /** The account this card is written for; empty means none was chosen. */
   accountId: string;
   audienceProblemJudgment: string;
@@ -154,6 +255,7 @@ export function topicCardDraftToInput(draft: TopicCardDraft): TopicCardInput {
     evidenceGapsAndInvestment: draft.evidenceGapsAndInvestment.trim(),
     channels: parseChannels(draft.channels),
     recommendedAction: draft.recommendedAction.trim(),
+    ...topicSourceDraftToInput(draft),
   };
 }
 

@@ -16,6 +16,7 @@ import {
   accountSelectionChanged,
   accountSelectionOf,
   accountSelectionToWire,
+  addTopicSource,
   briefDraftDiffers,
   briefDraftFromRevision,
   briefDraftToInput,
@@ -25,8 +26,12 @@ import {
   formatChannels,
   isTopicCardDraftReady,
   latestRevision,
+  removeTopicSource,
   sortedRevisions,
   topicCardDraftToInput,
+  topicSourceDraftDiffers,
+  topicSourceDraftToInput,
+  topicSourceSelectionOf,
   topicStatusKey,
   useActOnContentTopic,
   useAppendContentBrief,
@@ -36,13 +41,17 @@ import {
   useContentTopics,
   useCreateContentTopic,
   useSetContentTopicAccount,
+  useSetContentTopicSources,
   type BriefDraft,
   type BriefRevision,
   type TopicAction,
   type TopicCard,
   type TopicCardDraft,
+  type TopicSourceDraft,
+  type TopicSourceField,
 } from "@multica/core/content/topic-planning";
 import { Button } from "@multica/ui/components/ui/button";
+import { Checkbox } from "@multica/ui/components/ui/checkbox";
 import { Input } from "@multica/ui/components/ui/input";
 import { Textarea } from "@multica/ui/components/ui/textarea";
 import {
@@ -79,6 +88,14 @@ import { StartRunSection } from "./start";
 // yet" rather than pretending to be disabled features that might work.
 
 type Translate = ReturnType<typeof useT<"common">>["t"];
+
+/** A source-inbox row supplied by the Web composition adapter. */
+export interface TopicSourceCandidate {
+  sourceId: string;
+  title: string;
+  url: string;
+  status: string;
+}
 
 function saveStatusOf(
   outcome: SaveOutcome | null,
@@ -243,6 +260,13 @@ function ReadOnlyValue({ value }: { value: string }) {
 export interface TopicPlanningPageProps {
   wsId: string;
   /**
+   * Source candidates are supplied by the composition adapter. topic-planning
+   * deliberately has no dependency on source-inbox in the content graph.
+   */
+  sourceCandidates?: TopicSourceCandidate[];
+  sourceCandidatesLoading?: boolean;
+  sourceCandidatesFailed?: boolean;
+  /**
    * Slot rendered at the end of a card's detail view. The work editor is a
    * separate content module that the registry places downstream of this one,
    * so the page it lives on may not import it; the web adapter composes the
@@ -251,7 +275,13 @@ export interface TopicPlanningPageProps {
   renderCardExtras?: (topicCardId: string) => ReactNode;
 }
 
-export function TopicPlanningPage({ wsId, renderCardExtras }: TopicPlanningPageProps) {
+export function TopicPlanningPage({
+  wsId,
+  sourceCandidates = [],
+  sourceCandidatesLoading = false,
+  sourceCandidatesFailed = false,
+  renderCardExtras,
+}: TopicPlanningPageProps) {
   const { t } = useT("common");
   return (
     <>
@@ -260,12 +290,24 @@ export function TopicPlanningPage({ wsId, renderCardExtras }: TopicPlanningPageP
           {t(($) => $.contentTopics.title)}
         </span>
       </PageHeader>
-      <TopicPlanningContent wsId={wsId} renderCardExtras={renderCardExtras} />
+      <TopicPlanningContent
+        wsId={wsId}
+        sourceCandidates={sourceCandidates}
+        sourceCandidatesLoading={sourceCandidatesLoading}
+        sourceCandidatesFailed={sourceCandidatesFailed}
+        renderCardExtras={renderCardExtras}
+      />
     </>
   );
 }
 
-function TopicPlanningContent({ wsId, renderCardExtras }: TopicPlanningPageProps) {
+function TopicPlanningContent({
+  wsId,
+  sourceCandidates = [],
+  sourceCandidatesLoading = false,
+  sourceCandidatesFailed = false,
+  renderCardExtras,
+}: TopicPlanningPageProps) {
   const { t } = useT("common");
   const accountOptions = useAccountOptions(wsId);
   // "" is every card; the sentinel is the cards no account was chosen for.
@@ -374,6 +416,9 @@ function TopicPlanningContent({ wsId, renderCardExtras }: TopicPlanningPageProps
           wsId={wsId}
           onCreated={setSelectedId}
           accountOptions={accountOptions}
+          sources={sourceCandidates}
+          sourcesLoading={sourceCandidatesLoading}
+          sourcesFailed={sourceCandidatesFailed}
         />
 
         <NotAvailableYetSection />
@@ -384,6 +429,9 @@ function TopicPlanningContent({ wsId, renderCardExtras }: TopicPlanningPageProps
             wsId={wsId}
             card={selected}
             accountOptions={accountOptions}
+            sources={sourceCandidates}
+            sourcesLoading={sourceCandidatesLoading}
+            sourcesFailed={sourceCandidatesFailed}
             renderCardExtras={renderCardExtras}
           />
         ) : null}
@@ -424,10 +472,16 @@ function CreateTopicSection({
   wsId,
   onCreated,
   accountOptions,
+  sources,
+  sourcesLoading,
+  sourcesFailed,
 }: {
   wsId: string;
   onCreated: (topicCardId: string) => void;
   accountOptions: { value: string; label: string }[];
+  sources: TopicSourceCandidate[];
+  sourcesLoading: boolean;
+  sourcesFailed: boolean;
 }) {
   const { t } = useT("common");
   const create = useCreateContentTopic(wsId);
@@ -528,6 +582,15 @@ function CreateTopicSection({
             />
           </SettingsRow>
         ))}
+        <TopicSourceSelectorRows
+          draft={draft}
+          sources={sources}
+          sourcesLoading={sourcesLoading}
+          sourcesFailed={sourcesFailed}
+          currentFitSourceIds={[]}
+          currentEvidenceSourceIds={[]}
+          onChange={edit}
+        />
         <SettingsRow
           label={t(($) => $.contentTopics.fields.channels)}
           description={t(($) => $.contentTopics.channelsHint)}
@@ -573,11 +636,17 @@ function TopicCardPanel({
   wsId,
   card,
   accountOptions,
+  sources,
+  sourcesLoading,
+  sourcesFailed,
   renderCardExtras,
 }: {
   wsId: string;
   card: TopicCard;
   accountOptions: { value: string; label: string }[];
+  sources: TopicSourceCandidate[];
+  sourcesLoading: boolean;
+  sourcesFailed: boolean;
   renderCardExtras?: (topicCardId: string) => ReactNode;
 }) {
   // The detail query is what the four actions refresh, so the panel reads it
@@ -587,6 +656,14 @@ function TopicCardPanel({
   return (
     <>
       <TopicCardDetail card={current} accountOptions={accountOptions} />
+      <TopicSourceReferenceSection
+        key={`${current.topicCardId}:${current.updatedAt}`}
+        wsId={wsId}
+        card={current}
+        sources={sources}
+        sourcesLoading={sourcesLoading}
+        sourcesFailed={sourcesFailed}
+      />
       <AccountLinkSection
         wsId={wsId}
         card={current}
@@ -696,6 +773,227 @@ function TopicCardDetail({
             </SettingsRow>
           </>
         ) : null}
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
+function sourceStatusLabel(t: Translate, status: string): string {
+  switch (status) {
+    case "inbox":
+      return t(($) => $.contentTopics.sourceReferences.statuses.inbox);
+    case "organized":
+      return t(($) => $.contentTopics.sourceReferences.statuses.organized);
+    case "archived":
+      return t(($) => $.contentTopics.sourceReferences.statuses.archived);
+    default:
+      return status || t(($) => $.contentTopics.sourceReferences.statuses.unknown);
+  }
+}
+
+function sourceLabel(
+  source: TopicSourceCandidate | undefined,
+  sourceId: string,
+): string {
+  return source?.title.trim() || source?.url.trim() || sourceId;
+}
+
+function SourceReferenceValue({
+  sourceIds,
+  sources,
+}: {
+  sourceIds: readonly string[];
+  sources: TopicSourceCandidate[];
+}) {
+  const { t } = useT("common");
+  if (sourceIds.length === 0) {
+    return (
+      <span className="text-body text-muted-foreground">
+        {t(($) => $.contentTopics.sourceReferences.empty)}
+      </span>
+    );
+  }
+  return (
+    <ul className="space-y-1">
+      {sourceIds.map((sourceId) => {
+        const source = sources.find((item) => item.sourceId === sourceId);
+        return (
+          <li key={sourceId} className="break-words text-body text-muted-foreground">
+            {sourceLabel(source, sourceId)} · {sourceStatusLabel(t, source?.status ?? "")}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function TopicSourceSelectorRows({
+  draft,
+  sources,
+  sourcesLoading,
+  sourcesFailed,
+  currentFitSourceIds,
+  currentEvidenceSourceIds,
+  onChange,
+}: {
+  draft: TopicSourceDraft;
+  sources: TopicSourceCandidate[];
+  sourcesLoading: boolean;
+  sourcesFailed: boolean;
+  currentFitSourceIds: readonly string[];
+  currentEvidenceSourceIds: readonly string[];
+  onChange: (patch: TopicSourceDraft) => void;
+}) {
+  const { t } = useT("common");
+  const candidates = sources.filter((source) => source.status !== "archived");
+  const fields: {
+    field: TopicSourceField;
+    label: string;
+    currentIds: readonly string[];
+  }[] = [
+    {
+      field: "fitSourceIds",
+      label: t(($) => $.contentTopics.sourceReferences.fit),
+      currentIds: currentFitSourceIds,
+    },
+    {
+      field: "evidenceSourceIds",
+      label: t(($) => $.contentTopics.sourceReferences.evidence),
+      currentIds: currentEvidenceSourceIds,
+    },
+  ];
+
+  return (
+    <>
+      {fields.map(({ field, label, currentIds }) => {
+        const selectedIds = topicSourceSelectionOf(draft, field, currentIds);
+        return (
+          <SettingsRow
+            key={field}
+            label={label}
+            description={t(($) => $.contentTopics.sourceReferences.selectorHint)}
+            size="text"
+            align="start"
+          >
+            {sourcesLoading ? (
+              <span className="text-body text-muted-foreground">
+                {t(($) => $.contentTopics.sourceReferences.loading)}
+              </span>
+            ) : sourcesFailed ? (
+              <span className="text-body text-muted-foreground">
+                {t(($) => $.contentTopics.sourceReferences.loadFailed)}
+              </span>
+            ) : candidates.length === 0 ? (
+              <span className="text-body text-muted-foreground">
+                {t(($) => $.contentTopics.sourceReferences.candidatesEmpty)}
+              </span>
+            ) : (
+              <div className="space-y-2">
+                {candidates.map((source) => {
+                  const checked = selectedIds.includes(source.sourceId);
+                  return (
+                    <label
+                      key={source.sourceId}
+                      className="flex items-start gap-3 text-body text-muted-foreground"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) =>
+                          onChange(
+                            value === true
+                              ? addTopicSource(draft, field, source.sourceId, currentIds)
+                              : removeTopicSource(draft, field, source.sourceId, currentIds),
+                          )
+                        }
+                        aria-label={t(($) => $.contentTopics.sourceReferences.select, {
+                          source: sourceLabel(source, source.sourceId),
+                        })}
+                      />
+                      <span className="break-words">
+                        {sourceLabel(source, source.sourceId)} · {sourceStatusLabel(t, source.status)}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </SettingsRow>
+        );
+      })}
+    </>
+  );
+}
+
+function TopicSourceReferenceSection({
+  wsId,
+  card,
+  sources,
+  sourcesLoading,
+  sourcesFailed,
+}: {
+  wsId: string;
+  card: TopicCard;
+  sources: TopicSourceCandidate[];
+  sourcesLoading: boolean;
+  sourcesFailed: boolean;
+}) {
+  const { t } = useT("common");
+  const setSources = useSetContentTopicSources(wsId);
+  const [draft, setDraft] = useState<TopicSourceDraft>({});
+  const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
+  const changed = topicSourceDraftDiffers(draft, card);
+
+  const save = () => {
+    setOutcome(null);
+    setSources.mutate(
+      { topicCardId: card.topicCardId, sources: topicSourceDraftToInput(draft) },
+      {
+        onSuccess: () => {
+          setOutcome(SAVED);
+          setDraft({});
+        },
+        onError: (error) => setOutcome(saveOutcome(error)),
+      },
+    );
+  };
+
+  return (
+    <SettingsSection
+      title={t(($) => $.contentTopics.sourceReferences.title)}
+      description={t(($) => $.contentTopics.sourceReferences.description)}
+    >
+      <SettingsCard>
+        <SettingsRow
+          label={t(($) => $.contentTopics.sourceReferences.fit)}
+          size="text"
+          align="start"
+        >
+          <SourceReferenceValue sourceIds={card.fitSourceIds} sources={sources} />
+        </SettingsRow>
+        <SettingsRow
+          label={t(($) => $.contentTopics.sourceReferences.evidence)}
+          size="text"
+          align="start"
+        >
+          <SourceReferenceValue sourceIds={card.evidenceSourceIds} sources={sources} />
+        </SettingsRow>
+        <TopicSourceSelectorRows
+          draft={draft}
+          sources={sources}
+          sourcesLoading={sourcesLoading}
+          sourcesFailed={sourcesFailed}
+          currentFitSourceIds={card.fitSourceIds}
+          currentEvidenceSourceIds={card.evidenceSourceIds}
+          onChange={setDraft}
+        />
+        <SettingsRow label={t(($) => $.contentTopics.sourceReferences.save)}>
+          <div className="flex items-center gap-3">
+            <SaveFeedback outcome={outcome} pending={setSources.isPending} />
+            <Button disabled={!changed || setSources.isPending} onClick={save}>
+              {t(($) => $.contentTopics.sourceReferences.save)}
+            </Button>
+          </div>
+        </SettingsRow>
       </SettingsCard>
     </SettingsSection>
   );
