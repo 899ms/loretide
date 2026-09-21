@@ -507,6 +507,25 @@
     "filterByAccount": "按账号筛选",
     "filterByAccountHint": "只看某个账号的卡，或只看还没关联账号的卡。",
     "filterAll": "全部选题卡",
+    "sourceReferences": {
+      "title": "人手选择的素材",
+      "description": "这些素材由人手选择，不是系统生成的关联资料。",
+      "fit": "为什么适合这个 IP 的引用素材",
+      "evidence": "证据与缺口的引用素材",
+      "selectorHint": "手动选择本品牌已收集的素材；这不是系统生成的关联资料，已归档的素材不会出现在候选中。",
+      "select": "选择 {{source}}",
+      "empty": "尚未选择素材",
+      "candidatesEmpty": "没有可选择的未归档素材",
+      "loading": "素材加载中",
+      "loadFailed": "素材加载失败",
+      "save": "保存素材引用",
+      "statuses": {
+        "inbox": "待整理",
+        "organized": "已整理",
+        "archived": "已归档",
+        "unknown": "未知状态"
+      }
+    },
     "start": {
       "title": "开始运行",
       "description": "把这一次开工所用的配置固定下来。固定之后，事后再改都不会动它。",

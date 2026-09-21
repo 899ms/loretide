@@ -1,6 +1,7 @@
 "use client";
 import {useWorkspaceId} from "@multica/core/hooks";
 import {useContentAccounts} from "@multica/core/content/ip-profile";
+import {useContentSources} from "@multica/core/content/source-inbox";
 import {TopicPlanningPage} from "@multica/views/content/topic-planning";
 import {WorkSections} from "@multica/views/content/work-editor";
 import {ReviewDeliverySections} from "@multica/views/content/review-delivery";
@@ -15,8 +16,9 @@ import {FeedbackLearningSections} from "@multica/views/content/feedback-learning
 export default function Page(){
   const wsId=useWorkspaceId();
   const accounts=useContentAccounts(wsId);
+  const sources=useContentSources(wsId);
   const options=(accounts.data??[]).map((account)=>({id:account.account_id,name:account.display_name}));
-  return <TopicPlanningPage key={wsId} wsId={wsId} renderCardExtras={(topicCardId)=>
+  return <TopicPlanningPage key={wsId} wsId={wsId} sourceCandidates={sources.data??[]} sourceCandidatesLoading={sources.isLoading} sourceCandidatesFailed={sources.isError} renderCardExtras={(topicCardId)=>
     <WorkSections wsId={wsId} topicCardId={topicCardId} renderArtifactExtras={(context)=>
       <ReviewDeliverySections
         wsId={context.wsId}
