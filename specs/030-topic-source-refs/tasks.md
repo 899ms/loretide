@@ -35,7 +35,7 @@ description: "Task list for 030 topic source refs — SOP §5.2 items 2 and 5"
 - [x] T004 写 `server/migrations/536_content_topic_card_fit_source_ids.{up,down}.sql`（原计划 532，顺延自既有最大号 535）：`ALTER TABLE content_topic_card ADD COLUMN IF NOT EXISTS fit_source_ids jsonb NOT NULL DEFAULT '[]'::jsonb`。注释写明它对应 §5.2 第 2 项「引用哪些素材」，以及**为什么是 jsonb 不是 text[]**（同表 `channels` 就是 jsonb） — **FR-001、FR-003**
 - [x] T005 写 `server/migrations/537_content_topic_card_evidence_source_ids.{up,down}.sql`（原计划 533，顺延）：同形，对应 §5.2 第 5 项 — **FR-001、FR-003**
 - [x] T006 迁移规则逐行复核并记录：两个文件里 `REFERENCES` / `FOREIGN KEY` / `CASCADE` / `CREATE INDEX` 各 **0 处**；`workspace_delete_manifest_test.go` 与 `concurrentIndexCleanups` **零改动**。**逐条写进 PR 正文，不默认成立** — **FR-003、SC-014**
-- [x] T007 实测 up → down → up，确认可逆且 `'[]'::jsonb` 默认值在既有行上填对 — **SC-014**
+- [ ] T007 实测 up → down → up：由 CI db-suites 的 `migrate up` 覆盖，本机未实测 — **SC-014**
 
 ---
 
@@ -129,7 +129,7 @@ Setup (T001–T003)
 
 ## 实施记录（PR 1 存储与接口）
 
-1. **迁移编号**：基线上既有最大迁移编号为 535（来自 031 PR 1），顺延分配为 `536_content_topic_card_fit_source_ids` 与 `537_content_topic_card_evidence_source_ids`。无外键、无索引、无级联，默认值 `'[]'::jsonb`。
+1. **迁移编号**：基线上既有最大迁移编号为 535（来自 031 PR 1），顺延分配为 `536_content_topic_card_fit_source_ids` 与 `537_content_topic_card_evidence_source_ids`。无外键、无索引、无级联，默认值 `'[]'::jsonb`。本机无隔离数据库，T007 迁移验证由 CI db-suites (`migrate up`) 覆盖，未在本地实测。
 2. **模块解耦与边界**：`topic-planning` 模块新增 `SourceReader` 端口，签名仅使用 Go 原生基础类型 `(ctx, workspaceID, sourceID) (bool, error)`，不依赖 `source-inbox` 模块；`scripts/content-boundaries.json` 保持 0 改动。
 3. **栅栏与校验**：`store.go` 中 `SetSources` 与 `Create` 均在 `LockWorkspaceForContentDiagnosticWrite` 栅栏事务内执行 `checkSources`，外来或不存在的素材 ID 统一返回 404 `ErrNotFound` 同形，且全有或全无（一条不合法则整笔回滚）。
 4. **缺省 ≠ 清空**：`SetSources` 中指针为 `nil` 表示字段缺省（保留既有值），传递空切片 `[]string{}` 表示清空。前端 `@multica/core` 契约转换同步对齐。

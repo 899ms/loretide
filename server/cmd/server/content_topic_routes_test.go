@@ -252,9 +252,14 @@ func TestContentTopicSourcesLinkUsesThePathIDBehindTheRealMiddleware(t *testing.
 	}
 	fx := testutil.New(testPool, testWorkspaceID, testUserID)
 	sourceID := "topic-link-source-" + fmt.Sprint(time.Now().UnixNano())
-	fx.Exec(t, `INSERT INTO content_source (source_id, workspace_id, capture_method, source_type, title, raw_content, state)
-		VALUES ($1, $2, 'manual', 'text', '素材标题', '素材正文', 'active')`, sourceID, testWorkspaceID)
-	fx.Cleanup(t, `DELETE FROM content_source WHERE source_id = $1`, sourceID)
+	fx.InsertNoID(t, "content_source", testutil.Cols{
+		"source_id":    sourceID,
+		"workspace_id": testWorkspaceID,
+		"kind":         "pasted_text",
+		"recorded_by":  testUserID,
+		"title":        "素材标题",
+		"status":       "inbox",
+	}, "source_id=$1", sourceID)
 
 	response := accountAPIRequest(t, http.MethodPost, "/api/content-topics", `{
 		"audience_problem_judgment":"audience/problem/judgment",
