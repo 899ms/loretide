@@ -364,6 +364,11 @@ deleted_content_artifacts AS (
 deleted_content_works AS (
     DELETE FROM content_work WHERE workspace_id = $1::text
 ),
+-- Historical-import replay data is workspace-owned. This runs before the
+-- parent workspace row disappears, so a completed request cannot outlive it.
+deleted_content_import_idempotency AS (
+    DELETE FROM content_import_idempotency WHERE workspace_id = $1::text
+),
 -- Review requests, their frozen delivery snapshots, the append-only transition
 -- log, delivery tasks and publication records. The transition log and the
 -- publication records are append-only everywhere else; these statements are the

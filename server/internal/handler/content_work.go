@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
+	"github.com/multica-ai/multica/server/internal/content/idempotency"
 	workeditor "github.com/multica-ai/multica/server/internal/content/work-editor"
 	workspacecore "github.com/multica-ai/multica/server/internal/content/workspace-core"
 )
@@ -88,6 +89,10 @@ func decodeWorkBody(w http.ResponseWriter, r *http.Request, target any) bool {
 
 func (h *Handler) workError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, idempotency.ErrInvalid):
+		writeError(w, http.StatusBadRequest, "Idempotency-Key is required and must be at most 255 bytes")
+	case errors.Is(err, idempotency.ErrConflict):
+		writeError(w, http.StatusConflict, "Idempotency-Key conflicts with a different import request")
 	case errors.Is(err, workeditor.ErrInvalid):
 		h.workDiagnosticError(w, http.StatusBadRequest, false)
 	case errors.Is(err, workeditor.ErrConflict):
@@ -154,10 +159,19 @@ func (h *Handler) CreateContentWork(w http.ResponseWriter, r *http.Request) {
 		h.workError(w, workeditor.ErrNotFound)
 		return
 	}
+	var request idempotency.Request
+	if body.HistoricalImport {
+		var requestErr error
+		request, _, requestErr = historicalImportRequest(r, "create-work", "", body)
+		if requestErr != nil {
+			h.workError(w, requestErr)
+			return
+		}
+	}
 	created, err := h.workEditorStore().CreateWork(r.Context(), workspace, actor, workeditor.Work{
 		TopicCardID: body.TopicCardID, SnapshotID: body.SnapshotID, Title: body.Title,
 		HistoricalImport: body.HistoricalImport,
-	})
+	}, optionalIdempotencyRequest(request.Key != "", request)...)
 	if err != nil {
 		h.workError(w, err)
 		return
@@ -245,15 +259,45 @@ func (h *Handler) CreateContentArtifact(w http.ResponseWriter, r *http.Request) 
 		h.workError(w, workeditor.ErrInvalid)
 		return
 	}
+	historical, historyErr := h.historicalWork(r, workspace, workIDFromURL(r))
+	if historyErr != nil {
+		h.workError(w, historyErr)
+		return
+	}
+	var request idempotency.Request
+	if historical {
+		var requestErr error
+		request, _, requestErr = historicalImportRequest(r, "create-artifact", workIDFromURL(r), body)
+		if requestErr != nil {
+			h.workError(w, requestErr)
+			return
+		}
+	}
 	created, err := h.workEditorStore().CreateArtifact(r.Context(), workspace, actor, workIDFromURL(r),
 		workeditor.Artifact{
 			Kind: workeditor.Kind(body.Kind), Title: body.Title, Position: body.Position,
-		})
+		}, optionalIdempotencyRequest(request.Key != "", request)...)
 	if err != nil {
 		h.workError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+}
+
+func (h *Handler) historicalWork(r *http.Request, workspaceID, workID string) (bool, error) {
+	if h.DB == nil {
+		return false, workeditor.ErrStorage
+	}
+	var historical bool
+	err := h.DB.QueryRow(r.Context(), `SELECT historical_import FROM content_work
+		WHERE workspace_id=$1 AND work_id=$2`, workspaceID, workID).Scan(&historical)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, workeditor.ErrStorage
+	}
+	return historical, nil
 }
 
 func (h *Handler) ListContentArtifacts(w http.ResponseWriter, r *http.Request) {

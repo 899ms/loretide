@@ -2,10 +2,12 @@ package reviewdelivery
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/multica-ai/multica/server/internal/content/idempotency"
 )
 
 // Publication records (SOP 9.1, 9.2).
@@ -54,7 +56,7 @@ type RecordRequest struct {
 // fetch the page, it does not confirm anything: it writes down what a person
 // said and how they say they checked it. SOP 9.2 - "系统不保存平台发布密钥，也不
 // 提供发布执行接口" - and three guard tests.
-func (s *Store) Record(ctx context.Context, workspaceID, actor string, request RecordRequest) (PublicationRecord, error) {
+func (s *Store) Record(ctx context.Context, workspaceID, actor string, request RecordRequest, requests ...idempotency.Request) (PublicationRecord, error) {
 	if s == nil {
 		return PublicationRecord{}, ErrStorage
 	}
@@ -103,6 +105,22 @@ func (s *Store) Record(ctx context.Context, workspaceID, actor string, request R
 		return PublicationRecord{}, err
 	}
 	defer tx.Rollback(ctx)
+	var replayRequest idempotency.Request
+	if len(requests) > 0 {
+		replayRequest = requests[0]
+		replay, replayed, claimErr := idempotency.Claim(ctx, tx, workspaceID, replayRequest)
+		if claimErr != nil {
+			s.reportFailure(ctx, workspaceID, actor, request.ArtifactID, "record-publication", claimErr)
+			return PublicationRecord{}, claimErr
+		}
+		if replayed {
+			var prior PublicationRecord
+			if json.Unmarshal(replay, &prior) != nil {
+				return PublicationRecord{}, idempotency.ErrStorage
+			}
+			return prior, nil
+		}
+	}
 
 	if s.Artifacts != nil {
 		workID, _, resolveErr := s.Artifacts.ResolveVersion(ctx, workspaceID, request.ArtifactID, "")
@@ -136,6 +154,13 @@ func (s *Store) Record(ctx context.Context, workspaceID, actor string, request R
 		_ = tx.Rollback(ctx)
 		s.reportFailure(ctx, workspaceID, actor, record.PublicationRecordID, "record-publication", err)
 		return PublicationRecord{}, ErrStorage
+	}
+	if len(requests) > 0 {
+		if err = idempotency.Complete(ctx, tx, workspaceID, replayRequest, record); err != nil {
+			_ = tx.Rollback(ctx)
+			s.reportFailure(ctx, workspaceID, actor, record.PublicationRecordID, "record-publication", err)
+			return PublicationRecord{}, ErrStorage
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		s.reportFailure(ctx, workspaceID, actor, record.PublicationRecordID, "record-publication", err)

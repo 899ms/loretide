@@ -74,6 +74,7 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"content_source_revision":            workspaceDelete,
 	"content_manual_metric":              workspaceDelete,
 	"content_feedback_excerpt":           workspaceDelete,
+	"content_import_idempotency":         workspaceDelete,
 	"comment_reaction":                   workspaceDelete,
 	"contact_sales_inquiry":              workspaceDeleteKeep,
 	"daemon_connection":                  workspaceDelete,

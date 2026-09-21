@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_import_idempotency_scope_key_idx;
