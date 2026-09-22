@@ -38,7 +38,7 @@ ConfigState = configured | unconfigured | unknown
 HealthState = healthy | unverified | stale | unavailable | unknown
 ExecutionState = enabled | disabled | not_applicable | unknown
 ConfigSource = server_boot | router_storage | web_capability | runtime_registry |
-               execution_policy | search_host
+               execution_policy | executor_host | search_host
 ```
 
 `ComponentConfigFact` contains only `component`, `config_state`, `observed_at`, an optional safe
@@ -60,13 +60,25 @@ RegisterSourceSnapshot(SourceSnapshot{
 RecordLiveness(fact LivenessFact)
 ```
 
-The registration domain is fixed by `ConfigSource`: `server_boot` owns `api,database`; `router_storage`
-owns `files`; every other source owns its same-named single component, except `execution_policy`, which
-owns the executor execution fact and may supply its config fact only when a reviewed real-executor owner
-exists. Each call must contain the complete domain for *its* source, and it atomically replaces only that
-source partition. It does not delete another source's facts. A source's absent component is a validation
-error; a host that no longer knows a fact must explicitly submit `config_state=unknown`, while
-`unconfigured` remains an affirmative assertion.
+The registration domain is fixed and explicit:
+
+| Source | `components` domain | `execution` rule |
+|---|---|---|
+| `server_boot` | exactly `api,database` | absent |
+| `router_storage` | exactly `files` | absent |
+| `web_capability` | exactly `web` | absent |
+| `runtime_registry` | exactly `daemon` | absent |
+| `executor_host` | exactly `executor` | absent |
+| `search_host` | exactly `search` | absent |
+| `execution_policy` | exactly empty | required, with `component=executor` |
+
+Each call must contain the complete domain for *its* source and atomically replaces only that source
+partition. It does not delete another source's facts. A component omission from a non-empty domain, any
+component in `execution_policy`, or an execution fact on any other source is a validation error. A host
+that no longer knows a fact must explicitly submit `config_state=unknown`, while `unconfigured` remains
+an affirmative assertion. Before `executor_host` is reviewed and wired, executor configuration has no
+source partition and therefore is `unknown`; `execution_policy` still supplies its required execution
+fact independently.
 
 `generation` is stored per `ConfigSource`, not globally. A lower generation is rejected; an equal
 generation is idempotent only when its normalized snapshot is identical, otherwise it is rejected; a
@@ -90,7 +102,7 @@ reduction.
 | files | `router_storage` | `NewRouterWithOptions`, immediately after S3/local selection | both supported constructors explicitly yield no store |
 | web | `web_capability` | a future server-side adapter fed by a verified deployment/capability inventory; it alone holds the private registrar | that trusted adapter explicitly declares diagnostics capability omitted; no browser heartbeat is sufficient |
 | daemon | `runtime_registry` | a future adapter over explicit runtime-registration configuration, with documented workspace/aggregation scope | the registry supplies an explicit empty/disabled declaration for that scope |
-| executor | `execution_policy` | a future policy adapter after review | only when a real executor configuration owner explicitly says none is configured; policy-disabled is **not** this state |
+| executor | `executor_host` for configuration; `execution_policy` for execution state only | a future reviewed real-executor host; current policy adapter only injects its read-only execution fact | only when `executor_host` explicitly says no real executor is configured; policy-disabled is **not** this state |
 | search | `search_host` | a future actual search host | only when that host explicitly declares its search integration absent |
 
 The current `handler.ContentDiagnosticClient` web heartbeat and the `agent_runtime` HTTP/WebSocket
