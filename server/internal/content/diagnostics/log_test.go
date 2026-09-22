@@ -7,6 +7,3 @@ func TestSecretsNeverEnterTechnicalLog(t *testing.T){
  wire,_:=json.Marshal(b.Events());if strings.Contains(string(wire),"secret")||strings.Contains(string(wire),"private"){t.Fatal(string(wire))}
  b.Append(e);if len(b.Events())!=2 || b.Dropped.Load()!=1{t.Fatal("unbounded sink")}
 }
-func TestDiagnosticEarlyUnavailableCodesRemainStructured(t *testing.T){
- for _,code:=range []string{"DIAGNOSTICS_UNAVAILABLE","STREAM_UNAVAILABLE"}{e:=Sanitize(Event{Code:code,Component:"diagnostics"});if e.Code!=code||e.Message==""||!e.Retryable||e.Next!="retry_query"{t.Fatalf("%s sanitized to %#v",code,e)}}
-}

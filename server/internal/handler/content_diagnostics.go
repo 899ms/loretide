@@ -19,7 +19,11 @@ import (
 
 func (h *Handler) diagnosticScope(w http.ResponseWriter, r *http.Request) (diagnostics.Scope, bool) {
 	if h.ContentDiagnostics == nil {
-		diagnosticErrorCode(w, http.StatusServiceUnavailable, "DIAGNOSTICS_UNAVAILABLE")
+		// The diagnostics contract deliberately has a closed sanitized-code
+		// allowlist. INTERNAL is the existing non-database server-failure code;
+		// do not grow the allowlist merely to distinguish this transport setup
+		// failure from other internal failures.
+		diagnosticErrorCode(w, http.StatusServiceUnavailable, "INTERNAL")
 		return diagnostics.Scope{}, false
 	}
 	if isMachineCredentialActor(r) {
@@ -239,7 +243,7 @@ func (h *Handler) ContentDiagnosticStream(w http.ResponseWriter, r *http.Request
 	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		diagnosticErrorCode(w, http.StatusServiceUnavailable, "STREAM_UNAVAILABLE")
+		diagnosticErrorCode(w, http.StatusServiceUnavailable, "INTERNAL")
 		return
 	}
 	w.Header().Set("Content-Type", "application/x-ndjson")

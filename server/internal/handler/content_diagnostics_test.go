@@ -43,7 +43,7 @@ func (w *nonFlushingDiagnosticResponse) Write(body []byte) (int, error) {
 	return w.body.Write(body)
 }
 
-func assertDiagnosticEarlyError(t *testing.T, response *nonFlushingDiagnosticResponse, code string) {
+func assertDiagnosticEarlyError(t *testing.T, response *nonFlushingDiagnosticResponse, code, next string, retryable bool) {
 	t.Helper()
 	if response.status != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d: %s", response.status, http.StatusServiceUnavailable, response.body.String())
@@ -59,7 +59,7 @@ func assertDiagnosticEarlyError(t *testing.T, response *nonFlushingDiagnosticRes
 	if err := json.Unmarshal(response.body.Bytes(), &body); err != nil {
 		t.Fatalf("decode structured diagnostic error: %v: %s", err, response.body.String())
 	}
-	if body.Error == "" || body.Code != code || body.Component != "diagnostics" || !body.Retryable || body.Next != "retry_query" {
+	if body.Error == "" || body.Code != code || body.Component != "diagnostics" || body.Retryable != retryable || body.Next != next {
 		t.Fatalf("unexpected diagnostic error: %+v", body)
 	}
 	if body.Trace != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
@@ -72,7 +72,7 @@ func TestContentDiagnosticEarlyErrorsStayStructured(t *testing.T) {
 		response := newNonFlushingDiagnosticResponse()
 		response.Header().Set(middleware.DiagnosticTraceHeader, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 		(&Handler{}).ContentDiagnosticOverview(response, httptest.NewRequest(http.MethodGet, "/api/content-diagnostics/overview", nil))
-		assertDiagnosticEarlyError(t, response, "DIAGNOSTICS_UNAVAILABLE")
+		assertDiagnosticEarlyError(t, response, "INTERNAL", "inspect_trace", false)
 	})
 
 	t.Run("stream unavailable after authorization", func(t *testing.T) {
@@ -82,7 +82,7 @@ func TestContentDiagnosticEarlyErrorsStayStructured(t *testing.T) {
 		response := newNonFlushingDiagnosticResponse()
 		response.Header().Set(middleware.DiagnosticTraceHeader, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 		h.ContentDiagnosticStream(response, request)
-		assertDiagnosticEarlyError(t, response, "STREAM_UNAVAILABLE")
+		assertDiagnosticEarlyError(t, response, "INTERNAL", "inspect_trace", false)
 	})
 
 	t.Run("stream capability check does not bypass authorization", func(t *testing.T) {
