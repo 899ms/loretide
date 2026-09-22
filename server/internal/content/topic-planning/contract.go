@@ -3,7 +3,10 @@
 package topicplanning
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
 	"time"
 )
 
@@ -84,6 +87,62 @@ type TopicCard struct {
 	StartedBriefRevisionID    *string   `json:"started_brief_revision_id"`
 	CreatedAt                 time.Time `json:"created_at"`
 	UpdatedAt                 time.Time `json:"updated_at"`
+}
+
+// PatchString distinguishes a missing field from an explicitly empty string.
+// Empty text is a legitimate "not known" answer on a topic card, while a
+// missing field must leave the stored value untouched.
+type PatchString struct {
+	Set   bool
+	Value string
+}
+
+func (p *PatchString) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return ErrInvalid
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return ErrInvalid
+	}
+	p.Set = true
+	p.Value = value
+	return nil
+}
+
+// TopicBodyPatch is the only mutable portion of an existing topic card.
+// Account ownership, source references, decision state, channels and the
+// recommended action all have their own semantics and must not be changed by
+// this endpoint.
+type TopicBodyPatch struct {
+	AudienceProblemJudgment   PatchString `json:"audience_problem_judgment"`
+	IPFit                     PatchString `json:"ip_fit"`
+	Timing                    PatchString `json:"timing"`
+	ExistingContentRelation   PatchString `json:"existing_content_relation"`
+	EvidenceGapsAndInvestment PatchString `json:"evidence_gaps_and_investment"`
+}
+
+func (p *TopicBodyPatch) UnmarshalJSON(data []byte) error {
+	type wire TopicBodyPatch
+	var decoded wire
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&decoded); err != nil {
+		return ErrInvalid
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return ErrInvalid
+	}
+	*p = TopicBodyPatch(decoded)
+	return nil
+}
+
+func (p TopicBodyPatch) Validate() error {
+	if !p.AudienceProblemJudgment.Set && !p.IPFit.Set && !p.Timing.Set &&
+		!p.ExistingContentRelation.Set && !p.EvidenceGapsAndInvestment.Set {
+		return ErrInvalid
+	}
+	return nil
 }
 
 type BriefRevision struct {

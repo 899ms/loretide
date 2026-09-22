@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -104,6 +105,19 @@ func decodeTopicBody(w http.ResponseWriter, r *http.Request, target any) bool {
 	return decoder.Decode(target) == nil
 }
 
+// decodeTopicBodyPatch is stricter than the older topic-body readers: the
+// PATCH contract rejects a second JSON value as malformed input. Keep that
+// rule local to this new endpoint so existing topic API contracts do not gain
+// a new rejection behavior as a side effect.
+func decodeTopicBodyPatch(w http.ResponseWriter, r *http.Request, target *topicplanning.TopicBodyPatch) bool {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256*1024))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return false
+	}
+	return decoder.Decode(&struct{}{}) == io.EOF
+}
+
 func topicCardIDFromURL(r *http.Request) string { return chi.URLParam(r, "id") }
 
 func (h *Handler) CreateContentTopic(w http.ResponseWriter, r *http.Request) {
@@ -147,6 +161,32 @@ func (h *Handler) GetContentTopic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	card, err := h.topicPlanningStore().Get(r.Context(), workspace, actor, topicCardIDFromURL(r))
+	if err != nil {
+		h.topicError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, card)
+}
+
+// PatchContentTopicBody changes only the five authored-text fields that have
+// no independent resource or decision semantics. Account, source, action, and
+// brief endpoints remain the sole owners of their respective mutations.
+func (h *Handler) PatchContentTopicBody(w http.ResponseWriter, r *http.Request) {
+	workspace, actor, ok := h.topicScope(w, r)
+	if !ok {
+		return
+	}
+	var body topicplanning.TopicBodyPatch
+	if !decodeTopicBodyPatch(w, r, &body) {
+		h.topicError(w, topicplanning.ErrInvalid)
+		return
+	}
+	if err := body.Validate(); err != nil {
+		h.topicError(w, err)
+		return
+	}
+	card, err := h.topicPlanningStore().PatchBody(r.Context(), workspace, actor,
+		topicCardIDFromURL(r), body)
 	if err != nil {
 		h.topicError(w, err)
 		return

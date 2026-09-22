@@ -2,7 +2,9 @@
 
 ## 这份文件是什么
 
-`server/internal/handler` 与 `server/cmd/server` 是两个**整包级**的数据库测试套件。它们的入口是 **fail-closed** 的：没有完整配置就**非零退出**，**不连接任何数据库**，**不跳过**。
+`server/internal/handler` 与 `server/cmd/server` 是两个由 Go `TestMain` **fail-closed** 的整包级数据库测试套件：没有完整配置就**非零退出**，**不连接任何数据库**，**不跳过**。
+
+`server/internal/content/topic-planning` 是第三个、只经 `scripts/test-go-db.sh` 调度的 CI store 套件。其历史夹具在直接 `go test` 时若缺少 `LORETIDE_TOPIC_TEST_DATABASE_URL` 会**skip**，并不拥有与前两个包相同的 Go 入口守卫；wrapper 则在启动该包前要求完整的 `LORETIDE_DB_TEST_*` 合同，并仅向子进程映射已验证的 URL。CI 还要求本卡指定的 store 用例实际 `pass`，不能由纯逻辑用例的 package pass 掩盖 skip。
 
 这份文件说明为什么是这样，以及怎么跑它们。
 
@@ -40,7 +42,7 @@ if err != nil {
 | `LORETIDE_DB_TEST_DATABASE` | 期望连上的库名 |
 | `LORETIDE_DB_TEST_ROLE` | 期望连上的角色名 |
 | `LORETIDE_DB_TEST_RUN_ID` | 本次运行的标识（CI 用 `run_id_attempt`） |
-| `LORETIDE_DB_TEST_SUITE` | `handler` 或 `cmd-server`，**由代码固定并与环境比对** |
+| `LORETIDE_DB_TEST_SUITE` | `handler`、`cmd-server` 或 `topic-planning`；wrapper 固定它，前两者也由 Go 守卫比对 |
 
 **通用 `DATABASE_URL` 永远不会被读取。** 读它就等于让每一个导出过它的开发者 shell 变成一次隐式 opt-in——而那正是要消除的问题。
 
@@ -94,15 +96,16 @@ export LORETIDE_DB_TEST_RUN_ID=local_$(date +%s)
 bash server/scripts/verify-db-test-target.sh      # 先让 shell 侧拒绝明显的错配
 bash scripts/test-go-db.sh --suite handler
 bash scripts/test-go-db.sh --suite cmd-server
+bash scripts/test-go-db.sh --suite topic-planning
 ```
 
-`scripts/test-go-db.sh` **不会补任何默认值**。缺变量就退出，且不调用 `go`——一个会填默认值的 wrapper 等于把刚拆掉的东西装回去。
+`scripts/test-go-db.sh` **不会补任何默认值**。缺变量就退出，且不调用 `go`——一个会填默认值的 wrapper 等于把刚拆掉的东西装回去。这个结论适用于经 wrapper 调度的三个 suite；不要把直接运行 `go test ./internal/content/topic-planning` 的 fixture skip 误读为 fail-closed 通过。
 
 ### CI
 
-`.github/workflows/loretide-content.yml` 的 `db-suites` 作业：两个 suite 各一个 runner、各一库一角色，名字从 `GITHUB_RUN_ID` / `GITHUB_RUN_ATTEMPT` 派生并在每个动库的步骤里**重新派生并校验**（要删库的那一步必须自己算出它被允许删的名字）。跑完 `if: always()` 精确回收。
+`.github/workflows/loretide-content.yml` 的 `db-suites` 作业：三个 suite 各一个 runner、各一库一角色，名字从 `GITHUB_RUN_ID` / `GITHUB_RUN_ATTEMPT` 派生并在每个动库的步骤里**重新派生并校验**（要删库的那一步必须自己算出它被允许删的名字）。跑完 `if: always()` 精确回收。`topic-planning` 仅在 wrapper 子进程中把已验证的 URL 映射为其历史夹具变量 `LORETIDE_TOPIC_TEST_DATABASE_URL`，夹具仍会再建/删自己的 schema。
 
-证据是**逐测试**的 JSON 事件，不是包级的一行 `ok`：**零个 pass 直接判红**——「跑了零个用例」正是过去被读成成功的那个状态。
+证据是**逐测试**的 JSON 事件，不是包级的一行 `ok`：**零个 pass 直接判红**——「跑了零个用例」正是过去被读成成功的那个状态。`topic-planning` 还必须报告 `TestPatchBodyChangesOnlyItsFiveFieldsAndLeavesFrozenObjectsUntouched`、`TestPatchBodyAuditFailureRollsBackCardWrite` 与 `TestPatchBodyConcurrentDifferentFieldsDoNotOverwriteEachOther` 为 `pass`；skip、缺失或非 pass 都判红。
 
 ## 默认路径现在缺了什么
 
@@ -120,5 +123,5 @@ bash scripts/test-go-db.sh --suite cmd-server
 | `server/internal/testutil/dbtest/scope.go` | 每次运行唯一的夹具名（清理仍按 id） |
 | `server/scripts/verify-db-test-target.sh` | Go 启动前的同一套检查 |
 | `scripts/test-go-db.sh` | 专用入口 |
-| `scripts/test-go.sh` | 通用入口，排除这两个包 |
-| `.github/workflows/loretide-content.yml` 的 `db-suites` | 两个隔离 DB 作业 |
+| `scripts/test-go.sh` | 通用入口，排除 handler 与 cmd/server 两个包 |
+| `.github/workflows/loretide-content.yml` 的 `db-suites` | 三个隔离 DB 作业 |

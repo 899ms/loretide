@@ -28,7 +28,8 @@ cat >"$BIN_DIR/go" <<'FAKE'
 set -eu
 # Records the invocation and the suite the wrapper exported, so a case can
 # assert both the command line and the environment the suite would have run in.
-printf '%s|suite=%s\n' "$*" "${LORETIDE_DB_TEST_SUITE:-}" >>"$LORETIDE_TEST_GO_CALLS"
+printf '%s|suite=%s|topic-url=%s\n' "$*" "${LORETIDE_DB_TEST_SUITE:-}" \
+  "${LORETIDE_TOPIC_TEST_DATABASE_URL:-}" >>"$LORETIDE_TEST_GO_CALLS"
 FAKE
 chmod 755 "$BIN_DIR/go"
 
@@ -78,22 +79,29 @@ expect_refusal() {
 
 # Exact command construction, and the suite the wrapper sets for the child.
 PATH="$BIN_DIR:$PATH" complete_env bash "$SCRIPT_DIR/test-go-db.sh" --suite handler
-expect_call "handler" "test -count=1 ./internal/handler|suite=handler"
+expect_call "handler" "test -count=1 ./internal/handler|suite=handler|topic-url="
 
 PATH="$BIN_DIR:$PATH" complete_env bash "$SCRIPT_DIR/test-go-db.sh" --suite cmd-server
-expect_call "cmd-server" "test -count=1 ./cmd/server|suite=cmd-server"
+expect_call "cmd-server" "test -count=1 ./cmd/server|suite=cmd-server|topic-url="
+
+PATH="$BIN_DIR:$PATH" complete_env bash "$SCRIPT_DIR/test-go-db.sh" --suite topic-planning
+expect_call "topic-planning" "test -count=1 ./internal/content/topic-planning|suite=topic-planning|topic-url=postgres://r:p@127.0.0.1:5432/loretide_db?sslmode=disable"
 
 PATH="$BIN_DIR:$PATH" complete_env bash "$SCRIPT_DIR/test-go-db.sh" --suite handler --json
-expect_call "handler --json" "test --json -count=1 ./internal/handler|suite=handler"
+expect_call "handler --json" "test --json -count=1 ./internal/handler|suite=handler|topic-url="
 
 PATH="$BIN_DIR:$PATH" complete_env bash "$SCRIPT_DIR/test-go-db.sh" --suite handler -- -run TestOne
-expect_call "extra go args" "test -count=1 -run TestOne ./internal/handler|suite=handler"
+expect_call "extra go args" "test -count=1 -run TestOne ./internal/handler|suite=handler|topic-url="
 
 # The suite is set by the wrapper, not inherited: an environment built for the
 # other suite must not steer this command at the other suite's database.
 PATH="$BIN_DIR:$PATH" LORETIDE_DB_TEST_SUITE=cmd-server complete_env \
   bash "$SCRIPT_DIR/test-go-db.sh" --suite handler
-expect_call "inherited suite is overridden" "test -count=1 ./internal/handler|suite=handler"
+expect_call "inherited suite is overridden" "test -count=1 ./internal/handler|suite=handler|topic-url="
+
+PATH="$BIN_DIR:$PATH" LORETIDE_TOPIC_TEST_DATABASE_URL=postgres://stale complete_env \
+  bash "$SCRIPT_DIR/test-go-db.sh" --suite handler
+expect_call "inherited topic target is cleared" "test -count=1 ./internal/handler|suite=handler|topic-url="
 
 # No opt-in, no run.
 expect_refusal "absent opt-in" 2 --suite handler

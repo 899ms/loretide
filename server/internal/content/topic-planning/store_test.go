@@ -94,6 +94,11 @@ func TestWritesFailClosedWithoutTheWorkspaceFence(t *testing.T) {
 			_, err := store.SetSources(t.Context(), "workspace-a", "actor-a", "topic-a", nil, nil)
 			return err
 		},
+		"patch-body": func() error {
+			_, err := store.PatchBody(t.Context(), "workspace-a", "actor-a", "topic-a",
+				TopicBodyPatch{IPFit: PatchString{Set: true, Value: "edited"}})
+			return err
+		},
 	}
 	for name, write := range writes {
 		t.Run(name, func(t *testing.T) {
