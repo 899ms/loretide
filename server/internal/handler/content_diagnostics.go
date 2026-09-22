@@ -19,7 +19,7 @@ import (
 
 func (h *Handler) diagnosticScope(w http.ResponseWriter, r *http.Request) (diagnostics.Scope, bool) {
 	if h.ContentDiagnostics == nil {
-		writeError(w, 503, "diagnostics unavailable")
+		diagnosticErrorCode(w, http.StatusServiceUnavailable, "DIAGNOSTICS_UNAVAILABLE")
 		return diagnostics.Scope{}, false
 	}
 	if isMachineCredentialActor(r) {
@@ -65,6 +65,10 @@ func diagnosticError(w http.ResponseWriter, err error) {
 		status = 409
 		code = "INPUT_CONFLICT"
 	}
+	diagnosticErrorCode(w, status, code)
+}
+
+func diagnosticErrorCode(w http.ResponseWriter, status int, code string) {
 	e := diagnostics.Sanitize(diagnostics.Event{Code: code, Component: "diagnostics", Trace: w.Header().Get("X-Diagnostic-Trace")})
 	writeJSON(w, status, map[string]any{"error": e.Message, "code": e.Code, "trace_id": e.Trace, "component": e.Component, "retryable": e.Retryable, "next_action": e.Next})
 }
@@ -235,7 +239,7 @@ func (h *Handler) ContentDiagnosticStream(w http.ResponseWriter, r *http.Request
 	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		writeError(w, 503, "stream unavailable")
+		diagnosticErrorCode(w, http.StatusServiceUnavailable, "STREAM_UNAVAILABLE")
 		return
 	}
 	w.Header().Set("Content-Type", "application/x-ndjson")

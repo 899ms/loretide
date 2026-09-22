@@ -4,7 +4,7 @@ import("context";"log/slog";"net/http";"net/textproto";"regexp";"sort";"strings"
 
 var codes=map[string]string{
  "":"Completed", "AUTHORIZATION_DENIED":"Access denied", "FILE_MISSING":"File unavailable", "FILE_CHANGED":"File changed",
- "DATABASE_UNAVAILABLE":"Database write failed", "NETWORK_UNAVAILABLE":"Connection interrupted", "SEARCH_FAILED":"Search failed",
+ "DATABASE_UNAVAILABLE":"Database write failed", "NETWORK_UNAVAILABLE":"Connection interrupted", "DIAGNOSTICS_UNAVAILABLE":"Diagnostics unavailable", "STREAM_UNAVAILABLE":"Diagnostic stream unavailable", "SEARCH_FAILED":"Search failed",
  "MODEL_AUTH":"Model authentication failed", "MODEL_QUOTA":"Model quota exhausted", "OUTPUT_SCHEMA":"Output format rejected",
  "TIMEOUT":"Operation timed out", "CANCELLED":"Operation cancelled", "DUPLICATE":"Duplicate event ignored", "LATE_RESULT":"Late result ignored",
  "INPUT_CONFLICT":"Input conflict", "UI_ERROR":"Browser rendering failed", "INTERNAL":"Internal error", "CLOCK_SKEW":"Clock skew detected",
@@ -127,7 +127,7 @@ func Sanitize(e Event) Event {
  e.HeadersPresent=safePresence(e.HeadersPresent)
  if e.Upstream!=""&&!hexID.MatchString(e.Upstream){e.Upstream=""}
  e.Next="inspect_trace";e.Retryable=false
- switch e.Code{case "NETWORK_UNAVAILABLE","SEARCH_FAILED","TIMEOUT","DATABASE_UNAVAILABLE":e.Next="retry_simulation";e.Retryable=true;case "AUTHORIZATION_DENIED":e.Next="check_authorization";case "FILE_MISSING","FILE_CHANGED":e.Next="check_registered_file";case "MODEL_AUTH","MODEL_QUOTA":e.Next="check_local_client"}
+ switch e.Code{case "NETWORK_UNAVAILABLE","SEARCH_FAILED","TIMEOUT","DATABASE_UNAVAILABLE":e.Next="retry_simulation";e.Retryable=true;case "DIAGNOSTICS_UNAVAILABLE","STREAM_UNAVAILABLE":e.Next="retry_query";e.Retryable=true;case "AUTHORIZATION_DENIED":e.Next="check_authorization";case "FILE_MISSING","FILE_CHANGED":e.Next="check_registered_file";case "MODEL_AUTH","MODEL_QUOTA":e.Next="check_local_client"}
  return e
 }
 type LogBuffer struct{mu sync.Mutex;events []Event;capacity int;Dropped atomic.Int64;Errors atomic.Int64}
