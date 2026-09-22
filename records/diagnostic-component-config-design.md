@@ -40,18 +40,86 @@
   `unknown`，不能把缺项解释成 `unconfigured`。执行策略另以只读 `ExecutionFact` 注入当前的
   `disabled`，没有任何接口可把它启用；浏览器客户端永远拿不到私有 registrar。
 
-## 建议实施切片（均须主控审查后另开卡）
+## 可派发实施卡草案（主控预占后才可实现）
 
-1. **卡 A：服务端合同和 api/database/files 注册（P1）**
-   - 预计：`server/internal/content/diagnostics/*`、`server/cmd/server/main.go`、`router.go`、
-     `packages/core/content/diagnostics/contract.ts` 及对应非 UI 纯函数测试。
-   - 依赖：本规格的字段、优先级和兼容规则；不接触真实执行器。
-   - 回滚：revert 该卡的代码提交；新增响应字段为可选，旧客户端保持现有展示。
+两张卡共同基线为 `79510d5329856056c61583d3b874a6874e25dd88`；本 PR 的设计头为
+`f133dcb47863b55037800f0bae4f9923227407fd`。它们只覆盖 `api/database/files` 的事实合同。
+`daemon`、`search`、`web` 能力注册、`executor_host`、真实执行器启用和任何 UI 改动均不在这两张卡内。
 
-2. **卡 B：daemon/executor/search 的具名事实提供者与页面呈现（P2）**
-   - 预计：runtime 配置投影/adaptor、执行策略 adapter、前端 contract/诊断概览及非 UI 纯函数测试。
-   - 依赖：卡 A 的注册接口；daemon 的范围语义和任何 search host 必须先获主控裁定。
-   - 回滚：revert 该卡；没有提供者时统一安全回落 `unknown`，不回填模拟或历史心跳。
+### A1（S）纯内存事实注册与归约器
+
+**目标与依赖**：在不改 HTTP、router、Store 或 wire response 的前提下，实现本规格的来源分区、generation
+和纯归约规则。依赖仅为本记录和 `specs/032-diagnostic-component-config-contract/spec.md`；不依赖数据库、
+启动配置、服务或 A2。
+
+**预计文件和真实符号**：
+
+| 操作 | 文件 | 符号 / 边界 |
+|---|---|---|
+| 新增 | `server/internal/content/diagnostics/component_facts.go` | 新的未导出 `componentFactRegistry`、`sourceSnapshot`、`executionFact`、`registerSourceSnapshot`、`reduceComponentStatus`；仅使用内存 map、`sync` 和 `time`。 |
+| 新增 | `server/internal/content/diagnostics/component_facts_test.go` | `TestComponentFactRegistry...` 与 `TestReduceComponentStatus...`；只构造 registry 和值对象。 |
+| 可选小改 | `server/internal/content/diagnostics/service.go` | 只增加 registry 字段/构造，不改变 `Service.Overview`、`Store.Check`、`Store.Query` 或现有 `Heartbeat` 的响应行为。 |
+
+**完整验收矩阵**：
+
+| 案例 | 断言 |
+|---|---|
+| 来源域 | `server_boot` 只能完整提交 `api,database`；`router_storage` 只能完整提交 `files`；`execution_policy` 组件域为空且 execution fact 必填。越域、缺项、重复组件均拒绝。 |
+| 分区与代际 | `server_boot@g7` + `router_storage@g3` 后，`router_storage@g4` 仅替换 files；`router_storage@g2` 拒绝；相同 generation 仅完全相同快照幂等。 |
+| 未知/未配置 | 无事实或显式 `unknown` 归约为 unknown；只有明确事实才归约为 unconfigured。 |
+| 活性冲突 | configured + 无心跳为 unverified；configured + 新鲜/过期心跳为 healthy/unavailable；unconfigured + 新鲜心跳仍为 unconfigured，带安全冲突原因。 |
+| 执行策略 | execution-policy 的 disabled 覆盖展示；缺 execution source 时默认 unknown；不存在可写入 enabled 的入口。 |
+| 隔离与并发 | 模拟输入无法取得 registrar；并发 reader 只看见完整来源分区，且不丢失其他来源。 |
+
+**无数据库核查方式**：本卡的测试不得创建 `diagnostics.Store`，更不得调用 `NewStore`、`Service.Overview`、
+`Store.Check` 或 `Store.Query`。在 `server/internal/content/diagnostics` 未出现 `TestMain` 的前提下，只运行新
+测试名称，例如 `go test ./server/internal/content/diagnostics -run '^(TestComponentFactRegistry|TestReduceComponentStatus)' -count=1`。
+另以 `rg` 确认新文件不导入 `pgx`/`pgxpool`、不引用 `Store`。这两项均不打开数据库连接。
+
+**兼容、回滚和禁止范围**：A1 不变更 JSON、页面或既有 overview 行为，故旧前后端无 wire 风险。回滚仅 revert
+A1 提交。禁止改 `server/cmd/server/*`、`server/internal/handler/*`、`packages/core/*`、`packages/views/*`，禁止
+迁移、服务、端口、真实执行器、模拟事实写入或 UI 单测。
+
+### A2（M）受控宿主接入与可选响应合同
+
+**前置依赖**：A1 已合并且其纯测试为绿；主控明确预占此卡。只接入已有且可确认的
+`server_boot`（api/database）、`router_storage`（files）和当前只读 `execution_policy=disabled`。不为 web、daemon、
+search 或 executor configuration 发明来源。
+
+**预计文件和真实符号**：
+
+| 操作 | 文件 | 符号 / 边界 |
+|---|---|---|
+| 修改 | `server/internal/content/diagnostics/service.go` | `NewService` 持有 A1 registry；`Overview` 从纯 reducer 取得组件行。数据库现有 `Store.Check` 仍只提供活性，不得读取或回显 DSN。 |
+| 修改 | `server/cmd/server/router.go` | `NewRouterWithOptions` 在 `storage.NewS3StorageFromEnv` / `storage.NewLocalStorageFromEnv` 的既有选择结果处注册 `router_storage` 的 files 事实（仅 configured/unconfigured 与允许的类别）。 |
+| 修改 | `server/cmd/server/main.go` | `main` 已在 `pool.Ping` 后调用 `NewRouterWithOptions` 并取得 `h`；通过 `h.ContentDiagnostics` 注入 `server_boot` 和当前 `executionpolicy.Check` 的只读 disabled 事实。api 的事实不得伪装为监听成功：在没有显式 listener-ready 生命周期改造前只能是配置已知、活性 unknown。 |
+| 可选、后置 | `packages/core/content/diagnostics/contract.ts` | 仅以 `.default("unknown")` 等方式解析新增可选 `config_state`、`health_state`、`execution_state`、安全原因/时间字段；不改变旧字段或触碰视图。 |
+| 可选、后置 | `packages/core/content/diagnostics/contract.test.ts` | 旧 wire payload 缺失新增字段时安全回落；只测 parser，不是 UI 测试。 |
+
+**完整验收矩阵**：
+
+| 案例 | 断言 |
+|---|---|
+| 宿主来源 | pool 成功建立后的 boot 事实不含连接值；S3/local 成功或两者都无的装配结果分别生成 files 的 configured/unconfigured；现有 policy 只产生 disabled。 |
+| 不作伪 | listener 尚未有 ready 回调时 api health 仍为 unknown；`Store.Check` 成功/失败仅改变 database health，不改变 database config。 |
+| 无来源组件 | web/daemon/search 和 executor configuration 在本卡仍为 unknown；现有 browser/daemon heartbeat 不能改变其配置。 |
+| 响应兼容 | 若可选 wire 字段落地，旧客户端忽略字段；新 parser 面对旧后端缺字段回落 unknown/not_applicable，既有 `status`/metrics/scenarios 完整。 |
+| 回归边界 | `ContentDiagnosticClient → Heartbeat("web", ...)` 未变为 registrar；`executionpolicy.Check` 没有 enable 分支；simulation 不写事实。 |
+
+**无数据库核查方式**：不得执行 `go test ./server/cmd/server`，该包有数据库集成 `TestMain`。可以执行 A1 的
+纯测试和核心 parser 测试；对宿主文件只做 `go test -c -o <已验证的临时目录>/server.test ./server/cmd/server`
+（只编译，不执行测试二进制）及源码断言：`main` 的注册在已取得 `h` 后、`router` 的 files 注册紧邻现有 storage
+选择，且注册调用没有原始配置参数。编译产物必须置于临时目录并在核验后移除。禁止执行 `main`、`Overview` 的
+数据库路径或任何本机服务。
+
+**兼容、回滚和禁止范围**：新增 wire 字段必须可选；在未加入 parser 字段时本卡可只落服务端内部行为。回滚仅
+revert A2 提交，恢复当前响应形状和合成状态，不迁移、不回填、不清理历史。禁止页面/翻译/视觉改动、UI 单测、
+computer use、daemon/runtime 查询、search、真实执行器、配置值读取、数据库/端口/服务运行。
+
+### 卡 B：继续搁置
+
+daemon 的 workspace 聚合与显式空注册表、search 的真实宿主、web 的可信部署清单以及 `executor_host` 的受审查
+配置来源尚未裁定。本卡只保留设计，不得因 A1/A2 创建来源、访问 runtime 数据、启用执行器或扩展 UI。
 
 ## 验证与交接
 
