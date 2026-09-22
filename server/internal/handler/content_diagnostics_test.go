@@ -18,6 +18,85 @@ import (
 	"github.com/multica-ai/multica/server/internal/testutil"
 )
 
+type nonFlushingDiagnosticResponse struct {
+	header http.Header
+	body   bytes.Buffer
+	status int
+}
+
+func newNonFlushingDiagnosticResponse() *nonFlushingDiagnosticResponse {
+	return &nonFlushingDiagnosticResponse{header: make(http.Header)}
+}
+
+func (w *nonFlushingDiagnosticResponse) Header() http.Header {
+	return w.header
+}
+
+func (w *nonFlushingDiagnosticResponse) WriteHeader(status int) {
+	w.status = status
+}
+
+func (w *nonFlushingDiagnosticResponse) Write(body []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	return w.body.Write(body)
+}
+
+func assertDiagnosticEarlyError(t *testing.T, response *nonFlushingDiagnosticResponse, code, next string, retryable bool) {
+	t.Helper()
+	if response.status != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d: %s", response.status, http.StatusServiceUnavailable, response.body.String())
+	}
+	var body struct {
+		Error     string `json:"error"`
+		Code      string `json:"code"`
+		Trace     string `json:"trace_id"`
+		Component string `json:"component"`
+		Retryable bool   `json:"retryable"`
+		Next      string `json:"next_action"`
+	}
+	if err := json.Unmarshal(response.body.Bytes(), &body); err != nil {
+		t.Fatalf("decode structured diagnostic error: %v: %s", err, response.body.String())
+	}
+	if body.Error == "" || body.Code != code || body.Component != "diagnostics" || body.Retryable != retryable || body.Next != next {
+		t.Fatalf("unexpected diagnostic error: %+v", body)
+	}
+	if body.Trace != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Fatalf("trace_id = %q, want response trace", body.Trace)
+	}
+}
+
+func TestContentDiagnosticEarlyErrorsStayStructured(t *testing.T) {
+	t.Run("service unavailable before authentication", func(t *testing.T) {
+		response := newNonFlushingDiagnosticResponse()
+		response.Header().Set(middleware.DiagnosticTraceHeader, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+		(&Handler{}).ContentDiagnosticOverview(response, httptest.NewRequest(http.MethodGet, "/api/content-diagnostics/overview", nil))
+		assertDiagnosticEarlyError(t, response, "INTERNAL", "inspect_trace", false)
+	})
+
+	t.Run("stream unavailable after authorization", func(t *testing.T) {
+		h, workspaceID := newDiagnosticWorkspace(t)
+		request := testutil.WithHeaders(httptest.NewRequest(http.MethodGet, "/api/content-diagnostics/stream", nil),
+			"X-User-ID", testUserID, "X-Workspace-ID", workspaceID)
+		response := newNonFlushingDiagnosticResponse()
+		response.Header().Set(middleware.DiagnosticTraceHeader, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+		h.ContentDiagnosticStream(response, request)
+		assertDiagnosticEarlyError(t, response, "INTERNAL", "inspect_trace", false)
+	})
+
+	t.Run("stream capability check does not bypass authorization", func(t *testing.T) {
+		h := Handler{ContentDiagnostics: diagnostics.NewService(nil, "test", true)}
+		request := testutil.WithHeaders(httptest.NewRequest(http.MethodGet, "/api/content-diagnostics/stream", nil),
+			"X-User-ID", "unscoped-user")
+		response := newNonFlushingDiagnosticResponse()
+		h.ContentDiagnosticStream(response, request)
+		if response.status != http.StatusNotFound {
+			t.Fatalf("status = %d, want authorization refusal before stream capability check: %s", response.status, response.body.String())
+		}
+	})
+}
+
 func TestContentDiagnosticsAuthAndFaultGate(t *testing.T) {
 	h := *testHandler
 	h.ContentDiagnostics = diagnostics.NewService(h.NewContentDiagnosticsStore(testPool), "test", false)
