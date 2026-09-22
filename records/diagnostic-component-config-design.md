@@ -1,7 +1,7 @@
 # #239 诊断组件配置事实来源与状态合同设计记录
 
 **日期**：2026-09-22
-**基线**：`79510d5329856056c61583d3b874a6874e25dd88` (`app-main`)
+**审计历史基线**：`79510d5329856056c61583d3b874a6874e25dd88` (`app-main`)
 **范围**：只读源码后的设计记录；本提交不改生产代码、配置、数据库、服务或 UI。
 **关联规格**：[specs/032-diagnostic-component-config-contract/spec.md](../specs/032-diagnostic-component-config-contract/spec.md)
 
@@ -42,8 +42,10 @@
 
 ## 可派发实施卡草案（主控预占后才可实现）
 
-两张卡共同基线为 `79510d5329856056c61583d3b874a6874e25dd88`；本 PR 的设计头为
-`f133dcb47863b55037800f0bae4f9923227407fd`。它们只覆盖 `api/database/files` 的事实合同。
+两张卡的**正式实施基线**必须是本设计 PR 合并后由主控锁定的 `app-main` 提交；派卡时将该实际 SHA
+写入卡片。`79510d5329856056c61583d3b874a6874e25dd88` 仅保留为本设计的审计历史基线，不能作为未来
+实施分支的假定起点。本 PR 当前设计头为 `d21a93743c278cc589c0a285d892a3dbe2526d26`。它们只覆盖
+`api/database/files` 的事实合同。
 `daemon`、`search`、`web` 能力注册、`executor_host`、真实执行器启用和任何 UI 改动均不在这两张卡内。
 
 ### A1（S）纯内存事实注册与归约器
@@ -71,9 +73,10 @@
 | 执行策略 | execution-policy 的 disabled 覆盖展示；缺 execution source 时默认 unknown；不存在可写入 enabled 的入口。 |
 | 隔离与并发 | 模拟输入无法取得 registrar；并发 reader 只看见完整来源分区，且不丢失其他来源。 |
 
-**无数据库核查方式**：本卡的测试不得创建 `diagnostics.Store`，更不得调用 `NewStore`、`Service.Overview`、
-`Store.Check` 或 `Store.Query`。在 `server/internal/content/diagnostics` 未出现 `TestMain` 的前提下，只运行新
-测试名称，例如 `go test ./server/internal/content/diagnostics -run '^(TestComponentFactRegistry|TestReduceComponentStatus)' -count=1`。
+**无数据库核查方式**：从 `server`（唯一含 `go.mod` 的目录；仓库根没有 `go.mod/go.work`）运行。本卡的测试
+不得创建 `diagnostics.Store`，更不得调用 `NewStore`、`Service.Overview`、`Store.Check` 或 `Store.Query`。
+在 `internal/content/diagnostics` 未出现 `TestMain` 的前提下，只运行新测试名称，例如
+`go test ./internal/content/diagnostics -run '^(TestComponentFactRegistry|TestReduceComponentStatus)' -count=1`。
 另以 `rg` 确认新文件不导入 `pgx`/`pgxpool`、不引用 `Store`。这两项均不打开数据库连接。
 
 **兼容、回滚和禁止范围**：A1 不变更 JSON、页面或既有 overview 行为，故旧前后端无 wire 风险。回滚仅 revert
@@ -106,11 +109,11 @@ search 或 executor configuration 发明来源。
 | 响应兼容 | 若可选 wire 字段落地，旧客户端忽略字段；新 parser 面对旧后端缺字段回落 unknown/not_applicable，既有 `status`/metrics/scenarios 完整。 |
 | 回归边界 | `ContentDiagnosticClient → Heartbeat("web", ...)` 未变为 registrar；`executionpolicy.Check` 没有 enable 分支；simulation 不写事实。 |
 
-**无数据库核查方式**：不得执行 `go test ./server/cmd/server`，该包有数据库集成 `TestMain`。可以执行 A1 的
-纯测试和核心 parser 测试；对宿主文件只做 `go test -c -o <已验证的临时目录>/server.test ./server/cmd/server`
-（只编译，不执行测试二进制）及源码断言：`main` 的注册在已取得 `h` 后、`router` 的 files 注册紧邻现有 storage
-选择，且注册调用没有原始配置参数。编译产物必须置于临时目录并在核验后移除。禁止执行 `main`、`Overview` 的
-数据库路径或任何本机服务。
+**无数据库核查方式**：从 `server`（唯一含 `go.mod` 的目录）运行，且不得执行
+`go test ./cmd/server`，该包有数据库集成 `TestMain`。可以执行 A1 的纯测试和核心 parser 测试；对宿主文件
+只做 `go test -c -o <已验证的临时目录>/server.test ./cmd/server`（只编译，不执行测试二进制）及源码断言：
+`main` 的注册在已取得 `h` 后、`router` 的 files 注册紧邻现有 storage 选择，且注册调用没有原始配置参数。
+编译产物必须置于临时目录并在核验后移除。禁止执行 `main`、`Overview` 的数据库路径或任何本机服务。
 
 **兼容、回滚和禁止范围**：新增 wire 字段必须可选；在未加入 parser 字段时本卡可只落服务端内部行为。回滚仅
 revert A2 提交，恢复当前响应形状和合成状态，不迁移、不回填、不清理历史。禁止页面/翻译/视觉改动、UI 单测、
