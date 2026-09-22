@@ -127,6 +127,11 @@ func TestContentTopicWritesAreFencedByWorkspaceDeletion(t *testing.T) {
 			_, err := store.SetSources(ctx, workspaceID, testUserID, created.TopicCardID, nil, nil)
 			return err
 		}},
+		{"patch-body", func() error {
+			_, err := store.PatchBody(ctx, workspaceID, testUserID, created.TopicCardID,
+				topicplanning.TopicBodyPatch{IPFit: topicplanning.PatchString{Set: true, Value: "edited"}})
+			return err
+		}},
 	} {
 		t.Run(write.name, func(t *testing.T) {
 			if err := write.call(); !errors.Is(err, topicplanning.ErrNotFound) {

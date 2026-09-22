@@ -1893,6 +1893,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/", h.CreateContentTopic)
 			r.Route("/{id}", func(r chi.Router) {
 				r.Get("/", h.GetContentTopic)
+				r.Patch("/body", h.PatchContentTopicBody)
 				r.Post("/account", h.SetContentTopicAccount)
 				r.Post("/sources", h.SetContentTopicSources)
 				r.Post("/actions", h.ActOnContentTopic)

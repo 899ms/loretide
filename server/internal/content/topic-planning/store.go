@@ -463,6 +463,62 @@ func (s *Store) SetSources(ctx context.Context, workspaceID, actor, topicCardID 
 	return card, nil
 }
 
+// PatchBody updates only the supplied free-text answers on a topic card.
+// The single conditional UPDATE is intentional: each request writes only its
+// own columns, so a concurrent edit to another answer is not overwritten by a
+// stale full-card read. Empty strings are valid answers; absence is tracked by
+// TopicBodyPatch and leaves a column unchanged.
+func (s *Store) PatchBody(ctx context.Context, workspaceID, actor, topicCardID string, patch TopicBodyPatch) (TopicCard, error) {
+	if workspaceID == "" || actor == "" || topicCardID == "" {
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "edit-body", ErrInvalid)
+		return TopicCard{}, ErrInvalid
+	}
+	if err := patch.Validate(); err != nil {
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "edit-body", err)
+		return TopicCard{}, err
+	}
+
+	tx, err := s.begin(ctx, workspaceID)
+	if err != nil {
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "edit-body", err)
+		return TopicCard{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	ctx, err = s.audit(ctx, tx, workspaceID, actor, topicCardID, "edit-body")
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "edit-body", err)
+		return TopicCard{}, err
+	}
+
+	card, err := scanTopicCard(tx.QueryRow(ctx, `
+		UPDATE content_topic_card
+		SET audience_problem_judgment=CASE WHEN $3 THEN $4 ELSE audience_problem_judgment END,
+			ip_fit=CASE WHEN $5 THEN $6 ELSE ip_fit END,
+			timing=CASE WHEN $7 THEN $8 ELSE timing END,
+			existing_content_relation=CASE WHEN $9 THEN $10 ELSE existing_content_relation END,
+			evidence_gaps_and_investment=CASE WHEN $11 THEN $12 ELSE evidence_gaps_and_investment END,
+			updated_at=now()
+		WHERE workspace_id=$1 AND topic_card_id=$2
+		RETURNING `+topicCardColumns, workspaceID, topicCardID,
+		patch.AudienceProblemJudgment.Set, patch.AudienceProblemJudgment.Value,
+		patch.IPFit.Set, patch.IPFit.Value,
+		patch.Timing.Set, patch.Timing.Value,
+		patch.ExistingContentRelation.Set, patch.ExistingContentRelation.Value,
+		patch.EvidenceGapsAndInvestment.Set, patch.EvidenceGapsAndInvestment.Value))
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "edit-body", err)
+		return TopicCard{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		s.reportFailure(ctx, workspaceID, actor, topicCardID, "edit-body", err)
+		return TopicCard{}, ErrStorage
+	}
+	return card, nil
+}
+
 func (s *Store) Get(ctx context.Context, workspaceID, actor, topicCardID string) (TopicCard, error) {
 	if s == nil || s.DB == nil {
 		if s != nil {
@@ -722,11 +778,13 @@ func (s *Store) GetBrief(ctx context.Context, workspaceID, actor, topicCardID, r
 	return brief, err
 }
 
-const topicCardSelect = `SELECT topic_card_id, workspace_id, account_id,
+const topicCardColumns = `topic_card_id, workspace_id, account_id,
 	audience_problem_judgment, ip_fit, timing, existing_content_relation,
 	evidence_gaps_and_investment, channels, fit_source_ids, evidence_source_ids,
 	recommended_action, status, decision_reason, decision_note,
-	started_brief_revision_id, created_at, updated_at
+	started_brief_revision_id, created_at, updated_at`
+
+const topicCardSelect = `SELECT ` + topicCardColumns + `
 	FROM content_topic_card`
 
 type scanner interface{ Scan(...any) error }

@@ -417,3 +417,24 @@ UsesNeutralExpression bool `json:"uses_neutral_expression"`
 4. **归档的条目可引、已建立的引用不失效**（FR-014）。原文只说收件箱支持归档，没说归档对引用意味着什么。**裁决已接受。**
 5. **冻结走扩展字段而不是 `required_sources`**（FR-015、FR-016）。依据是 `snapshot.go:45-57` 的注释与 023 的负例，不是 SOP。**裁决已接受。**
 6. **界面要写明「人手选的」**（FR-023）。原文没这句；它是为了不让本卡的界面把 028 守住的「0 条系统生成的关联资料」在视觉上推翻。
+
+---
+
+## 后续切片：Issue #238 已建卡五项正文编辑（2026-09-22）
+
+FR-031 与 Out of Scope 第 6 条在 030 的交付范围内仍然成立：030 没有把
+引用端点顺手扩成整卡编辑。Issue #238 是该条明确要求的**另一张卡**，只交付
+后端合同、存储、路由和定向测试；页面编辑控件另行立卡与人工验收。
+
+- 专用入口是 `PATCH /api/content-topics/{id}/body`。它仅接受
+  `audience_problem_judgment`、`ip_fit`、`timing`、`existing_content_relation`、
+  `evidence_gaps_and_investment` 五个字符串键；返回更新后的完整选题卡。
+- 每个键独立部分更新：省略保留原值，显式 `""` 清空。`null`、非字符串、未知键、
+  空对象或多余 JSON 值一律 `400`，且不写卡或审计成功事件。
+- `channels`、`recommended_action`、账号、两组引用、状态、
+  `decision_reason`、`decision_note` 不属于该入口；简报版本与开始快照仍是
+  append-only、不可由该入口变更。
+- 写入和审计在同一个工作区删除栅栏事务内完成。存储层以单条条件 `UPDATE` 做部分
+  更新，不能先读整卡再全量覆写，因此两个请求分别改不同字段不会互相覆盖。
+- 同 030 的授权口径：路径卡 id 在 `chi.URLParam` 读取，工作区来自既有授权上下文；
+  不同工作区或无权访问继续是既有的 `404` 形状。

@@ -1038,3 +1038,158 @@ func TestSetSourcesAcceptsArchivedSource(t *testing.T) {
 		t.Errorf("updated.FitSourceIDs = %v, want [src-archived]", updated.FitSourceIDs)
 	}
 }
+
+func TestPatchBodyChangesOnlyItsFiveFieldsAndLeavesFrozenObjectsUntouched(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	seedAccount(t, fx, string(ipprofile.ScopeAll), readyProfile())
+	cardID, briefID := seedStartableBrief(t, fx)
+	snapshot, err := fx.store.Start(ctx, startWorkspace, "actor-start", cardID, briefID,
+		startRequest(string(ipprofile.ScopeWeb)))
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	beforeCard, err := fx.store.Get(ctx, startWorkspace, "actor-start", cardID)
+	if err != nil {
+		t.Fatalf("get before patch: %v", err)
+	}
+	beforeBrief, err := fx.store.GetBrief(ctx, startWorkspace, "actor-start", cardID, briefID)
+	if err != nil {
+		t.Fatalf("get brief before patch: %v", err)
+	}
+	beforeSnapshot, err := fx.store.GetSnapshot(ctx, startWorkspace, "actor-start", cardID, snapshot.SnapshotID)
+	if err != nil {
+		t.Fatalf("get snapshot before patch: %v", err)
+	}
+
+	updated, err := fx.store.PatchBody(ctx, startWorkspace, "actor-start", cardID, TopicBodyPatch{
+		IPFit:                     PatchString{Set: true, Value: ""},
+		Timing:                    PatchString{Set: true, Value: "publish after the next interview"},
+		EvidenceGapsAndInvestment: PatchString{Set: true, Value: "need one primary source"},
+	})
+	if err != nil {
+		t.Fatalf("patch body: %v", err)
+	}
+	if updated.IPFit != "" || updated.Timing != "publish after the next interview" ||
+		updated.EvidenceGapsAndInvestment != "need one primary source" {
+		t.Fatalf("updated editable fields = %#v", updated)
+	}
+	if updated.AudienceProblemJudgment != beforeCard.AudienceProblemJudgment ||
+		updated.ExistingContentRelation != beforeCard.ExistingContentRelation ||
+		!reflect.DeepEqual(updated.Channels, beforeCard.Channels) ||
+		updated.RecommendedAction != beforeCard.RecommendedAction ||
+		updated.Status != beforeCard.Status ||
+		updated.DecisionReason != beforeCard.DecisionReason ||
+		updated.DecisionNote != beforeCard.DecisionNote ||
+		!reflect.DeepEqual(updated.AccountID, beforeCard.AccountID) ||
+		!reflect.DeepEqual(updated.FitSourceIDs, beforeCard.FitSourceIDs) ||
+		!reflect.DeepEqual(updated.EvidenceSourceIDs, beforeCard.EvidenceSourceIDs) ||
+		!reflect.DeepEqual(updated.StartedBriefRevisionID, beforeCard.StartedBriefRevisionID) {
+		t.Fatalf("body patch changed an out-of-scope card field: before=%#v after=%#v", beforeCard, updated)
+	}
+
+	afterBrief, err := fx.store.GetBrief(ctx, startWorkspace, "actor-start", cardID, briefID)
+	if err != nil {
+		t.Fatalf("get brief after patch: %v", err)
+	}
+	afterSnapshot, err := fx.store.GetSnapshot(ctx, startWorkspace, "actor-start", cardID, snapshot.SnapshotID)
+	if err != nil {
+		t.Fatalf("get snapshot after patch: %v", err)
+	}
+	if !reflect.DeepEqual(afterBrief, beforeBrief) {
+		t.Fatalf("body patch changed frozen brief: before=%#v after=%#v", beforeBrief, afterBrief)
+	}
+	if !reflect.DeepEqual(afterSnapshot, beforeSnapshot) {
+		t.Fatalf("body patch changed start snapshot: before=%#v after=%#v", beforeSnapshot, afterSnapshot)
+	}
+	if events := fx.db.Count(t, `SELECT count(*) FROM content_operation_audit
+		WHERE workspace_id=$1 AND payload->>'object_id'=$2 AND payload->>'step'='edit-body'`,
+		startWorkspace, cardID); events != 1 {
+		t.Fatalf("edit-body audit events = %d, want 1", events)
+	}
+}
+
+func TestPatchBodyAuditFailureRollsBackCardWrite(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, actor = "workspace-body-audit", "actor-body-audit"
+	created, err := fx.store.Create(ctx, actor, completeCard(workspace))
+	if err != nil {
+		t.Fatalf("create card: %v", err)
+	}
+	before, err := fx.store.Get(ctx, workspace, actor, created.TopicCardID)
+	if err != nil {
+		t.Fatalf("get card before failed patch: %v", err)
+	}
+
+	auditID := diagnostics.NewID()
+	fx.db.InsertNoID(t, "content_operation_audit", testutil.Cols{
+		"event_id": auditID, "workspace_id": workspace, "payload": testutil.Raw(`'{}'::jsonb`),
+	}, "event_id=$1", auditID)
+	ids := []string{auditID, diagnostics.NewID()}
+	index := 0
+	fx.store.NewID = func() string {
+		id := ids[index]
+		index++
+		return id
+	}
+
+	_, err = fx.store.PatchBody(ctx, workspace, actor, created.TopicCardID,
+		TopicBodyPatch{Timing: PatchString{Set: true, Value: "must not persist"}})
+	if err == nil {
+		t.Fatal("body patch succeeded even though its audit insert failed")
+	}
+	after, err := fx.store.Get(ctx, workspace, actor, created.TopicCardID)
+	if err != nil {
+		t.Fatalf("get card after failed patch: %v", err)
+	}
+	if !reflect.DeepEqual(after, before) {
+		t.Fatalf("audit failure changed card: before=%#v after=%#v", before, after)
+	}
+	if events := fx.db.Count(t, `SELECT count(*) FROM content_operation_audit WHERE event_id=$1`, auditID); events != 1 {
+		t.Fatalf("audit collision count = %d, want original event only", events)
+	}
+}
+
+func TestPatchBodyConcurrentDifferentFieldsDoNotOverwriteEachOther(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, actor = "workspace-body-concurrent", "actor-body"
+	created, err := fx.store.Create(ctx, actor, completeCard(workspace))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var group sync.WaitGroup
+	group.Go(func() {
+		<-start
+		_, patchErr := fx.store.PatchBody(ctx, workspace, actor, created.TopicCardID,
+			TopicBodyPatch{AudienceProblemJudgment: PatchString{Set: true, Value: "updated audience"}})
+		errs <- patchErr
+	})
+	group.Go(func() {
+		<-start
+		_, patchErr := fx.store.PatchBody(ctx, workspace, actor, created.TopicCardID,
+			TopicBodyPatch{Timing: PatchString{Set: true, Value: "updated timing"}})
+		errs <- patchErr
+	})
+	close(start)
+	group.Wait()
+	close(errs)
+	for patchErr := range errs {
+		if patchErr != nil {
+			t.Fatalf("concurrent body patch: %v", patchErr)
+		}
+	}
+
+	stored, err := fx.store.Get(ctx, workspace, actor, created.TopicCardID)
+	if err != nil {
+		t.Fatalf("get after concurrent patches: %v", err)
+	}
+	if stored.AudienceProblemJudgment != "updated audience" || stored.Timing != "updated timing" {
+		t.Fatalf("concurrent patches lost an edit: %#v", stored)
+	}
+}

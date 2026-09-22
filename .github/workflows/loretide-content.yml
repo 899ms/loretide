@@ -166,6 +166,8 @@ jobs:
             slug: handler
           - suite: cmd-server
             slug: cmdserver
+          - suite: topic-planning
+            slug: topicplanning
     concurrency:
       group: loretide-db-suites-${{ matrix.slug }}-${{ github.ref }}
       cancel-in-progress: false
@@ -345,6 +347,23 @@ jobs:
           }
           if (failed.length > 0) {
             throw new Error(`${suite}: failures: ${failed.slice(0, 20).join(', ')}`);
+          }
+
+          // topic-planning has older integration fixtures that skip on a
+          // direct go test without their private URL. Its package can still
+          // pass from pure tests, so require this Issue's three database cases
+          // themselves to have executed and passed.
+          const requiredPasses = suite === 'topic-planning'
+            ? [
+                'TestPatchBodyChangesOnlyItsFiveFieldsAndLeavesFrozenObjectsUntouched',
+                'TestPatchBodyAuditFailureRollsBackCardWrite',
+                'TestPatchBodyConcurrentDifferentFieldsDoNotOverwriteEachOther',
+              ]
+            : [];
+          for (const name of requiredPasses) {
+            if (terminal.get(name) !== 'pass') {
+              throw new Error(`${suite}: ${name} = ${terminal.get(name) ?? 'no terminal event'}, want pass`);
+            }
           }
 
           // Skips are named rather than absorbed into a total: these packages

@@ -27,7 +27,7 @@ if [[ "$LORETIDE_DB_TESTS" != "1" ]]; then
 fi
 
 case "$suite" in
-  handler|cmd-server) ;;
+  handler|cmd-server|topic-planning) ;;
   *) echo "refusing database tests: unknown suite '$suite'" >&2; exit 2 ;;
 esac
 

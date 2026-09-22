@@ -2,8 +2,10 @@
 # Run one package-wide database test suite against an explicitly provisioned,
 # isolated database.
 #
-# The two suites it can run — internal/handler and cmd/server — refuse to start
-# without the full LORETIDE_DB_TEST_* contract (server/internal/testutil/dbtest).
+# The wrapper requires the full LORETIDE_DB_TEST_* contract for all three
+# suites. internal/handler and cmd/server repeat that check in Go; the older
+# topic-planning fixture itself skips on a direct go test without its private
+# URL, so it must be invoked through this wrapper in CI.
 # This wrapper exists so the contract is spelled once, in a file that is
 # reviewed, rather than retyped into every job and every shell.
 #
@@ -18,7 +20,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 
 usage() {
-  echo "usage: $0 --suite handler|cmd-server [--json] [-- go-test-args...]" >&2
+  echo "usage: $0 --suite handler|cmd-server|topic-planning [--json] [-- go-test-args...]" >&2
 }
 
 suite=
@@ -27,7 +29,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --suite)
       case "${2:-}" in
-        handler|cmd-server) suite=$2 ;;
+        handler|cmd-server|topic-planning) suite=$2 ;;
         *)
           usage
           exit 2
@@ -57,9 +59,8 @@ fi
 
 # The opt-in and every identifier must already be in the environment. This
 # wrapper checks them so the failure names the missing variable instead of
-# surfacing as a Go panic, but the Go guard checks them again: the shell check
-# and the Go check are defence in depth against the same mistake, not two
-# independent proofs.
+# surfacing as a Go panic. handler and cmd/server check them again in Go; the
+# topic-planning fixture is older and only receives its private URL below.
 missing=
 for variable in \
   LORETIDE_DB_TESTS \
@@ -89,10 +90,18 @@ fi
 # An inherited value is how a handler command ends up pointed at the other
 # suite's database, and the Go guard compares this against its own constant.
 export LORETIDE_DB_TEST_SUITE="$suite"
+unset LORETIDE_TOPIC_TEST_DATABASE_URL
 
 case "$suite" in
   handler) package=./internal/handler ;;
   cmd-server) package=./cmd/server ;;
+  # The store fixture creates an isolated schema inside this already
+  # per-run-provisioned database. Keep its historical variable private to this
+  # one process so a developer shell can never inherit an opt-in target.
+  topic-planning)
+    package=./internal/content/topic-planning
+    export LORETIDE_TOPIC_TEST_DATABASE_URL="$LORETIDE_DB_TEST_DATABASE_URL"
+    ;;
 esac
 
 cd "$REPO_ROOT/server"

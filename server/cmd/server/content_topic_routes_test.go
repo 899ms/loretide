@@ -23,6 +23,7 @@ var contentTopicRoutes = []struct {
 	{http.MethodGet, "/api/content-topics/", "/api/content-topics"},
 	{http.MethodPost, "/api/content-topics/", "/api/content-topics"},
 	{http.MethodGet, "/api/content-topics/{id}/", "/api/content-topics/topic-1"},
+	{http.MethodPatch, "/api/content-topics/{id}/body", "/api/content-topics/topic-1/body"},
 	{http.MethodPost, "/api/content-topics/{id}/account", "/api/content-topics/topic-1/account"},
 	{http.MethodPost, "/api/content-topics/{id}/sources", "/api/content-topics/topic-1/sources"},
 	{http.MethodPost, "/api/content-topics/{id}/actions", "/api/content-topics/topic-1/actions"},
@@ -159,6 +160,97 @@ func TestContentTopicPathIDSurvivesTheRealMiddleware(t *testing.T) {
 	}
 	if got.TopicCardID != created.TopicCardID {
 		t.Fatalf("path named %q, response returned %q", created.TopicCardID, got.TopicCardID)
+	}
+}
+
+func TestContentTopicBodyPatchUsesThePathIDAndRejectsExcludedFields(t *testing.T) {
+	if testPool == nil || testServer == nil {
+		t.Skip("database not available")
+	}
+	fx := testutil.New(testPool, testWorkspaceID, testUserID)
+	response := accountAPIRequest(t, http.MethodPost, "/api/content-topics", `{
+		"audience_problem_judgment":"audience/problem/judgment",
+		"ip_fit":"initial fit",
+		"timing":"initial timing",
+		"existing_content_relation":"existing relation",
+		"evidence_gaps_and_investment":"initial evidence gap",
+		"channels":["zhihu"],
+		"recommended_action":"start"
+	}`)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("create topic = %d, want 201", response.StatusCode)
+	}
+	var created struct {
+		TopicCardID string `json:"topic_card_id"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.TopicCardID == "" || created.TopicCardID == testWorkspaceID {
+		t.Fatalf("topic id %q cannot prove path/context separation", created.TopicCardID)
+	}
+	fx.Cleanup(t, `DELETE FROM content_operation_audit
+		WHERE workspace_id=$1 AND payload->>'object_id'=$2`, testWorkspaceID, created.TopicCardID)
+	fx.Cleanup(t, `DELETE FROM content_brief_revision WHERE topic_card_id=$1`, created.TopicCardID)
+	fx.Cleanup(t, `DELETE FROM content_topic_card WHERE topic_card_id=$1`, created.TopicCardID)
+
+	patched := accountAPIRequest(t, http.MethodPatch,
+		"/api/content-topics/"+created.TopicCardID+"/body", `{
+			"ip_fit":"",
+			"timing":"publish while the evidence is current"
+		}`)
+	defer patched.Body.Close()
+	if patched.StatusCode != http.StatusOK {
+		t.Fatalf("patch topic body = %d, want 200", patched.StatusCode)
+	}
+	var got struct {
+		TopicCardID             string   `json:"topic_card_id"`
+		AudienceProblemJudgment string   `json:"audience_problem_judgment"`
+		IPFit                   string   `json:"ip_fit"`
+		Timing                  string   `json:"timing"`
+		ExistingContentRelation string   `json:"existing_content_relation"`
+		Channels                []string `json:"channels"`
+		RecommendedAction       string   `json:"recommended_action"`
+	}
+	if err := json.NewDecoder(patched.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.TopicCardID != created.TopicCardID {
+		t.Fatalf("path named %q, response returned %q", created.TopicCardID, got.TopicCardID)
+	}
+	if got.IPFit != "" || got.Timing != "publish while the evidence is current" {
+		t.Fatalf("patched body = ip_fit %q, timing %q", got.IPFit, got.Timing)
+	}
+	if got.AudienceProblemJudgment != "audience/problem/judgment" ||
+		got.ExistingContentRelation != "existing relation" ||
+		len(got.Channels) != 1 || got.Channels[0] != "zhihu" || got.RecommendedAction != "start" {
+		t.Fatalf("body patch changed excluded fields: %+v", got)
+	}
+
+	invalid := accountAPIRequest(t, http.MethodPatch,
+		"/api/content-topics/"+created.TopicCardID+"/body", `{"channels":["xiaohongshu"]}`)
+	defer invalid.Body.Close()
+	if invalid.StatusCode != http.StatusBadRequest {
+		t.Fatalf("patch excluded field = %d, want 400", invalid.StatusCode)
+	}
+
+	read := accountAPIRequest(t, http.MethodGet, "/api/content-topics/"+created.TopicCardID, "")
+	defer read.Body.Close()
+	if read.StatusCode != http.StatusOK {
+		t.Fatalf("read after invalid patch = %d, want 200", read.StatusCode)
+	}
+	var unchanged struct {
+		IPFit     string `json:"ip_fit"`
+		Timing    string `json:"timing"`
+		Channels  []string `json:"channels"`
+	}
+	if err := json.NewDecoder(read.Body).Decode(&unchanged); err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.IPFit != "" || unchanged.Timing != "publish while the evidence is current" ||
+		len(unchanged.Channels) != 1 || unchanged.Channels[0] != "zhihu" {
+		t.Fatalf("invalid patch changed stored card: %+v", unchanged)
 	}
 }
 
