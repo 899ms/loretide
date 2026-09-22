@@ -35,6 +35,10 @@
   全局 daemon 配置。
 - `simulation_enabled` 仅来自开发诊断模拟开关；模拟 run 或模拟心跳不得写入配置事实，更不得令真实组件变绿。
 - 任何配置事实只含枚举、时间、来源和安全的版本/原因码；不复制环境变量、连接串、文件路径、bucket 或凭据。
+- 事实注册必须按来源分区并带该来源内单调 generation：`server_boot` 的 `api/database` 与
+  `router_storage` 的 `files` 各自原子替换，不能互相清空。缺项是校验错误；失去事实只能显式报
+  `unknown`，不能把缺项解释成 `unconfigured`。执行策略另以只读 `ExecutionFact` 注入当前的
+  `disabled`，没有任何接口可把它启用；浏览器客户端永远拿不到私有 registrar。
 
 ## 建议实施切片（均须主控审查后另开卡）
 

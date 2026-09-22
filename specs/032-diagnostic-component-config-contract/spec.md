@@ -41,23 +41,45 @@ ConfigSource = server_boot | router_storage | web_capability | runtime_registry 
                execution_policy | search_host
 ```
 
-`ComponentConfigFact` contains only `component`, `config_state`, `source`, `observed_at`, an optional
-safe `version`, and an optional fixed `reason_code`. It has no raw env value, URL, host, path, bucket,
+`ComponentConfigFact` contains only `component`, `config_state`, `observed_at`, an optional safe
+`version`, and an optional fixed `reason_code`. It has no raw env value, URL, host, path, bucket,
 credential, request body, or runtime identity. `LivenessFact` independently contains component,
-health evidence, observation time, and safe version/reason. `ExecutionState` exists so a disabled real
+health evidence, observation time, and safe version/reason. `ExecutionFact` contains `component=executor`,
+`execution_state`, `observed_at`, and a fixed reason code. `ExecutionState` exists so a disabled real
 executor cannot be mislabeled as missing configuration.
 
-The host gets a narrow injection interface, conceptually:
+The host gets a narrow, process-private, **source-partitioned** injection interface, conceptually:
 
 ```text
-RegisterComponentConfig(snapshot []ComponentConfigFact) error
+RegisterSourceSnapshot(SourceSnapshot{
+  source ConfigSource,
+  generation uint64,              // monotonic within this source only
+  components []ComponentConfigFact,
+  execution *ExecutionFact        // permitted only for execution_policy
+}) error
 RecordLiveness(fact LivenessFact)
 ```
 
-`RegisterComponentConfig` replaces one validated snapshot atomically; it is not a public HTTP endpoint
-and it is not callable by the simulator. The diagnostics package validates component/source ownership,
-normalizes tokens, rejects an older generation, and copies the snapshot before returning an overview.
-The host owns the truth; the service owns validation, storage and reduction.
+The registration domain is fixed by `ConfigSource`: `server_boot` owns `api,database`; `router_storage`
+owns `files`; every other source owns its same-named single component, except `execution_policy`, which
+owns the executor execution fact and may supply its config fact only when a reviewed real-executor owner
+exists. Each call must contain the complete domain for *its* source, and it atomically replaces only that
+source partition. It does not delete another source's facts. A source's absent component is a validation
+error; a host that no longer knows a fact must explicitly submit `config_state=unknown`, while
+`unconfigured` remains an affirmative assertion.
+
+`generation` is stored per `ConfigSource`, not globally. A lower generation is rejected; an equal
+generation is idempotent only when its normalized snapshot is identical, otherwise it is rejected; a
+higher generation replaces that source partition. For example, `server_boot@g7` may publish configured
+`api` and `database`, then `router_storage@g3` may publish `files=unconfigured`; a later
+`router_storage@g4` with `files=configured` changes only `files`, preserving both boot facts. A delayed
+`router_storage@g2` is rejected. This gives reloads atomicity without allowing an unrelated source to
+erase other components.
+
+The registrar is not a public HTTP endpoint and is not callable by the simulator. The diagnostics package
+validates source/domain ownership, normalizes tokens, and copies a coherent combined snapshot before
+returning an overview. The trusted host owns facts; the service owns validation, partition storage and
+reduction.
 
 ### 2. Source ownership and registration points
 
@@ -66,14 +88,15 @@ The host owns the truth; the service owns validation, storage and reduction.
 | api | `server_boot` | `cmd/server/main.go`, after the app listener is successfully bound or an equivalent confirmed server-ready lifecycle event | the owning host has an explicit disabled/no-listener mode; a failure before serving remains `unknown` to an unavailable overview |
 | database | `server_boot` | `main.go`, from successfully constructed database configuration/pool, without exposing the DSN | the host has a defined optional-database mode and explicitly selects it; current boot failure is not that mode |
 | files | `router_storage` | `NewRouterWithOptions`, immediately after S3/local selection | both supported constructors explicitly yield no store |
-| web | `web_capability` | a future authenticated capability registration owned by the deployed web host | the web host explicitly registers that diagnostics capability is omitted; no browser heartbeat is sufficient |
+| web | `web_capability` | a future server-side adapter fed by a verified deployment/capability inventory; it alone holds the private registrar | that trusted adapter explicitly declares diagnostics capability omitted; no browser heartbeat is sufficient |
 | daemon | `runtime_registry` | a future adapter over explicit runtime-registration configuration, with documented workspace/aggregation scope | the registry supplies an explicit empty/disabled declaration for that scope |
 | executor | `execution_policy` | a future policy adapter after review | only when a real executor configuration owner explicitly says none is configured; policy-disabled is **not** this state |
 | search | `search_host` | a future actual search host | only when that host explicitly declares its search integration absent |
 
 The current `handler.ContentDiagnosticClient` web heartbeat and the `agent_runtime` HTTP/WebSocket
-heartbeats remain liveness-only. A heartbeat must neither create a config fact nor convert `unknown` to
-`configured`.
+heartbeats remain liveness-only. An authenticated browser/user request is not a capability registration
+and never receives the registrar; it can only call `RecordLiveness` through the existing handler path.
+A heartbeat must neither create a config fact nor convert `unknown` to `configured`.
 
 ### 3. Reducer and precedence
 
@@ -83,7 +106,7 @@ projection. The reducer has the following precedence:
 
 | Condition, in order | config_state | health_state | legacy/presentation status | Required explanation |
 |---|---|---|---|---|
-| executor policy explicitly disabled | configured or unknown | any | `disabled` | `execution_disabled`; never call this unconfigured |
+| executor policy fact explicitly disabled | configured or unknown | any | `disabled` | `execution_disabled`; never call this unconfigured |
 | explicit config is unconfigured | unconfigured | retained but not promotable | `unconfigured` | heartbeat is inconsistent and cannot turn row healthy |
 | config is unknown | unknown | retain evidence if any | `unknown` | missing fact is not a negative assertion |
 | configured and no liveness evidence | configured | unverified | `unverified` | configured, not yet verified |
@@ -92,9 +115,13 @@ projection. The reducer has the following precedence:
 | configured and current probe fails | configured | unavailable | `unavailable` | fixed probe failure code |
 | invalid timestamp / clock skew | retained | unknown | `unknown` | `clock_skew` |
 
-Thus an unexpected heartbeat plus explicit `unconfigured` is visible as an inconsistency but can never
-make the component healthy. An old heartbeat is retained as evidence, not silently erased. Per-component
-freshness comes from the liveness producer contract; it is not inferred from a config timestamp.
+The current `executionpolicy.Check` is a read-only policy input and supplies `ExecutionFact{disabled,
+execution_disabled}` through the `execution_policy` private partition. Its absence defaults to `unknown`.
+No registration interface enables execution: `enabled` is admissible only after a separately reviewed
+real-executor adapter changes that policy contract. Thus an unexpected heartbeat plus explicit
+`unconfigured` is visible as an inconsistency but can never make the component healthy. An old heartbeat
+is retained as evidence, not silently erased. Per-component freshness comes from the liveness producer
+contract; it is not inferred from a config timestamp.
 
 ### 4. Existing data and old clients
 
@@ -110,10 +137,11 @@ freshness comes from the liveness producer contract; it is not inferred from a c
 ### 5. Simulator and concurrency invariants
 
 - Simulation may create a run and liveness-shaped test data only in its existing isolated test path; it
-  cannot call `RegisterComponentConfig`, modify a production snapshot, or change execution policy.
+  cannot call `RegisterSourceSnapshot`, modify a production snapshot, or change execution policy.
 - The production service stores facts and liveness under a mutex (or immutable atomic snapshot). Overview
-  obtains a copied snapshot, then evaluates probes without holding the mutation lock. Reload publishes a
-  whole generation; concurrent readers never observe a half-updated component set.
+  obtains a copied combined snapshot, then evaluates probes without holding the mutation lock. A source
+  reload publishes its whole source generation; concurrent readers never observe a half-updated source
+  partition or an erased unrelated partition.
 - Only validated host wiring obtains the registrar. HTTP callers, browser clients, daemon packets and
   background simulator code do not obtain it. A rejected source/component pair leaves the prior snapshot
   intact and emits only safe operational telemetry.
@@ -130,17 +158,20 @@ or network is needed.
 5. Disabled executor stays `disabled` whether a config fact or synthetic heartbeat exists.
 6. Unknown configuration + heartbeat stays presentation `unknown`, while preserving health evidence.
 7. Old overview payload lacking the additive fields parses to safe defaults without losing components.
-8. A simulated run cannot mutate the production config snapshot; concurrent snapshot replacement is
-   race-safe and readers see either complete generation.
+8. `server_boot@g7` plus `router_storage@g3` preserves boot facts when `router_storage@g4` replaces files;
+   stale `router_storage@g2` and an incomplete source-domain snapshot are rejected.
+9. Current read-only execution policy injects `disabled`; no API can inject `enabled`, and a simulated run
+   cannot mutate production facts. Concurrent readers see complete source partitions.
 
 ## UI impact and manual acceptance TODO
 
 Affected future flow: `packages/views/content/diagnostics/index.tsx` overview card and the core
 diagnostics response parser. This design changes no UI today. When an implementation card lands, a human
-should manually verify the overview distinguishes: unknown configuration, configured-unverified, healthy,
-expired/unavailable, and executor-disabled; and that it never shows a missing web/daemon/search heartbeat
-as "unconfigured". Visual/UI acceptance is pending user validation; no computer-use or UI unit test is
-authorized for this card.
+should manually verify the overview distinguishes: unknown configuration, **explicitly unconfigured**,
+configured-unverified, healthy, expired/unavailable, and executor-disabled. They should also verify an
+explicitly unconfigured component with a fresh heartbeat remains unconfigured and shows its safe conflict
+reason, and that a missing web/daemon/search heartbeat is never shown as "unconfigured". Visual/UI
+acceptance is pending user validation; no computer-use or UI unit test is authorized for this card.
 
 ## Implementation cards and rollback
 
