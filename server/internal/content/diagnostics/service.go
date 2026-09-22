@@ -5,8 +5,8 @@ import("context";"encoding/json";"sort";"sync";"time")
 type Component struct{Name string `json:"name"`;Status string `json:"status"`;LastSeen *time.Time `json:"last_seen"`;Version string `json:"version"`;Reason string `json:"reason"`}
 type Metrics struct{Count int `json:"sample_count"`;Errors int `json:"errors"`;P50 int64 `json:"p50_ms"`;P95 *int64 `json:"p95_ms"`;Retries int `json:"retries"`;Cancelled int `json:"cancelled"`;Dropped int64 `json:"dropped"`;SinkErrors int64 `json:"sink_errors"`;QueueWait int64 `json:"queue_wait_ms"`}
 type Overview struct{Components []Component `json:"components"`;Metrics Metrics `json:"metrics"`;Scenarios []Scenario `json:"scenarios"`;Instance string `json:"instance"`;Build string `json:"build"`;SimulationEnabled bool `json:"simulation_enabled"`;RetentionDays int `json:"retention_days"`;Capacity int `json:"capacity"`}
-type Service struct{Store *Store;Build string;Enabled bool;mu sync.Mutex;heartbeats map[string]Component}
-func NewService(store *Store,build string,enabled bool)*Service{return &Service{Store:store,Build:safeToken(build),Enabled:enabled,heartbeats:map[string]Component{}}}
+type Service struct{Store *Store;Build string;Enabled bool;mu sync.Mutex;heartbeats map[string]Component;facts *componentFactRegistry}
+func NewService(store *Store,build string,enabled bool)*Service{return &Service{Store:store,Build:safeToken(build),Enabled:enabled,heartbeats:map[string]Component{},facts:newComponentFactRegistry()}}
 func(s *Service)Heartbeat(name,version string,at time.Time){if oneOf(name,"web","daemon","executor","search","files")=="unknown"{return};s.mu.Lock();defer s.mu.Unlock();s.heartbeats[name]=Component{Name:name,Status:"healthy",LastSeen:&at,Version:safeToken(version)}}
 func(s *Service)Overview(ctx context.Context,scope Scope)(Overview,error){
  if !scope.Allows(scope.Workspace,""){return Overview{},ErrDenied};now:=time.Now().UTC();o:=Overview{Components:[]Component{},Scenarios:Scenarios,Instance:"native-development",Build:s.Build,SimulationEnabled:s.Enabled,RetentionDays:int(s.Store.Retention.Hours()/24),Capacity:s.Store.MaxLogs}
