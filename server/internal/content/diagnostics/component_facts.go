@@ -176,6 +176,9 @@ func normalizeSourceSnapshot(input sourceSnapshot) (sourceSnapshot, error) {
 		fact.Reason = safeToken(fact.Reason)
 	}
 	sort.Slice(components, func(i, j int) bool { return components[i].Component < components[j].Component })
+	if len(components) == 0 {
+		components = nil
+	}
 
 	result := sourceSnapshot{Source: input.Source, Generation: input.Generation, Components: components}
 	if input.Execution != nil {
@@ -226,7 +229,11 @@ func validConfigState(state configState) bool {
 
 func cloneSourceSnapshot(input sourceSnapshot) sourceSnapshot {
 	result := input
-	result.Components = append([]componentConfigFact(nil), input.Components...)
+	if len(input.Components) == 0 {
+		result.Components = nil
+	} else {
+		result.Components = append([]componentConfigFact(nil), input.Components...)
+	}
 	if input.Execution != nil {
 		execution := *input.Execution
 		result.Execution = &execution
@@ -237,16 +244,16 @@ func cloneSourceSnapshot(input sourceSnapshot) sourceSnapshot {
 func reduceComponentStatus(component configComponent, config *componentConfigFact, liveness *livenessFact, execution *executionFact, now time.Time) componentAssessment {
 	health, reason, lastSeen := reduceHealth(liveness, now)
 	assessment := componentAssessment{Config: configUnknown, Health: health, Execution: executionUnknown, Status: "unknown", Reason: reason, LastSeen: lastSeen}
-	if config != nil {
+	if config != nil && config.Component == component {
 		assessment.Config = config.State
 	}
-	if execution != nil && execution.Component == componentExecutor && execution.State == executionDisabled {
+	if component == componentExecutor && execution != nil && execution.Component == component && execution.State == executionDisabled {
 		assessment.Execution = executionDisabled
 		assessment.Status = "disabled"
 		assessment.Reason = "execution_disabled"
 		return assessment
 	}
-	if config == nil || config.State == configUnknown {
+	if config == nil || config.Component != component || config.State == configUnknown {
 		return assessment
 	}
 	if config.State == configUnconfigured {

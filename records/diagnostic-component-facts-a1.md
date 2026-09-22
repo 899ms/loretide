@@ -17,12 +17,12 @@
 均从 `server`（模块 `go.mod` 所在目录）运行：
 
 ```text
-go test ./internal/content/diagnostics -run '^(TestComponentFactRegistry|TestReduceComponentStatus|TestNewServiceBuildsFactRegistryWithoutStore)$' -count=1
-go test -race ./internal/content/diagnostics -run '^(TestComponentFactRegistry|TestReduceComponentStatus|TestNewServiceBuildsFactRegistryWithoutStore)$' -count=1
+go test -json ./internal/content/diagnostics -run '^(TestComponentFactRegistry.*|TestReduceComponentStatus|TestNewServiceBuildsFactRegistryWithoutStore)$' -count=1
+go test -json -race ./internal/content/diagnostics -run '^(TestComponentFactRegistry.*|TestReduceComponentStatus|TestNewServiceBuildsFactRegistryWithoutStore)$' -count=1
 go vet ./internal/content/diagnostics
 ```
 
-三项均通过。新 registry 与测试不导入 `pgx`/`pgxpool`，也不构造 `Store` 或调用 `Overview`、`Store.Check`、
+两组 JSON 测试均逐项确认所有预期顶层测试为 terminal `pass`，`go vet` 也通过。新 registry 与测试不导入 `pgx`/`pgxpool`，也不构造 `Store` 或调用 `Overview`、`Store.Check`、
 `Store.Query`；没有连接数据库、启动服务、迁移、端口探测、UI 单测、computer use 或真实执行器。
 
 ## 未覆盖与回滚

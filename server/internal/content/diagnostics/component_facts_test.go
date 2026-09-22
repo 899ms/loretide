@@ -121,6 +121,31 @@ func TestComponentFactRegistryKeepsSourcePartitionsAndGenerations(t *testing.T) 
 	}
 }
 
+func TestComponentFactRegistryNormalizesPolicyAndBootSnapshots(t *testing.T) {
+	now := time.Date(2026, 9, 22, 0, 0, 0, 0, time.UTC)
+	registry := newComponentFactRegistry()
+	policy := sourceSnapshot{Source: sourceExecutionPolicy, Generation: 1, Components: []componentConfigFact{}, Execution: &executionFact{Component: componentExecutor, State: executionDisabled, ObservedAt: now.In(time.FixedZone("+01", 3600))}}
+	if err := registry.registerSourceSnapshot(policy); err != nil {
+		t.Fatal(err)
+	}
+	policy.Components = nil
+	policy.Execution.ObservedAt = now
+	if err := registry.registerSourceSnapshot(policy); err != nil {
+		t.Fatalf("normalized policy replay must be idempotent: %v", err)
+	}
+
+	boot := bootSnapshot(2, now.In(time.FixedZone("+01", 3600)))
+	if err := registry.registerSourceSnapshot(boot); err != nil {
+		t.Fatal(err)
+	}
+	boot.Components[0], boot.Components[1] = boot.Components[1], boot.Components[0]
+	boot.Components[0].ObservedAt = now
+	boot.Components[1].ObservedAt = now
+	if err := registry.registerSourceSnapshot(boot); err != nil {
+		t.Fatalf("ordered UTC-equivalent boot replay must be idempotent: %v", err)
+	}
+}
+
 func TestComponentFactRegistryCopiesInputAndOutput(t *testing.T) {
 	now := time.Date(2026, 9, 22, 0, 0, 0, 0, time.UTC)
 	registry := newComponentFactRegistry()
@@ -170,6 +195,8 @@ func TestReduceComponentStatus(t *testing.T) {
 		{"unknown config keeps evidence", componentFiles, &componentConfigFact{Component: componentFiles, State: configUnknown, ObservedAt: now}, &livenessFact{LastSeen: now}, nil, "unknown", healthHealthy, ""},
 		{"clock skew", componentFiles, &configured, &livenessFact{LastSeen: now.Add(maximumClockSkew + time.Nanosecond)}, nil, "unknown", healthUnknown, "clock_skew"},
 		{"policy disabled", componentExecutor, nil, &livenessFact{LastSeen: now}, &executionFact{Component: componentExecutor, State: executionDisabled, ObservedAt: now}, "disabled", healthHealthy, "execution_disabled"},
+		{"executor policy cannot disable files", componentFiles, &configured, &livenessFact{LastSeen: now}, &executionFact{Component: componentExecutor, State: executionDisabled, ObservedAt: now}, "healthy", healthHealthy, ""},
+		{"mismatched config cannot promote", componentFiles, &componentConfigFact{Component: componentAPI, State: configConfigured, ObservedAt: now}, &livenessFact{LastSeen: now}, nil, "unknown", healthHealthy, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -209,7 +236,7 @@ func TestComponentFactRegistryConcurrentSnapshots(t *testing.T) {
 	}
 	writers.Wait()
 	readers.Wait()
-	if storage, ok := registry.sourceSnapshot(sourceRouterStorage); !ok || storage.Generation == 0 {
+	if storage, ok := registry.sourceSnapshot(sourceRouterStorage); !ok || storage.Generation != rounds {
 		t.Fatalf("storage partition missing after concurrent updates: %#v", storage)
 	}
 }
