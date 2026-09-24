@@ -412,6 +412,11 @@
     "createDescription": "docs/01 §5.2의 일곱 항목. “없음”이라고 쓰는 것도 완전한 답이며, 빈칸은 아닙니다.",
     "create": "주제 카드 만들기",
     "detailTitle": "주제 카드",
+    "bodyEdit": {
+      "title": "주제 본문 편집",
+      "description": "여기서 바꾼 답변만 저장하며 다른 답변은 그대로 둡니다.",
+      "save": "변경 사항 저장"
+    },
     "statusLabel": "상태",
     "blank": "작성되지 않음",
     "channelsHint": "여러 채널은 쉼표로 구분하세요.",

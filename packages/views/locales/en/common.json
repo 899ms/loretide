@@ -412,6 +412,11 @@
     "createDescription": "Seven items, from docs/01 §5.2. Writing “none” is a complete answer — leaving a box empty is not.",
     "create": "Create topic card",
     "detailTitle": "Topic card",
+    "bodyEdit": {
+      "title": "Edit topic text",
+      "description": "Save only the answers changed here. Leave the other answers as they are.",
+      "save": "Save changes"
+    },
     "statusLabel": "Status",
     "blank": "Not written",
     "channelsHint": "Separate several channels with commas.",

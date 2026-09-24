@@ -40,11 +40,13 @@ import {
   useContentTopic,
   useContentTopics,
   useCreateContentTopic,
+  usePatchContentTopicBody,
   useSetContentTopicAccount,
   useSetContentTopicSources,
   type BriefDraft,
   type BriefRevision,
   type TopicAction,
+  type TopicBodyPatchInput,
   type TopicCard,
   type TopicCardDraft,
   type TopicSourceDraft,
@@ -657,6 +659,11 @@ function TopicCardPanel({
   return (
     <>
       <TopicCardDetail card={current} accountOptions={accountOptions} />
+      <TopicBodyEditSection
+        key={current.topicCardId}
+        wsId={wsId}
+        card={current}
+      />
       <TopicSourceReferenceSection
         key={`${current.topicCardId}:${current.updatedAt}`}
         wsId={wsId}
@@ -774,6 +781,110 @@ function TopicCardDetail({
             </SettingsRow>
           </>
         ) : null}
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
+const TOPIC_BODY_FIELDS: {
+  key: keyof TopicBodyPatchInput;
+  label: (t: Translate) => string;
+  placeholder: (t: Translate) => string;
+}[] = [
+  {
+    key: "audienceProblemJudgment",
+    label: (t) => t(($) => $.contentTopics.fields.audienceProblemJudgment),
+    placeholder: (t) => t(($) => $.contentTopics.placeholders.audienceProblemJudgment),
+  },
+  {
+    key: "ipFit",
+    label: (t) => t(($) => $.contentTopics.fields.ipFit),
+    placeholder: (t) => t(($) => $.contentTopics.placeholders.ipFit),
+  },
+  {
+    key: "timing",
+    label: (t) => t(($) => $.contentTopics.fields.timing),
+    placeholder: (t) => t(($) => $.contentTopics.placeholders.timing),
+  },
+  {
+    key: "existingContentRelation",
+    label: (t) => t(($) => $.contentTopics.fields.existingContentRelation),
+    placeholder: (t) => t(($) => $.contentTopics.placeholders.existingContentRelation),
+  },
+  {
+    key: "evidenceGapsAndInvestment",
+    label: (t) => t(($) => $.contentTopics.fields.evidenceGapsAndInvestment),
+    placeholder: (t) => t(($) => $.contentTopics.placeholders.evidenceGapsAndInvestment),
+  },
+];
+
+function TopicBodyEditSection({
+  wsId,
+  card,
+}: {
+  wsId: string;
+  card: TopicCard;
+}) {
+  const { t } = useT("common");
+  const patchBody = usePatchContentTopicBody(wsId);
+  const [draft, setDraft] = useState<TopicBodyPatchInput>({});
+  const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
+  const changed = Object.keys(draft).length > 0;
+
+  const edit = (key: keyof TopicBodyPatchInput, value: string) => {
+    setDraft((current) => {
+      if (value === card[key]) {
+        const { [key]: _unchanged, ...rest } = current;
+        return rest;
+      }
+      return { ...current, [key]: value };
+    });
+  };
+
+  const save = () => {
+    setOutcome(null);
+    patchBody.mutate(
+      { topicCardId: card.topicCardId, body: draft },
+      {
+        onSuccess: () => {
+          setOutcome(SAVED);
+          setDraft({});
+        },
+        onError: (error) => setOutcome(saveOutcome(error)),
+      },
+    );
+  };
+
+  return (
+    <SettingsSection
+      title={t(($) => $.contentTopics.bodyEdit.title)}
+      description={t(($) => $.contentTopics.bodyEdit.description)}
+    >
+      <SettingsCard>
+        {TOPIC_BODY_FIELDS.map((field) => (
+          <SettingsRow
+            key={field.key}
+            label={field.label(t)}
+            size="text"
+            align="start"
+          >
+            <Textarea
+              value={draft[field.key] ?? card[field.key]}
+              onChange={(event) => edit(field.key, event.target.value)}
+              placeholder={field.placeholder(t)}
+              rows={2}
+              disabled={patchBody.isPending}
+            />
+          </SettingsRow>
+        ))}
+        <SettingsRow label={t(($) => $.contentTopics.bodyEdit.save)}>
+          <div className="flex items-center gap-3">
+            <SaveFeedback outcome={outcome} pending={patchBody.isPending} />
+            <Button disabled={!changed || patchBody.isPending} onClick={save}>
+              {t(($) => $.contentTopics.bodyEdit.save)}
+            </Button>
+          </div>
+        </SettingsRow>
       </SettingsCard>
     </SettingsSection>
   );

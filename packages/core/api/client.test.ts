@@ -2,12 +2,40 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAuthStore } from "../auth";
 import { configStore } from "../config";
 import type { StorageAdapter, User } from "../types";
+import { topicBodyPatchInputToWire } from "../content/topic-planning";
 import { ApiClient, ApiError, CHAT_DRAFT_RESTORE_CAPABILITY, clientErrorMessage } from "./client";
 import { EMPTY_PLUGIN_PACKAGE_LIST, EMPTY_PLUGIN_PREVIEW, EMPTY_PLUGIN_SURFACE_LAUNCH } from "./schemas";
 
 afterEach(() => {
   configStore.getState().setAgentConversationStartersSupported(false);
   vi.unstubAllGlobals();
+});
+
+describe("ApiClient topic body patch transport", () => {
+  it("PATCHes an encoded card id with only the fields being edited", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("{}", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await new ApiClient("https://api.example.test").patchContentTopicBody(
+      "topic/card",
+      topicBodyPatchInputToWire({ ipFit: "", timing: "write this week" }),
+    );
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://api.example.test/api/content-topics/topic%2Fcard/body",
+    );
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(String(init.body))).toEqual({
+      ip_fit: "",
+      timing: "write this week",
+    });
+  });
 });
 
 describe("ApiClient historical import transport", () => {

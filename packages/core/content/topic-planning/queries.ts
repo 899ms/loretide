@@ -9,11 +9,13 @@ import {
   parseTopicCards,
   setContentTopicSourcesInputToWire,
   topicActionInputToWire,
+  topicBodyPatchInputToWire,
   topicCardInputToWire,
   type BriefRevision,
   type BriefRevisionInput,
   type SetContentTopicSourcesInput,
   type TopicActionInput,
+  type TopicBodyPatchInput,
   type TopicCard,
   type TopicCardInput,
 } from "./contract";
@@ -211,6 +213,26 @@ export function useSetContentTopicSources(workspaceId: string) {
         await api.setContentTopicSources(
           input.topicCardId,
           setContentTopicSourcesInputToWire(input.sources),
+        ),
+      ),
+    onSuccess: () =>
+      client.invalidateQueries({
+        queryKey: topicPlanningKeys.all(workspaceId),
+      }),
+  });
+}
+
+export function usePatchContentTopicBody(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      topicCardId: string;
+      body: TopicBodyPatchInput;
+    }) =>
+      parseTopicCard(
+        await api.patchContentTopicBody(
+          input.topicCardId,
+          topicBodyPatchInputToWire(input.body),
         ),
       ),
     onSuccess: () =>
