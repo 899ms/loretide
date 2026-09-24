@@ -50,7 +50,7 @@
 
 1. **「日历领域」不存在**（Current State 第 3 节）。BO-01 原文把它列为依赖。文档 12 把「日历关联」划给未落地的 `project-collab`；仓库里唯一的计划时间是作品级交付待办的 `scheduled_at`。本卡没有悄悄新建日历，列为 Q1。
 2. **「账号专属材料」今天不存在**（Current State 第 6 节）。素材没有账号列，授权记录没有存下来。D14-V01 后半句在本版无对象可测，改为一条负例守住将来（FR-045、T033）。
-3. **`Create` 的账号校验在栅栏外**（Current State 第 2 节，`store.go:167`），与 `SetAccount` 注释的规则不一致。**后续项**，主控 2026-09-25 确认不在本卡范围，记 Out of Scope 10。
+3. **`Create` 的账号校验在栅栏外**（Current State 第 2 节，`store.go:167`），与 `SetAccount` 注释的规则不一致。**后续项**，主控 2026-09-25 确认不在本卡范围，记 Out of Scope 10。**已由 #261 修复（2026-09-25）**：`Create` 现按采用路径的顺序，在栅栏事务内依次做账号校验、`prepareNewCard`、`insertCardTx`。
 4. **包级测试没有时区库**：`time/tzdata` 只在 `server/cmd/server/main.go:19` import，节点文件要自己 import 一次（plan 风险表）。
 5. **「简报」在本仓的含义**：简报版本只在「开始」时冻结，而「开始」就是启动创作。所以 R-056 的「采用后创建或关联简报」在本仓只能落为「创建或关联选题卡」（Assumptions）。
 

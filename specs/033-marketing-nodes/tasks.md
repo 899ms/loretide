@@ -113,7 +113,7 @@ ssh ... ~/loretide-ci/lt-verify.sh <branch> all
 | **文件** | plan.md「PR 2」清单 |
 | **测试** | 读时计算纯函数（撞期、缺口、重复风险、关联理由）、候选 store 真实库用例（幂等、并发、采用、挂卡、影响）、下游表守卫、handler 与真实路由用例、core 畸形用例 |
 | **验收** | D14-V01（候选与采用：用对方卡挂 404、候选不部分写入）；D14-V02（候选显示关联理由、缺口与来源；采用前不启动创作——6 张下游表行数零变化）；D14-V03（重复整理不重复、重复采用不重复建卡、改期 / 取消列出受影响卡、历史快照与已发布记录逐字节不变） |
-| **不含** | 页面；交付待办参与撞期（Q1=A）；开始快照扩展字段（D3 已定不加）；`store.go:167` 栅栏外账号校验的修正（后续项） |
+| **不含** | 页面；交付待办参与撞期（Q1=A）；开始快照扩展字段（D3 已定不加）；`store.go:167` 栅栏外账号校验的修正（后续项；已由 #261 修复，2026-09-25） |
 | **验证** | 「共用：验证命令」全部 + 远程验收 `lt-verify.sh <branch> all` |
 
 ### 读时计算（PR 2，先写测试）
@@ -129,7 +129,7 @@ ssh ... ~/loretide-ci/lt-verify.sh <branch> all
 - [ ] T036 **先写**采用用例并确认失败：`mode=create` → 卡数 +1、`draft`、账号与候选一致、`timing` 为 contract §4.3 模板、`ip_fit` = 角度、`fit_source_ids` = 节点素材；候选 `adopted` 并记 `adopted_revision`；同一候选采用 3 次（含 2 次并发）卡数仍只 +1 且返回同一张卡；简报版本、开始记录、作品、审核请求、交付待办、发布记录 6 张表行数零变化 — **FR-030～FR-033、FR-035、SC-005**
 - [ ] T037 **先写**挂卡用例并确认失败：挂本品牌卡 → 那张卡全部列逐字节未变；挂别的品牌的卡 → 404 且候选未被部分写入；卡账号 ≠ 候选账号 → 400 指名 `topic_card_id` — **FR-034、SC-006、SC-009**
 - [ ] T038 **先写**改候选用例并确认失败：角度缺省不改、显式空串清空；`open` ↔ `dismissed` 可来回；已采用 → `dismissed` 400 — **FR-020、FR-036**
-- [ ] T039 `store.go`：把 `Create` 里的 INSERT 与素材校验抽成一个接收 `pgx.Tx` 的函数，`Create` 改为调用它。**`Create` 的对外行为、既有用例一行不改且全绿**；`Create` 里位于栅栏外的账号校验（`store.go:167`）**不动**（Out of Scope 10） — **FR-032**
+- [ ] T039 `store.go`：把 `Create` 里的 INSERT 与素材校验抽成一个接收 `pgx.Tx` 的函数，`Create` 改为调用它。**`Create` 的对外行为、既有用例一行不改且全绿**；`Create` 里位于栅栏外的账号校验（`store.go:167`）**不动**（Out of Scope 10；已由 #261 修复，2026-09-25） — **FR-032**
 - [ ] T040 写 `marketing_node_candidate.go`：整理（`ON CONFLICT DO NOTHING`）、改候选、采用（候选行 `FOR UPDATE`、已采用直接返回、账号与素材校验在事务内、调用 T039 的函数）、读时计算；审计 `sync-marketing-candidates` / `edit-marketing-candidate` / `adopt-marketing-candidate` — **FR-018～FR-036、FR-048**
 
 ### 改期、取消与影响（PR 2，先写测试）
