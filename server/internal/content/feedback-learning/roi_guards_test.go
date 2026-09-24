@@ -26,6 +26,9 @@ var roiTables = []string{
 	// PR 2.
 	"content_roi_cost_allocation",
 	"content_roi_attribution_revision",
+	// PR 3.
+	"content_roi_import_batch",
+	"content_roi_import_claim",
 }
 
 // roiSourceFiles returns the non-test roi_*.go files by name and content.
@@ -47,7 +50,7 @@ func roiSourceFiles(t *testing.T) map[string]string {
 		files[filepath.Base(path)] = string(body)
 	}
 	for _, required := range []string{"roi_contract.go", "roi_money.go", "roi_dedupe.go", "roi_records.go",
-		"roi_allocate.go", "roi_attribution.go", "roi_calc.go"} {
+		"roi_allocate.go", "roi_attribution.go", "roi_calc.go", "roi_import.go"} {
 		if _, ok := files[required]; !ok {
 			t.Fatalf("%s is missing; every guard below would pass vacuously", required)
 		}

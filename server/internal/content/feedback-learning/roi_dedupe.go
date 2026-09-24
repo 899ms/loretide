@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // Dedupe keys (contract §4, FR-026, D14-V11).
@@ -16,21 +18,21 @@ import (
 // guarantee: two real costs with the same category, day and amount collide,
 // and an order number copied down one digit wrong does not.
 //
-// Normalization is: trimmed, inner whitespace collapsed to one space. There
-// is NO case folding, for the same reason oneOf does none: "A-1"
-// and "a-1" are different order numbers as far as anybody here knows.
-// Dates are the brand's calendar day, so the same instant lands on the day
-// the operator saw it on.
+// Normalization is: Unicode NFC, trimmed, inner whitespace collapsed to one
+// space. NFC makes "é" typed as one code point and "e" followed by a combining
+// accent the same text, which is what they are to anybody reading them; a
+// paste from one tool and a form in another differ exactly this way. There is
+// NO case folding, for the same reason oneOf does none: "A-1" and "a-1" are
+// different order numbers as far as anybody here knows. Dates are the brand's
+// calendar day, so the same instant lands on the day the operator saw it on.
 //
-// Contract §4 also asks for Unicode NFC. That needs golang.org/x/text, which
-// is not an approved import for content modules (scripts/content-boundaries
-// .json upstreamImports), and this PR may only add an adapters line there.
-// Until that import is approved, two spellings of one character that differ
-// only in composition give different keys - a missed hint, never a wrong
-// merge, because a key only ever asks the operator to confirm.
+// NFC reached this function in PR 3 (golang.org/x/text/unicode/norm, added to
+// upstreamImports for it). Keys stored before then were computed without it;
+// for text already in NFC - nearly everything typed on a keyboard - the key is
+// the same, and for the rest the cost is a missed hint, never a wrong merge.
 
 func normalizeKeyText(text string) string {
-	return strings.Join(strings.Fields(text), " ")
+	return strings.Join(strings.Fields(norm.NFC.String(text)), " ")
 }
 
 func keyDate(instant time.Time, location *time.Location) string {

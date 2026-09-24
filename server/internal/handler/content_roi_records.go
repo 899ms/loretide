@@ -200,6 +200,12 @@ func (h *Handler) roiError(w http.ResponseWriter, err error) {
 		})
 		return
 	}
+	if _, ok := errors.AsType[feedbacklearning.IdempotencyConflict](err); ok {
+		h.feedbackDiagnosticError(w, http.StatusConflict, map[string]any{
+			"field": feedbacklearning.IdempotencyKeyField, "reason": "used with a different request",
+		})
+		return
+	}
 	if duplicate, ok := errors.AsType[feedbacklearning.PossibleDuplicate](err); ok {
 		h.feedbackDiagnosticError(w, http.StatusConflict, map[string]any{
 			"code": "possible_duplicate", "matches": duplicate.Matches,

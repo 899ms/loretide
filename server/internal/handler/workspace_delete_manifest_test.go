@@ -85,6 +85,8 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"content_roi_adjustment_revision":    workspaceDelete,
 	"content_roi_cost_allocation":        workspaceDelete,
 	"content_roi_attribution_revision":   workspaceDelete,
+	"content_roi_import_batch":           workspaceDelete,
+	"content_roi_import_claim":           workspaceDelete,
 	"comment_reaction":                   workspaceDelete,
 	"contact_sales_inquiry":              workspaceDeleteKeep,
 	"daemon_connection":                  workspaceDelete,

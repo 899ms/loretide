@@ -43,6 +43,10 @@ var contentROIRoutes = []struct {
 	// PR 2.
 	{http.MethodPost, "/api/content-roi/deals/{dealId}/attribution", "/api/content-roi/deals/deal-1/attribution"},
 	{http.MethodPost, "/api/content-roi/preview", "/api/content-roi/preview"},
+	// PR 3.
+	{http.MethodPost, "/api/content-roi/imports", "/api/content-roi/imports"},
+	{http.MethodGet, "/api/content-roi/imports", "/api/content-roi/imports"},
+	{http.MethodGet, "/api/content-roi/imports/{batchId}", "/api/content-roi/imports/batch-1"},
 }
 
 // T032 / FR-074: every PR 1 and PR 2 endpoint is mounted, and - every record being

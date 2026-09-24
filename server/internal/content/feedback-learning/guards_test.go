@@ -311,6 +311,16 @@ func TestThereIsNoSixthControlledSet(t *testing.T) {
 		}
 		delete(found, name)
 	}
+	// specs/034 PR 3's sets, contract §1.8: what an import holds (cost, lead,
+	// deal - the three record kinds R-061 names for import) and what happened
+	// to each row (FR-029: written, held back as a possible duplicate, or
+	// confirmed not a duplicate).
+	for _, name := range []string{"ImportRecordKinds", "ImportOutcomes"} {
+		if !found[name] {
+			t.Errorf("034 PR 3 controlled set %s is gone", name)
+		}
+		delete(found, name)
+	}
 	for extra := range found {
 		t.Errorf("a controlled set %q was added; SOP 10.1 names those fields but gives no values, and inventing some puts words in the SOP's mouth that every stored row then has to be valid against", extra)
 	}

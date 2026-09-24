@@ -809,3 +809,143 @@ export function parseRoiResult(data: unknown): RoiResult | null {
     rules: parsed.rules ?? [],
   };
 }
+
+// ---------------------------------------------------------------- import (PR 3)
+//
+// An import batch, contract §1.8: what a paste was, and what happened to each
+// row. Counts are plain numbers (they are row counts, not money); every id is
+// a string. A row outcome this build has not heard of reads as "unknown" -
+// never as "written", which would claim a record exists.
+
+/** What one import holds (Go: ImportRecordKinds). */
+export const ROI_IMPORT_KINDS = ["cost", "lead", "deal"] as const;
+export type RoiImportKind = (typeof ROI_IMPORT_KINDS)[number];
+
+/** What happened to one row (Go: ImportOutcomes). */
+export const ROI_IMPORT_OUTCOMES = ["written", "duplicate", "confirmed_not_duplicate"] as const;
+export type RoiImportOutcome = (typeof ROI_IMPORT_OUTCOMES)[number] | "unknown";
+
+export interface RoiImportRow {
+  /** 1-based, counting data rows. */
+  row: number;
+  outcome: RoiImportOutcome;
+  /** The record the row wrote; "" when it was held back or in a dry run. */
+  recordId: string;
+  /** The current records the row matched. */
+  duplicateOf: string[];
+  /** Dry run only: earlier rows of the same paste it matched. */
+  duplicateOfRows: number[];
+}
+
+export interface RoiImportResult {
+  dryRun: boolean;
+  /** "" for a dry run: nothing was stored. */
+  importBatchId: string;
+  recordKind: string;
+  rowCount: number;
+  writtenCount: number;
+  skippedCount: number;
+  rows: RoiImportRow[];
+  recordedBy: string;
+  /** null for a dry run. */
+  createdAt: string | null;
+}
+
+export interface RoiImportBatch {
+  importBatchId: string;
+  recordKind: string;
+  rowCount: number;
+  writtenCount: number;
+  skippedCount: number;
+  rows: RoiImportRow[];
+  idempotencyKey: string;
+  recordedBy: string;
+  createdAt: string;
+}
+
+const count = z.number().int().nonnegative();
+
+const importRowSchema = z.object({
+  row: z.number().int().positive(),
+  outcome: z.enum(ROI_IMPORT_OUTCOMES).or(z.literal("unknown")).catch("unknown"),
+  record_id: z.string(),
+  duplicate_of: z.array(z.string()).nullable().optional(),
+  duplicate_of_rows: z.array(z.number().int().positive()).nullable().optional(),
+});
+
+const importResultSchema = z.object({
+  dry_run: z.boolean(),
+  import_batch_id: z.string(),
+  record_kind: z.string(),
+  row_count: count,
+  written_count: count,
+  skipped_count: count,
+  rows: z.array(importRowSchema),
+  recorded_by: text,
+  created_at: z.string().nullable().optional(),
+});
+
+const importBatchSchema = z.object({
+  import_batch_id: z.string(),
+  record_kind: z.string(),
+  row_count: count,
+  written_count: count,
+  skipped_count: count,
+  rows: z.array(importRowSchema),
+  idempotency_key: text,
+  recorded_by: text,
+  created_at: text,
+});
+
+const importListSchema = z.object({ imports: z.array(importBatchSchema).nullable().optional() });
+
+function toImportRow(wire: z.infer<typeof importRowSchema>): RoiImportRow {
+  return {
+    row: wire.row,
+    outcome: wire.outcome,
+    recordId: wire.record_id,
+    duplicateOf: wire.duplicate_of ?? [],
+    duplicateOfRows: wire.duplicate_of_rows ?? [],
+  };
+}
+
+function toImportBatch(wire: z.infer<typeof importBatchSchema>): RoiImportBatch {
+  return {
+    importBatchId: wire.import_batch_id,
+    recordKind: wire.record_kind,
+    rowCount: wire.row_count,
+    writtenCount: wire.written_count,
+    skippedCount: wire.skipped_count,
+    rows: wire.rows.map(toImportRow),
+    idempotencyKey: wire.idempotency_key ?? "",
+    recordedBy: wire.recorded_by ?? "",
+    createdAt: wire.created_at ?? "",
+  };
+}
+
+/** POST imports' answer, or null when it does not fit the contract. */
+export function parseRoiImportResult(data: unknown): RoiImportResult | null {
+  const parsed = parseWithFallback<z.infer<typeof importResultSchema> | null>(data, importResultSchema, null, { endpoint: "content-roi/import" });
+  if (!parsed) return null;
+  return {
+    dryRun: parsed.dry_run,
+    importBatchId: parsed.import_batch_id,
+    recordKind: parsed.record_kind,
+    rowCount: parsed.row_count,
+    writtenCount: parsed.written_count,
+    skippedCount: parsed.skipped_count,
+    rows: parsed.rows.map(toImportRow),
+    recordedBy: parsed.recorded_by ?? "",
+    createdAt: parsed.created_at ?? null,
+  };
+}
+
+export function parseRoiImportBatch(data: unknown): RoiImportBatch | null {
+  const parsed = parseWithFallback<z.infer<typeof importBatchSchema> | null>(data, importBatchSchema, null, { endpoint: "content-roi/import-batch" });
+  return parsed ? toImportBatch(parsed) : null;
+}
+
+export function parseRoiImportList(data: unknown): RoiImportBatch[] {
+  const parsed = parseWithFallback<z.infer<typeof importListSchema>>(data, importListSchema, { imports: [] }, { endpoint: "content-roi/imports" });
+  return (parsed.imports ?? []).map(toImportBatch);
+}

@@ -11,6 +11,8 @@ import {
   ROI_CURRENCIES,
   ROI_EVIDENCE_TYPES,
   ROI_GROSS_BASES,
+  ROI_IMPORT_KINDS,
+  ROI_IMPORT_OUTCOMES,
   ROI_JUDGEMENTS,
   ROI_METRIC_IDS,
   ROI_PRICINGS,
@@ -26,6 +28,9 @@ import {
   parseRoiDeal,
   parseRoiDealDetail,
   parseRoiDealList,
+  parseRoiImportBatch,
+  parseRoiImportList,
+  parseRoiImportResult,
   parseRoiLead,
   parseRoiLeadDetail,
   parseRoiLeadList,
@@ -331,5 +336,98 @@ describe("a computed report", () => {
     expect(parseRoiResult({ ...resultWire, metrics: "x" })).toBeNull();
     expect(parseRoiResult({ calc_version: "roi-calc/1" })).toBeNull();
     expect(parseRoiResult(null)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------- import (PR 3)
+
+const goImport = readFileSync(join(goDir, "roi_import.go"), "utf8");
+
+function goImportSet(varName: string): string[] {
+  const declaration = new RegExp(`var ${varName} = \\[\\][A-Za-z]+\\{([^}]*)\\}`, "s").exec(goImport);
+  if (!declaration) throw new Error(`${varName} not found in roi_import.go`);
+  return declaration[1]!.split(",").map((name) => name.trim()).filter(Boolean).map((name) => {
+    const value = new RegExp(`${name}\\s+[A-Za-z]+ = "([^"]+)"`).exec(goImport);
+    if (!value) throw new Error(`${name} has no literal`);
+    return value[1]!;
+  });
+}
+
+describe("the import sets match the Go source", () => {
+  it.each([
+    ["ImportRecordKinds", ROI_IMPORT_KINDS],
+    ["ImportOutcomes", ROI_IMPORT_OUTCOMES],
+  ])("%s", (goName, tsValues) => {
+    expect([...tsValues]).toEqual(goImportSet(goName));
+  });
+});
+
+const importRowsWire = [
+  { row: 1, outcome: "written", record_id: "d1", duplicate_of: [] },
+  { row: 2, outcome: "duplicate", record_id: "", duplicate_of: ["d0"] },
+  { row: 3, outcome: "confirmed_not_duplicate", record_id: "d3", duplicate_of: ["d9"] },
+];
+const importResultWire = {
+  dry_run: false, import_batch_id: "b1", record_kind: "deal", row_count: 3, written_count: 2,
+  skipped_count: 1, rows: importRowsWire, recorded_by: "u1", created_at: "2026-09-25T01:02:03.456Z",
+};
+const importBatchWire = {
+  import_batch_id: "b1", workspace_id: "ws", record_kind: "deal", row_count: 3, written_count: 2,
+  skipped_count: 1, rows: importRowsWire, idempotency_key: "k1", recorded_by: "u1",
+  created_at: "2026-09-25T01:02:03.456Z",
+};
+
+describe("import responses", () => {
+  it("reads a real import's answer", () => {
+    const result = parseRoiImportResult(importResultWire);
+    expect(result).toMatchObject({ dryRun: false, importBatchId: "b1", writtenCount: 2, skippedCount: 1 });
+    expect(result?.rows[1]).toEqual({ row: 2, outcome: "duplicate", recordId: "", duplicateOf: ["d0"], duplicateOfRows: [] });
+  });
+
+  it("reads a dry run, which has no batch and no time", () => {
+    const result = parseRoiImportResult({
+      ...importResultWire, dry_run: true, import_batch_id: "", created_at: null,
+      rows: [{ row: 1, outcome: "duplicate", record_id: "", duplicate_of: [], duplicate_of_rows: [1] }],
+    });
+    expect(result).toMatchObject({ dryRun: true, importBatchId: "", createdAt: null });
+    expect(result?.rows[0]?.duplicateOfRows).toEqual([1]);
+  });
+
+  it("reads an outcome it has not heard of as unknown, never as written", () => {
+    const result = parseRoiImportResult({
+      ...importResultWire, rows: [{ row: 1, outcome: "merged", record_id: "", duplicate_of: [] }],
+    });
+    expect(result?.rows[0]?.outcome).toBe("unknown");
+  });
+
+  it("reads a batch and a list of batches", () => {
+    expect(parseRoiImportBatch(importBatchWire)).toMatchObject({ importBatchId: "b1", idempotencyKey: "k1" });
+    expect(parseRoiImportList({ imports: [importBatchWire] })).toHaveLength(1);
+    expect(parseRoiImportList({ imports: null })).toEqual([]);
+  });
+
+  it.each([
+    ["a count as a string", { ...importResultWire, written_count: "2" }],
+    ["a negative count", { ...importResultWire, skipped_count: -1 }],
+    ["rows that are not a list", { ...importResultWire, rows: {} }],
+    ["a record id as a number", { ...importResultWire, rows: [{ ...importRowsWire[0], record_id: 7 }] }],
+    ["row 0", { ...importResultWire, rows: [{ ...importRowsWire[0], row: 0 }] }],
+    ["duplicate_of that is not a list of ids", { ...importResultWire, rows: [{ ...importRowsWire[1], duplicate_of: "d0" }] }],
+    ["no dry_run flag", { ...importResultWire, dry_run: undefined }],
+  ])("degrades an import answer with %s to null", (_name, wire) => {
+    expect(parseRoiImportResult(wire)).toBeNull();
+  });
+
+  it.each([
+    ["no batch id", { ...importBatchWire, import_batch_id: undefined }],
+    ["a row count as a float", { ...importBatchWire, row_count: 2.5 }],
+    ["rows missing", { ...importBatchWire, rows: undefined }],
+  ])("degrades a batch with %s to null", (_name, wire) => {
+    expect(parseRoiImportBatch(wire)).toBeNull();
+  });
+
+  it("degrades a malformed list to empty", () => {
+    expect(parseRoiImportList({ imports: [{ ...importBatchWire, rows: "x" }] })).toEqual([]);
+    expect(parseRoiImportList("nope")).toEqual([]);
   });
 });

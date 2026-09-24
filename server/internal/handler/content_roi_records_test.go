@@ -31,6 +31,9 @@ var roiTableNames = []string{
 	// PR 2.
 	"content_roi_cost_allocation",
 	"content_roi_attribution_revision",
+	// PR 3.
+	"content_roi_import_batch",
+	"content_roi_import_claim",
 }
 
 // roiWorkspace makes a brand the test user owns, with one content account and
@@ -606,6 +609,12 @@ func TestContentROIWritesAreFencedByWorkspaceDeletion(t *testing.T) {
 			_, err := store.ReviseAdjustment(ctx, wsID, testUserID, dealID, adjustmentID, refund, base)
 			return err
 		}},
+		{"import", func() error {
+			_, err := store.Import(ctx, wsID, testUserID, feedbacklearning.ImportInput{
+				RecordKind: "cost", Costs: []feedbacklearning.CostInput{cost},
+			}, "fence-key", false)
+			return err
+		}},
 	} {
 		t.Run(write.name, func(t *testing.T) {
 			if err := write.call(); !errors.Is(err, feedbacklearning.ErrNotFound) {
@@ -634,7 +643,11 @@ func TestDeleteWorkspaceRemovesROIRecords(t *testing.T) {
 	for _, wsID := range []string{target, neighbor} {
 		roiCreated(t, roiCall(t, h.CreateContentROICost, wsID, "POST", "/api/content-roi/costs",
 			costJSON("拍摄", "1.00", `,"allocations":[{"target_kind":"period","target_id":"2026-09","weight":1}]`)), "cost_id")
-		leadID := roiLead(t, h, wsID, "客户-delete")
+		// The lead comes in through an import with a key, so the batch and
+		// claim tables have a row in each workspace too.
+		imported := decodeImport(t, importCall(t, h, wsID, "delete-key", importBody("lead",
+			`{"customer_ref":"客户-delete","stage":"咨询","first_seen_at":"2026-09-10T02:00:00Z"}`)), http.StatusCreated)
+		leadID := imported.Rows[0].RecordID
 		roiTouch(t, h, wsID, leadID, touchBody("unknown", "", "", "", "", "other"))
 		dealID, _ := roiCreated(t, roiCall(t, h.CreateContentROIDeal, wsID, "POST", "/api/content-roi/deals",
 			dealJSON("TB-delete", "100.00", "none", "")), "deal_id")
@@ -753,6 +766,9 @@ func TestEveryContentROIEndpointRefusesANonMemberLikeAMissingRecord(t *testing.T
 		{"revise-adjustment", h.ReviseContentROIAdjustment, "POST", []string{"dealId", "d", "adjustmentId", "a"}},
 		{"record-attribution", h.RecordContentROIAttribution, "POST", []string{"dealId", "d"}},
 		{"preview", h.PreviewContentROI, "POST", nil},
+		{"import", h.ImportContentROI, "POST", nil},
+		{"list-imports", h.ListContentROIImports, "GET", nil},
+		{"get-import", h.GetContentROIImport, "GET", []string{"batchId", "b"}},
 	} {
 		t.Run(endpoint.name, func(t *testing.T) {
 			response := roiCall(t, endpoint.handler, outsider, endpoint.method, "/", "{}", endpoint.params...)
