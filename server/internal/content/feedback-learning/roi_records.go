@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"slices"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -111,6 +112,9 @@ type DealDetail struct {
 	Current     DealRevision        `json:"current"`
 	Revisions   []DealRevision      `json:"revisions"`
 	Adjustments []AdjustmentHistory `json:"adjustments"`
+	// Attributions is every revision of the operator's judgement on this
+	// deal, oldest first; empty when nobody has judged it (PR 2).
+	Attributions []AttributionRevision `json:"attributions"`
 }
 
 // MergeInput merges a lead into another; an empty target unmerges it.
@@ -142,30 +146,38 @@ func (s *ROIStore) fail(ctx context.Context, workspaceID, actor, objectID, step 
 // inTx runs one write path. body returns the object id for the audit event.
 func (s *ROIStore) inTx(ctx context.Context, workspaceID, actor, step string,
 	body func(ctx context.Context, tx pgx.Tx) (string, error)) error {
+	return s.inTxStep(ctx, workspaceID, actor, func() string { return step }, body)
+}
+
+// inTxStep is inTx for a write whose audit step is only known once the body
+// has read the current state (a judgement's first revision is "record", a
+// later one "revise"). step is asked after body has run.
+func (s *ROIStore) inTxStep(ctx context.Context, workspaceID, actor string, step func() string,
+	body func(ctx context.Context, tx pgx.Tx) (string, error)) error {
 	if !s.ready() {
 		return ErrStorage
 	}
 	if workspaceID == "" || actor == "" {
-		s.fail(ctx, workspaceID, actor, "", step, ErrInvalid)
+		s.fail(ctx, workspaceID, actor, "", step(), ErrInvalid)
 		return ErrInvalid
 	}
 	tx, err := s.begin(ctx, workspaceID)
 	if err != nil {
-		s.fail(ctx, workspaceID, actor, "", step, err)
+		s.fail(ctx, workspaceID, actor, "", step(), err)
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	objectID, err := body(ctx, tx)
 	if err != nil {
-		s.fail(ctx, workspaceID, actor, objectID, step, err)
+		s.fail(ctx, workspaceID, actor, objectID, step(), err)
 		return err
 	}
-	if _, err = s.audit(ctx, tx, workspaceID, actor, objectID, step); err != nil {
-		s.fail(ctx, workspaceID, actor, objectID, step, err)
+	if _, err = s.audit(ctx, tx, workspaceID, actor, objectID, step()); err != nil {
+		s.fail(ctx, workspaceID, actor, objectID, step(), err)
 		return ErrStorage
 	}
 	if err = tx.Commit(ctx); err != nil {
-		s.fail(ctx, workspaceID, actor, objectID, step, err)
+		s.fail(ctx, workspaceID, actor, objectID, step(), err)
 		return ErrStorage
 	}
 	return nil
@@ -384,11 +396,29 @@ func (s *ROIStore) writeCost(ctx context.Context, workspaceID, actor, costID str
 			if err := firstError(
 				s.checkAccount(ctx, workspaceID, in.AccountID),
 				s.checkWork(ctx, workspaceID, actor, in.WorkID),
+				s.checkAllocationTargets(ctx, workspaceID, actor, in.Allocations),
 			); err != nil {
 				return costID, err
 			}
 			record, err := ValidateCost(in)
 			if err != nil {
+				return costID, err
+			}
+			// The split (FR-030 to FR-032). Absent: a revision keeps the
+			// split it had, recomputed on its amount, rather than silently
+			// becoming a cost nobody shares.
+			var shares []AllocationInput
+			switch {
+			case in.Allocations != nil:
+				shares = *in.Allocations
+			case previous != nil:
+				carried, carryErr := loadAllocations(ctx, tx, workspaceID, []string{costID})
+				if carryErr != nil {
+					return costID, carryErr
+				}
+				shares = allocationInputs(carried[allocationKey(costID, previous.Revision)], previous.Currency)
+			}
+			if record.Allocations, err = ResolveAllocations(record.amountMinor, record.Currency, shares); err != nil {
 				return costID, err
 			}
 			record.Revision = 1
@@ -436,6 +466,17 @@ func (s *ROIStore) writeCost(ctx context.Context, workspaceID, actor, costID str
 				Scan(&record.CreatedAt); err != nil {
 				return costID, insertError(err)
 			}
+			for _, allocation := range record.Allocations {
+				if _, err = tx.Exec(ctx, `INSERT INTO content_roi_cost_allocation
+					(workspace_id, cost_id, cost_revision, target_kind, target_id, method, weight,
+					 allocated_minor)
+					VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+					workspaceID, costID, record.Revision, string(allocation.TargetKind),
+					allocation.TargetID, string(allocation.Method), allocation.Weight,
+					int64(allocation.AllocatedMinor)); err != nil {
+					return costID, ErrStorage
+				}
+			}
 			record.CreatedAt = record.CreatedAt.UTC()
 			record.fill()
 			written = record
@@ -471,7 +512,108 @@ func (s *ROIStore) ListCosts(ctx context.Context, workspaceID, actor string, fil
 		s.fail(ctx, workspaceID, actor, "", "list-costs", err)
 		return nil, ErrStorage
 	}
-	return collect(rows, scanCost)
+	costs, err := collect(rows, scanCost)
+	if err != nil {
+		return nil, err
+	}
+	return s.withAllocations(ctx, workspaceID, costs)
+}
+
+// ---------------------------------------------------------------- allocations
+
+func allocationKey(costID string, revision int) string {
+	return costID + "/" + strconv.Itoa(revision)
+}
+
+type querier interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+// loadAllocations reads every share of the given costs, keyed by (cost id,
+// revision) and ordered by target within each.
+func loadAllocations(ctx context.Context, q querier, workspaceID string, costIDs []string) (map[string][]CostAllocation, error) {
+	shares := map[string][]CostAllocation{}
+	if len(costIDs) == 0 {
+		return shares, nil
+	}
+	rows, err := q.Query(ctx, `SELECT cost_id, cost_revision, target_kind, target_id, method,
+		weight, allocated_minor FROM content_roi_cost_allocation
+		WHERE workspace_id=$1 AND cost_id = ANY($2::text[])
+		ORDER BY cost_id, cost_revision, target_kind, target_id`, workspaceID, costIDs)
+	if err != nil {
+		return nil, ErrStorage
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var costID, kind, method, target string
+		var revision int
+		var weight *int64
+		var allocated int64
+		if err = rows.Scan(&costID, &revision, &kind, &target, &method, &weight, &allocated); err != nil {
+			return nil, ErrStorage
+		}
+		key := allocationKey(costID, revision)
+		shares[key] = append(shares[key], CostAllocation{
+			TargetKind: AllocationTarget(kind), TargetID: target, Method: AllocationMethod(method),
+			Weight: weight, AllocatedMinor: Minor(allocated),
+		})
+	}
+	if rows.Err() != nil {
+		return nil, ErrStorage
+	}
+	return shares, nil
+}
+
+// attachAllocations gives each cost revision its own shares.
+func attachAllocations(costs []CostRevision, shares map[string][]CostAllocation) {
+	for i := range costs {
+		costs[i].Allocations = shares[allocationKey(costs[i].CostID, costs[i].Revision)]
+		for j := range costs[i].Allocations {
+			costs[i].Allocations[j].Allocated = FormatAmount(int64(costs[i].Allocations[j].AllocatedMinor), costs[i].Currency)
+		}
+		costs[i].fill()
+	}
+}
+
+func costIDs(costs []CostRevision) []string {
+	ids := []string{}
+	for _, cost := range costs {
+		if !slices.Contains(ids, cost.CostID) {
+			ids = append(ids, cost.CostID)
+		}
+	}
+	return ids
+}
+
+// withAllocations attaches each cost revision's own shares.
+func (s *ROIStore) withAllocations(ctx context.Context, workspaceID string, costs []CostRevision) ([]CostRevision, error) {
+	shares, err := loadAllocations(ctx, s.DB, workspaceID, costIDs(costs))
+	if err != nil {
+		return nil, err
+	}
+	attachAllocations(costs, shares)
+	return costs, nil
+}
+
+// checkAllocationTargets is decision step 2 for a split: a work or account
+// it names exists here. The other target kinds are a label and a period.
+func (s *ROIStore) checkAllocationTargets(ctx context.Context, workspaceID, actor string, allocations *[]AllocationInput) error {
+	if allocations == nil {
+		return nil
+	}
+	for _, allocation := range *allocations {
+		var err error
+		switch AllocationTarget(allocation.TargetKind) {
+		case TargetWork:
+			err = s.checkWork(ctx, workspaceID, actor, allocation.TargetID)
+		case TargetAccount:
+			err = s.checkAccount(ctx, workspaceID, allocation.TargetID)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetCost returns every revision of one cost, oldest first.
@@ -493,6 +635,9 @@ func (s *ROIStore) GetCost(ctx context.Context, workspaceID, actor, costID strin
 	}
 	if len(revisions) == 0 {
 		return CostHistory{}, ErrNotFound
+	}
+	if revisions, err = s.withAllocations(ctx, workspaceID, revisions); err != nil {
+		return CostHistory{}, err
 	}
 	return CostHistory{CostID: costID, Current: revisions[len(revisions)-1], Revisions: revisions}, nil
 }
@@ -758,7 +903,7 @@ func (s *ROIStore) GetLead(ctx context.Context, workspaceID, actor, leadID strin
 	if len(revisions) == 0 {
 		return LeadDetail{}, ErrNotFound
 	}
-	members, err := s.mergedMembers(ctx, workspaceID, leadID)
+	members, err := mergedMembers(ctx, s.DB, workspaceID, leadID)
 	if err != nil {
 		return LeadDetail{}, err
 	}
@@ -780,8 +925,8 @@ func (s *ROIStore) GetLead(ctx context.Context, workspaceID, actor, leadID strin
 
 // mergedMembers is leadID plus every lead whose current merge chain reaches
 // it.
-func (s *ROIStore) mergedMembers(ctx context.Context, workspaceID, leadID string) ([]string, error) {
-	rows, err := s.DB.Query(ctx, `SELECT lead_id, merged_into FROM (
+func mergedMembers(ctx context.Context, q querier, workspaceID, leadID string) ([]string, error) {
+	rows, err := q.Query(ctx, `SELECT lead_id, merged_into FROM (
 			SELECT DISTINCT ON (lead_id) lead_id, merged_into
 			FROM content_roi_lead_revision WHERE workspace_id=$1
 			ORDER BY lead_id, revision DESC) latest
@@ -1182,9 +1327,19 @@ func (s *ROIStore) GetDeal(ctx context.Context, workspaceID, actor, dealID strin
 		}
 		return left.AdjustmentID < right.AdjustmentID
 	})
+	attributionRows, err := s.DB.Query(ctx, `SELECT `+attributionColumns+`
+		FROM content_roi_attribution_revision WHERE workspace_id=$1 AND deal_id=$2
+		ORDER BY revision`, workspaceID, dealID)
+	if err != nil {
+		return DealDetail{}, ErrStorage
+	}
+	attributions, err := collect(attributionRows, scanAttribution)
+	if err != nil {
+		return DealDetail{}, err
+	}
 	return DealDetail{
 		DealID: dealID, Current: revisions[len(revisions)-1], Revisions: revisions,
-		Adjustments: histories,
+		Adjustments: histories, Attributions: attributions,
 	}, nil
 }
 
@@ -1313,4 +1468,129 @@ func (s *ROIStore) writeAdjustment(ctx context.Context, workspaceID, actor, deal
 		return AdjustmentRevision{}, err
 	}
 	return written, nil
+}
+
+// ---------------------------------------------------------------- report input
+
+// LoadReportInput reads what a report over params needs, in one read-only
+// snapshot so the records agree with each other: the current revision of
+// every cost (with its shares) and of every deal closed in the window, their
+// refunds/adjustments and judgements, the touches those judgements accept,
+// and every revision of every lead. It writes nothing - no row, no audit.
+//
+// It reads a little more than the window (all costs, all leads) because
+// whether a cost counts depends on its shares' periods and whether a lead
+// reached a stage depends on its whole history; the calculator decides.
+func (s *ROIStore) LoadReportInput(ctx context.Context, workspaceID, actor string, params ReportParams) (ReportInput, error) {
+	if !s.ready() {
+		return ReportInput{}, ErrStorage
+	}
+	if workspaceID == "" || actor == "" {
+		return ReportInput{}, ErrInvalid
+	}
+	prepared, err := prepareReportParams(params)
+	if err != nil {
+		return ReportInput{}, err
+	}
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return ReportInput{}, ErrStorage
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY`); err != nil {
+		return ReportInput{}, ErrStorage
+	}
+	input := ReportInput{Params: params}
+
+	rows, err := tx.Query(ctx, `SELECT `+costColumns+` FROM (
+			SELECT DISTINCT ON (cost_id) `+costColumns+`
+			FROM content_roi_cost_revision WHERE workspace_id=$1
+			ORDER BY cost_id, revision DESC) latest
+		WHERE NOT voided ORDER BY cost_id`, workspaceID)
+	if err != nil {
+		return ReportInput{}, ErrStorage
+	}
+	if input.Costs, err = collect(rows, scanCost); err != nil {
+		return ReportInput{}, err
+	}
+	shares, err := loadAllocations(ctx, tx, workspaceID, costIDs(input.Costs))
+	if err != nil {
+		return ReportInput{}, err
+	}
+	attachAllocations(input.Costs, shares)
+
+	if rows, err = tx.Query(ctx, `SELECT `+leadColumns+` FROM content_roi_lead_revision
+		WHERE workspace_id=$1 ORDER BY lead_id, revision`, workspaceID); err != nil {
+		return ReportInput{}, ErrStorage
+	}
+	if input.Leads, err = collect(rows, scanLead); err != nil {
+		return ReportInput{}, err
+	}
+
+	if rows, err = tx.Query(ctx, `SELECT `+dealColumns+` FROM (
+			SELECT DISTINCT ON (deal_id) `+dealColumns+`
+			FROM content_roi_deal_revision WHERE workspace_id=$1
+			ORDER BY deal_id, revision DESC) latest
+		WHERE NOT voided AND closed_at >= $2 AND closed_at < $3 ORDER BY deal_id`,
+		workspaceID, prepared.start, prepared.end); err != nil {
+		return ReportInput{}, ErrStorage
+	}
+	if input.Deals, err = collect(rows, scanDeal); err != nil {
+		return ReportInput{}, err
+	}
+	dealIDs := make([]string, 0, len(input.Deals))
+	for _, deal := range input.Deals {
+		dealIDs = append(dealIDs, deal.DealID)
+	}
+
+	if rows, err = tx.Query(ctx, `SELECT DISTINCT ON (adjustment_id) `+adjustmentColumns+`
+		FROM content_roi_adjustment_revision WHERE workspace_id=$1 AND deal_id = ANY($2::text[])
+		ORDER BY adjustment_id, revision DESC`, workspaceID, dealIDs); err != nil {
+		return ReportInput{}, ErrStorage
+	}
+	if input.Adjustments, err = collect(rows, scanAdjustment); err != nil {
+		return ReportInput{}, err
+	}
+
+	if rows, err = tx.Query(ctx, `SELECT DISTINCT ON (deal_id) `+attributionColumns+`
+		FROM content_roi_attribution_revision WHERE workspace_id=$1 AND deal_id = ANY($2::text[])
+		ORDER BY deal_id, revision DESC`, workspaceID, dealIDs); err != nil {
+		return ReportInput{}, ErrStorage
+	}
+	if input.Attributions, err = collect(rows, scanAttribution); err != nil {
+		return ReportInput{}, err
+	}
+	touchIDs := []string{}
+	for _, attribution := range input.Attributions {
+		touchIDs = append(touchIDs, attribution.TouchIDs...)
+	}
+
+	if rows, err = tx.Query(ctx, `SELECT DISTINCT ON (touch_id) `+touchColumns+`
+		FROM content_roi_touch_revision WHERE workspace_id=$1 AND touch_id = ANY($2::text[])
+		ORDER BY touch_id, revision DESC`, workspaceID, touchIDs); err != nil {
+		return ReportInput{}, ErrStorage
+	}
+	if input.Touches, err = collect(rows, scanTouch); err != nil {
+		return ReportInput{}, err
+	}
+	return input, nil
+}
+
+// PreviewReport computes a report without saving anything (contract §6,
+// POST /preview). The server writes what a person must not choose: the
+// window's timezone is the brand's, the generation time is now, and every
+// rate was entered by this actor at that time.
+func (s *ROIStore) PreviewReport(ctx context.Context, workspaceID, actor string, params ReportParams, now time.Time) (Result, error) {
+	params.Window.Timezone = s.location(ctx, workspaceID).String()
+	params.GeneratedAt = now.UTC().Format(time.RFC3339)
+	params.Rates = slices.Clone(params.Rates)
+	for i := range params.Rates {
+		params.Rates[i].EnteredBy = actor
+		params.Rates[i].EnteredAt = params.GeneratedAt
+	}
+	input, err := s.LoadReportInput(ctx, workspaceID, actor, params)
+	if err != nil {
+		return Result{}, err
+	}
+	return CalculateROI(input)
 }

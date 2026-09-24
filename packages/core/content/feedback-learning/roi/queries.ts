@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@multica/core/api";
 import {
   parseRoiAdjustment,
+  parseRoiAttribution,
   parseRoiCost,
   parseRoiCostHistory,
   parseRoiCostList,
@@ -11,15 +12,18 @@ import {
   parseRoiLead,
   parseRoiLeadDetail,
   parseRoiLeadList,
+  parseRoiResult,
   parseRoiTouch,
   roiPath,
   type RoiAdjustment,
+  type RoiAttribution,
   type RoiCost,
   type RoiCostHistory,
   type RoiDeal,
   type RoiDealDetail,
   type RoiLead,
   type RoiLeadDetail,
+  type RoiResult,
   type RoiTouch,
 } from "./contract";
 
@@ -155,4 +159,21 @@ export function useWriteRoiDeal(workspaceId: string) {
 /** POST deals/{id}/adjustments or deals/{id}/adjustments/{adjustmentId}/revisions. */
 export function useWriteRoiAdjustment(workspaceId: string) {
   return useRoiWrite<RoiAdjustment | null>(workspaceId, parseRoiAdjustment);
+}
+
+/** POST deals/{id}/attribution: the next revision of the judgement on a
+ *  deal (base_revision 0 for the first). */
+export function useWriteRoiAttribution(workspaceId: string) {
+  return useRoiWrite<RoiAttribution | null>(workspaceId, parseRoiAttribution);
+}
+
+/**
+ * POST preview: compute a report once from the given parameters (contract
+ * §5.1) and return it. Nothing is saved, so nothing is invalidated, and
+ * nothing is cached: the brand is the one in the request header.
+ */
+export function useRoiPreview() {
+  return useMutation<RoiResult | null, Error, Record<string, unknown>>({
+    mutationFn: async (params) => parseRoiResult(await api.contentROIPost("preview", params)),
+  });
 }

@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_roi_attribution_revision_key_idx;

@@ -36,6 +36,34 @@ export type RoiAdjustmentKind = (typeof ROI_ADJUSTMENT_KINDS)[number];
 
 export const ROI_RECORD_SOURCES = ["manual", "import"] as const;
 
+/** specs/034 PR 2: what a share of a shared cost goes to, and how it is stated. */
+export const ROI_ALLOCATION_TARGETS = ["work", "account", "campaign_label", "period"] as const;
+export const ROI_ALLOCATION_METHODS = ["weights", "amounts"] as const;
+
+/** The operator's judgement on a deal: R-061's four. */
+export const ROI_JUDGEMENTS = ["confirmed", "operator_judgement", "multi_touch", "unknown"] as const;
+export type RoiJudgement = (typeof ROI_JUDGEMENTS)[number];
+
+/** How a report shares a multi-touch deal out; the person's choice. */
+export const ROI_ATTRIBUTION_METHODS = ["first_touch", "last_touch", "even_split", "judgement_weights"] as const;
+export type RoiAttributionMethod = (typeof ROI_ATTRIBUTION_METHODS)[number];
+
+/** Why a metric is not computable, in the server's priority order. */
+export const ROI_REASON_CODES = [
+  "no_data", "currency_unconverted", "labor_rate_missing", "missing_gross_profit",
+  "refund_without_gross_delta", "missing_denominator", "zero_denominator",
+] as const;
+
+/** The report's sixteen metrics. revenue_to_spend and ad_roas are revenue
+ *  ratios; only business_roi is the profit ROI. */
+export const ROI_METRIC_IDS = [
+  "spend_total", "ad_spend_total", "qualified_leads", "bookings", "deals", "net_revenue",
+  "attributed_net_revenue", "attributed_gross_profit", "attribution_coverage_count",
+  "attribution_coverage_amount", "conversion_rate", "cost_per_qualified_lead", "cost_per_deal",
+  "business_roi", "revenue_to_spend", "ad_roas",
+] as const;
+export type RoiMetricId = (typeof ROI_METRIC_IDS)[number];
+
 /** ip-profile's eight. A touch may also leave the platform empty. */
 export const ROI_TOUCH_PLATFORMS = [
   "xiaohongshu", "douyin", "wechat_mp", "bilibili", "zhihu", "weibo", "kuaishou", "shipinhao",
@@ -47,6 +75,17 @@ export const ROI_CURRENCIES = [
   { code: "USD", digits: 2 }, { code: "EUR", digits: 2 }, { code: "GBP", digits: 2 },
   { code: "SGD", digits: 2 }, { code: "JPY", digits: 0 }, { code: "KRW", digits: 0 },
 ] as const;
+
+/** One share of a shared cost's revision. allocatedMinor is the server's
+ *  figure; the shares of one revision add up to its amount exactly. */
+export interface RoiCostAllocation {
+  targetKind: string;
+  targetId: string;
+  method: string;
+  weight: number | null;
+  allocatedMinor: string;
+  allocated: string;
+}
 
 export interface RoiCost {
   costId: string;
@@ -75,6 +114,8 @@ export interface RoiCost {
   importBatchId: string;
   recordedBy: string;
   createdAt: string;
+  /** Empty for a cost that is not shared. */
+  allocations: RoiCostAllocation[];
 }
 
 export interface RoiLead {
@@ -148,11 +189,27 @@ export interface RoiAdjustment {
   kind: string;
   revenueDeltaMinor: string;
   revenueDelta: string;
-  /** null: the operator did not say how gross profit moved. Not 0. */
+  /** Signed, added to gross profit: a reduction is negative ("-300.00").
+   *  null: the operator did not say how gross profit moved. Not 0. */
   grossDeltaMinor: string | null;
   grossDelta: string | null;
   currency: string;
   occurredAt: string;
+  note: string;
+  recordedBy: string;
+  createdAt: string;
+}
+
+/** The operator's judgement on a deal: which touches it accepts. Not
+ *  evidence, and writing it changes no touch. */
+export interface RoiAttribution {
+  dealId: string;
+  revision: number;
+  voided: boolean;
+  judgement: string;
+  touchIds: string[];
+  /** Empty: no manual weights. Otherwise one per touch id. */
+  weights: number[];
   note: string;
   recordedBy: string;
   createdAt: string;
@@ -176,6 +233,8 @@ export interface RoiLeadDetail extends RoiHistory<RoiLead> {
 export interface RoiDealDetail extends RoiHistory<RoiDeal> {
   dealId: string;
   adjustments: (RoiHistory<RoiAdjustment> & { adjustmentId: string })[];
+  /** Every revision of the judgement, oldest first. */
+  attributions: RoiAttribution[];
 }
 
 // Lenient where the page only reads (a controlled value this build has not
@@ -186,6 +245,15 @@ const optionalAmount = z.string().nullable().optional();
 const text = z.string().optional();
 const flag = z.boolean().optional();
 const ids = z.array(z.string()).nullable().optional();
+
+const allocationSchema = z.object({
+  target_kind: z.string(),
+  target_id: z.string(),
+  method: text,
+  weight: z.number().int().nullable().optional(),
+  allocated_minor: amount,
+  allocated: amount,
+});
 
 const costSchema = z.object({
   cost_id: z.string(),
@@ -212,6 +280,7 @@ const costSchema = z.object({
   import_batch_id: text,
   recorded_by: text,
   created_at: text,
+  allocations: z.array(allocationSchema).nullable().optional(),
 });
 
 const leadSchema = z.object({
@@ -290,6 +359,18 @@ const adjustmentSchema = z.object({
   created_at: text,
 });
 
+const attributionSchema = z.object({
+  deal_id: z.string(),
+  revision: z.number().int(),
+  voided: flag,
+  judgement: text,
+  touch_ids: ids,
+  weights: z.array(z.number().int()).nullable().optional(),
+  note: text,
+  recorded_by: text,
+  created_at: text,
+});
+
 function history<T extends z.ZodTypeAny>(item: T) {
   return z.object({ current: item, revisions: z.array(item) });
 }
@@ -305,6 +386,7 @@ const leadDetailSchema = history(leadSchema).extend({
 const dealDetailSchema = history(dealSchema).extend({
   deal_id: z.string(),
   adjustments: z.array(history(adjustmentSchema).extend({ adjustment_id: z.string() })).nullable().optional(),
+  attributions: z.array(attributionSchema).nullable().optional(),
 });
 
 function toCost(wire: z.infer<typeof costSchema>): RoiCost {
@@ -332,6 +414,28 @@ function toCost(wire: z.infer<typeof costSchema>): RoiCost {
     notDuplicateOf: wire.not_duplicate_of ?? [],
     sourceType: wire.source_type ?? "",
     importBatchId: wire.import_batch_id ?? "",
+    recordedBy: wire.recorded_by ?? "",
+    createdAt: wire.created_at ?? "",
+    allocations: (wire.allocations ?? []).map((share) => ({
+      targetKind: share.target_kind,
+      targetId: share.target_id,
+      method: share.method ?? "",
+      weight: share.weight ?? null,
+      allocatedMinor: share.allocated_minor,
+      allocated: share.allocated,
+    })),
+  };
+}
+
+function toAttribution(wire: z.infer<typeof attributionSchema>): RoiAttribution {
+  return {
+    dealId: wire.deal_id,
+    revision: wire.revision,
+    voided: wire.voided ?? false,
+    judgement: wire.judgement ?? "",
+    touchIds: wire.touch_ids ?? [],
+    weights: wire.weights ?? [],
+    note: wire.note ?? "",
     recordedBy: wire.recorded_by ?? "",
     createdAt: wire.created_at ?? "",
   };
@@ -492,7 +596,13 @@ export function parseRoiDealDetail(data: unknown): RoiDealDetail | null {
       current: toAdjustment(adjustment.current),
       revisions: adjustment.revisions.map(toAdjustment),
     })),
+    attributions: (parsed.attributions ?? []).map(toAttribution),
   };
+}
+
+export function parseRoiAttribution(data: unknown): RoiAttribution | null {
+  const parsed = parseWithFallback<z.infer<typeof attributionSchema> | null>(data, attributionSchema, null, { endpoint: "content-roi/attribution" });
+  return parsed ? toAttribution(parsed) : null;
 }
 
 export function parseRoiAdjustment(data: unknown): RoiAdjustment | null {
@@ -504,4 +614,198 @@ export function parseRoiAdjustment(data: unknown): RoiAdjustment | null {
  *  can never step into a neighbouring route. */
 export function roiPath(...parts: string[]): string {
   return parts.map(encodeURIComponent).join("/");
+}
+
+// ---------------------------------------------------------------- report result (PR 2)
+//
+// A computed report, contract §5.2. The page shows the server's strings and
+// does no arithmetic: every value, numerator, denominator and amount here is
+// a string, and a response that sends one as a JSON number fails the schema.
+// A status this build has not heard of reads as "not_computable" - never as
+// a number shown on trust.
+
+export type RoiMetricStatus = "ok" | "not_computable";
+
+export interface RoiRecordRef {
+  kind: string;
+  id: string;
+  revision: number;
+  amountMinor: string | null;
+  currency: string;
+  convertedMinor: string | null;
+}
+
+export interface RoiMetric {
+  status: RoiMetricStatus;
+  /** Minor units, a count, or a reduced fraction ("2", "-1/2"). Not for display. */
+  value: string;
+  /** What the page shows, as the server wrote it ("200.00%", "10.00 倍", "−50.00%"). */
+  display: string;
+  unit: string;
+  numerator: string;
+  denominator: string;
+  /** Set when not computable. */
+  reason: string;
+  formula: string;
+  records: RoiRecordRef[];
+}
+
+export interface RoiBreakdownAmount {
+  status: RoiMetricStatus;
+  value: string;
+  display: string;
+  reason: string;
+}
+
+export interface RoiBreakdownRow {
+  kind: string;
+  id: string;
+  attributedNetRevenue: RoiBreakdownAmount;
+  attributedGrossProfit: RoiBreakdownAmount;
+  /** The same deal can appear under several works; these do not add up. */
+  dealsTouched: number;
+}
+
+export interface RoiResult {
+  calcVersion: string;
+  window: { start: string; end: string; timezone: string };
+  reportCurrency: string;
+  attributionMethod: string;
+  generatedAt: string;
+  metrics: Partial<Record<string, RoiMetric>>;
+  breakdown: {
+    byWork: RoiBreakdownRow[];
+    byAccount: RoiBreakdownRow[];
+    accountLevelUnknownWork: RoiBreakdownRow | null;
+    brandLevelUnknownAccount: RoiBreakdownRow | null;
+    unattributed: RoiBreakdownRow | null;
+    evenSplitFallback: string[];
+  };
+  rules: string[];
+}
+
+const statusSchema = z.enum(["ok", "not_computable"]).catch("not_computable");
+
+const recordRefSchema = z.object({
+  kind: z.string(),
+  id: z.string(),
+  revision: z.number().int(),
+  amount_minor: z.string().nullable().optional(),
+  currency: text,
+  converted_minor: z.string().nullable().optional(),
+});
+
+const metricSchema = z.object({
+  status: statusSchema,
+  value: text,
+  display: text,
+  unit: text,
+  numerator: text,
+  denominator: text,
+  reason: text,
+  formula: text,
+  records: z.array(recordRefSchema).nullable().optional(),
+});
+
+const breakdownAmountSchema = z.object({
+  status: statusSchema,
+  value: text,
+  display: text,
+  reason: text,
+});
+
+const breakdownRowSchema = z.object({
+  kind: text,
+  id: text,
+  attributed_net_revenue: breakdownAmountSchema,
+  attributed_gross_profit: breakdownAmountSchema,
+  deals_touched: z.number().int(),
+});
+
+const resultSchema = z.object({
+  calc_version: z.string(),
+  window: z.object({ start: text, end: text, timezone: text }),
+  report_currency: text,
+  attribution_method: text,
+  generated_at: text,
+  metrics: z.record(z.string(), metricSchema),
+  breakdown: z.object({
+    by_work: z.array(breakdownRowSchema).nullable().optional(),
+    by_account: z.array(breakdownRowSchema).nullable().optional(),
+    account_level_unknown_work: breakdownRowSchema.nullable().optional(),
+    brand_level_unknown_account: breakdownRowSchema.nullable().optional(),
+    unattributed: breakdownRowSchema.nullable().optional(),
+    even_split_fallback: z.array(z.string()).nullable().optional(),
+  }),
+  rules: z.array(z.string()).nullable().optional(),
+});
+
+function toAmount(wire: z.infer<typeof breakdownAmountSchema>): RoiBreakdownAmount {
+  // An amount that says ok but carries no value is not shown as zero.
+  const status = wire.status === "ok" && wire.value ? "ok" : "not_computable";
+  return { status, value: wire.value ?? "", display: wire.display ?? "", reason: wire.reason ?? "" };
+}
+
+function toRow(wire: z.infer<typeof breakdownRowSchema>): RoiBreakdownRow {
+  return {
+    kind: wire.kind ?? "",
+    id: wire.id ?? "",
+    attributedNetRevenue: toAmount(wire.attributed_net_revenue),
+    attributedGrossProfit: toAmount(wire.attributed_gross_profit),
+    dealsTouched: wire.deals_touched,
+  };
+}
+
+function toMetric(wire: z.infer<typeof metricSchema>): RoiMetric {
+  const status = wire.status === "ok" && wire.display ? "ok" : "not_computable";
+  return {
+    status,
+    value: wire.value ?? "",
+    display: status === "ok" ? (wire.display ?? "") : "",
+    unit: wire.unit ?? "",
+    numerator: wire.numerator ?? "",
+    denominator: wire.denominator ?? "",
+    reason: wire.reason ?? "",
+    formula: wire.formula ?? "",
+    records: (wire.records ?? []).map((record) => ({
+      kind: record.kind,
+      id: record.id,
+      revision: record.revision,
+      amountMinor: record.amount_minor ?? null,
+      currency: record.currency ?? "",
+      convertedMinor: record.converted_minor ?? null,
+    })),
+  };
+}
+
+/** A computed report (POST preview). null when the response is malformed. */
+export function parseRoiResult(data: unknown): RoiResult | null {
+  const parsed = parseWithFallback<z.infer<typeof resultSchema> | null>(data, resultSchema, null, { endpoint: "content-roi/result" });
+  if (!parsed) return null;
+  const metrics: Partial<Record<string, RoiMetric>> = {};
+  for (const [id, metric] of Object.entries(parsed.metrics)) {
+    metrics[id] = toMetric(metric);
+  }
+  const breakdown = parsed.breakdown;
+  return {
+    calcVersion: parsed.calc_version,
+    window: {
+      start: parsed.window.start ?? "",
+      end: parsed.window.end ?? "",
+      timezone: parsed.window.timezone ?? "",
+    },
+    reportCurrency: parsed.report_currency ?? "",
+    attributionMethod: parsed.attribution_method ?? "",
+    generatedAt: parsed.generated_at ?? "",
+    metrics,
+    breakdown: {
+      byWork: (breakdown.by_work ?? []).map(toRow),
+      byAccount: (breakdown.by_account ?? []).map(toRow),
+      accountLevelUnknownWork: breakdown.account_level_unknown_work ? toRow(breakdown.account_level_unknown_work) : null,
+      brandLevelUnknownAccount: breakdown.brand_level_unknown_account ? toRow(breakdown.brand_level_unknown_account) : null,
+      unattributed: breakdown.unattributed ? toRow(breakdown.unattributed) : null,
+      evenSplitFallback: breakdown.even_split_fallback ?? [],
+    },
+    rules: parsed.rules ?? [],
+  };
 }

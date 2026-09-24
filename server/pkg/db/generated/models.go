@@ -869,6 +869,31 @@ type ContentRoiAdjustmentRevision struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentRoiAttributionRevision struct {
+	WorkspaceID string             `json:"workspace_id"`
+	DealID      string             `json:"deal_id"`
+	Revision    int32              `json:"revision"`
+	Voided      bool               `json:"voided"`
+	Judgement   string             `json:"judgement"`
+	TouchIds    []string           `json:"touch_ids"`
+	Weights     []int32            `json:"weights"`
+	Note        string             `json:"note"`
+	RecordedBy  string             `json:"recorded_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentRoiCostAllocation struct {
+	WorkspaceID    string             `json:"workspace_id"`
+	CostID         string             `json:"cost_id"`
+	CostRevision   int32              `json:"cost_revision"`
+	TargetKind     string             `json:"target_kind"`
+	TargetID       string             `json:"target_id"`
+	Method         string             `json:"method"`
+	Weight         pgtype.Int4        `json:"weight"`
+	AllocatedMinor int64              `json:"allocated_minor"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContentRoiCostRevision struct {
 	WorkspaceID    string             `json:"workspace_id"`
 	CostID         string             `json:"cost_id"`

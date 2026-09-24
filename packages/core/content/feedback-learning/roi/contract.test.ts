@@ -5,14 +5,21 @@ import { describe, expect, it } from "vitest";
 
 import {
   ROI_ADJUSTMENT_KINDS,
+  ROI_ALLOCATION_METHODS,
+  ROI_ALLOCATION_TARGETS,
+  ROI_ATTRIBUTION_METHODS,
   ROI_CURRENCIES,
   ROI_EVIDENCE_TYPES,
   ROI_GROSS_BASES,
+  ROI_JUDGEMENTS,
+  ROI_METRIC_IDS,
   ROI_PRICINGS,
+  ROI_REASON_CODES,
   ROI_RECORD_SOURCES,
   ROI_TOUCH_PLATFORMS,
   ROI_TOUCH_ROLES,
   parseRoiAdjustment,
+  parseRoiAttribution,
   parseRoiCost,
   parseRoiCostHistory,
   parseRoiCostList,
@@ -22,6 +29,7 @@ import {
   parseRoiLead,
   parseRoiLeadDetail,
   parseRoiLeadList,
+  parseRoiResult,
   parseRoiTouch,
   roiPath,
 } from "./contract";
@@ -188,5 +196,140 @@ describe("deals and adjustments", () => {
 describe("roiPath", () => {
   it("encodes every segment", () => {
     expect(roiPath("costs", "a/b", "revisions")).toBe("costs/a%2Fb/revisions");
+  });
+});
+
+// ---------------------------------------------------------------- PR 2
+
+const goPR2 = ["roi_allocate.go", "roi_attribution.go", "roi_calc.go"]
+  .map((name) => readFileSync(join(goDir, name), "utf8"))
+  .join("\n");
+
+function goPR2Values(varName: string): string[] {
+  const declaration = new RegExp(`var ${varName} = \\[\\][A-Za-z]+\\{([^}]*)\\}`, "s").exec(goPR2);
+  if (!declaration) throw new Error(`${varName} not found in the PR 2 Go files`);
+  return declaration[1]!.split(",").map((name) => name.trim()).filter(Boolean).map((name) => {
+    const value = new RegExp(`${name}\\s+[A-Za-z]+ = "([^"]+)"`).exec(goPR2);
+    if (!value) throw new Error(`${name} has no literal`);
+    return value[1]!;
+  });
+}
+
+describe("the PR 2 sets match the Go source", () => {
+  it.each([
+    ["AllocationTargets", ROI_ALLOCATION_TARGETS],
+    ["AllocationMethods", ROI_ALLOCATION_METHODS],
+    ["Judgements", ROI_JUDGEMENTS],
+    ["AttributionMethods", ROI_ATTRIBUTION_METHODS],
+    ["ReasonCodes", ROI_REASON_CODES],
+    ["MetricIDs", ROI_METRIC_IDS],
+  ])("%s", (goName, tsValues) => {
+    expect([...tsValues]).toEqual(goPR2Values(goName));
+  });
+});
+
+describe("allocations and judgements", () => {
+  const share = {
+    target_kind: "work", target_id: "w1", method: "weights", weight: 1,
+    allocated_minor: "3334", allocated: "33.34",
+  };
+
+  it("reads a cost's shares as strings", () => {
+    const cost = parseRoiCost({ ...costWire, allocations: [share] });
+    expect(cost?.allocations).toEqual([{
+      targetKind: "work", targetId: "w1", method: "weights", weight: 1,
+      allocatedMinor: "3334", allocated: "33.34",
+    }]);
+    expect(parseRoiCost(costWire)?.allocations).toEqual([]);
+    expect(parseRoiCost({ ...costWire, allocations: [{ ...share, allocated_minor: 3334 }] })).toBeNull();
+  });
+
+  const attributionWire = {
+    deal_id: "d1", revision: 1, voided: false, judgement: "multi_touch", touch_ids: ["t1", "t2"],
+    weights: [2, 1], note: "", recorded_by: "u1", created_at: "2026-09-25T00:00:00Z",
+  };
+
+  it("reads a judgement and the deal's judgements", () => {
+    expect(parseRoiAttribution(attributionWire)?.touchIds).toEqual(["t1", "t2"]);
+    expect(parseRoiAttribution({ ...attributionWire, deal_id: 1 })).toBeNull();
+    const detail = parseRoiDealDetail({
+      deal_id: "d1", current: dealWire, revisions: [dealWire], attributions: [attributionWire],
+    });
+    expect(detail?.attributions.map((a) => a.judgement)).toEqual(["multi_touch"]);
+    expect(parseRoiDealDetail({ deal_id: "d1", current: dealWire, revisions: [dealWire] })?.attributions)
+      .toEqual([]);
+  });
+});
+
+// The server's own figures for contract §5.4's D14-V12 samples.
+const resultWire = {
+  calc_version: "roi-calc/1",
+  window: { start: "2026-09-01", end: "2026-09-30", timezone: "Asia/Shanghai" },
+  report_currency: "CNY",
+  attribution_method: "even_split",
+  generated_at: "2026-10-01T00:00:00Z",
+  metrics: {
+    business_roi: {
+      status: "ok", value: "2", display: "200.00%", unit: "percent", numerator: "200000",
+      denominator: "100000", formula: "business_roi/1",
+      records: [{ kind: "cost", id: "c-1", revision: 1, amount_minor: "100000", currency: "CNY", converted_minor: "100000" }],
+    },
+    revenue_to_spend: {
+      status: "ok", value: "10", display: "10.00 倍", unit: "times", numerator: "1000000",
+      denominator: "100000", formula: "revenue_to_spend/1", records: [],
+    },
+    ad_roas: { status: "not_computable", reason: "no_data", unit: "times", formula: "ad_roas/1", records: [] },
+  },
+  breakdown: {
+    by_work: [{
+      kind: "work", id: "w-1", deals_touched: 1,
+      attributed_net_revenue: { status: "ok", value: "1000000", display: "10000.00" },
+      attributed_gross_profit: { status: "not_computable", reason: "missing_gross_profit" },
+    }],
+    by_account: [],
+    account_level_unknown_work: null,
+    brand_level_unknown_account: null,
+    unattributed: null,
+    even_split_fallback: [],
+  },
+  rules: ["阶段是自由文本，没有先后顺序；转化率只按线索是否到达过某阶段计算，不反映阶段之间的先后。"],
+};
+
+describe("a computed report", () => {
+  it("passes D14-V12's display strings through untouched", () => {
+    const result = parseRoiResult(resultWire);
+    expect(result?.metrics.business_roi?.display).toBe("200.00%");
+    expect(result?.metrics.revenue_to_spend?.display).toBe("10.00 倍");
+    expect(result?.metrics.ad_roas?.status).toBe("not_computable");
+    expect(result?.metrics.ad_roas?.reason).toBe("no_data");
+    expect(result?.metrics.ad_roas?.display).toBe("");
+    expect(result?.breakdown.byWork[0]?.attributedGrossProfit.status).toBe("not_computable");
+    expect(result?.rules).toHaveLength(1);
+  });
+
+  it("never labels the revenue ratio as a profit ROI", () => {
+    for (const label of ["revenue_to_spend", resultWire.metrics.revenue_to_spend.formula]) {
+      expect(label.toLowerCase()).not.toContain("roi");
+      expect(label.toLowerCase()).not.toContain("profit");
+    }
+  });
+
+  it("reads an unknown status as not computable, never as a number", () => {
+    const result = parseRoiResult({
+      ...resultWire,
+      metrics: { business_roi: { ...resultWire.metrics.business_roi, status: "estimated" } },
+    });
+    expect(result?.metrics.business_roi?.status).toBe("not_computable");
+    expect(result?.metrics.business_roi?.display).toBe("");
+  });
+
+  it("refuses numbers where strings belong, and degrades malformed responses", () => {
+    expect(parseRoiResult({
+      ...resultWire,
+      metrics: { business_roi: { ...resultWire.metrics.business_roi, value: 2 } },
+    })).toBeNull();
+    expect(parseRoiResult({ ...resultWire, metrics: "x" })).toBeNull();
+    expect(parseRoiResult({ calc_version: "roi-calc/1" })).toBeNull();
+    expect(parseRoiResult(null)).toBeNull();
   });
 });

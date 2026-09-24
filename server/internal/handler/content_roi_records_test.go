@@ -28,6 +28,9 @@ var roiTableNames = []string{
 	"content_roi_touch_revision",
 	"content_roi_deal_revision",
 	"content_roi_adjustment_revision",
+	// PR 2.
+	"content_roi_cost_allocation",
+	"content_roi_attribution_revision",
 }
 
 // roiWorkspace makes a brand the test user owns, with one content account and
@@ -445,8 +448,8 @@ func TestContentROIDealsAndRefundsKeepTheirBasisAndTheirNet(t *testing.T) {
 	}
 
 	refundID, refund := roiCreated(t, roiCall(t, h.AddContentROIAdjustment, wsID, "POST", "/adjustments",
-		refundBody("1000.00", "CNY", `,"gross_delta":"300.00"`), "dealId", cogsDeal), "adjustment_id")
-	if refund["revenue_delta_minor"] != "100000" || refund["gross_delta_minor"] != "30000" {
+		refundBody("1000.00", "CNY", `,"gross_delta":"-300.00"`), "dealId", cogsDeal), "adjustment_id")
+	if refund["revenue_delta_minor"] != "100000" || refund["gross_delta_minor"] != "-30000" {
 		t.Fatalf("refund = %v", refund)
 	}
 	// 10000 - 1000 = 9000 left; 9000.01 more takes it below zero.
@@ -630,13 +633,15 @@ func TestDeleteWorkspaceRemovesROIRecords(t *testing.T) {
 	h := feedbackHandler(t)
 	for _, wsID := range []string{target, neighbor} {
 		roiCreated(t, roiCall(t, h.CreateContentROICost, wsID, "POST", "/api/content-roi/costs",
-			costJSON("拍摄", "1.00", "")), "cost_id")
+			costJSON("拍摄", "1.00", `,"allocations":[{"target_kind":"period","target_id":"2026-09","weight":1}]`)), "cost_id")
 		leadID := roiLead(t, h, wsID, "客户-delete")
 		roiTouch(t, h, wsID, leadID, touchBody("unknown", "", "", "", "", "other"))
 		dealID, _ := roiCreated(t, roiCall(t, h.CreateContentROIDeal, wsID, "POST", "/api/content-roi/deals",
 			dealJSON("TB-delete", "100.00", "none", "")), "deal_id")
 		roiCreated(t, roiCall(t, h.AddContentROIAdjustment, wsID, "POST", "/adjustments",
 			refundBody("1.00", "CNY", ""), "dealId", dealID), "adjustment_id")
+		roiCreated(t, roiCall(t, h.RecordContentROIAttribution, wsID, "POST", "/attribution",
+			`{"judgement":"unknown","touch_ids":[],"base_revision":0}`, "dealId", dealID), "deal_id")
 	}
 
 	request := newRequest(http.MethodDelete, "/api/workspaces/"+target, nil)
@@ -746,6 +751,8 @@ func TestEveryContentROIEndpointRefusesANonMemberLikeAMissingRecord(t *testing.T
 		{"revise-deal", h.ReviseContentROIDeal, "POST", []string{"dealId", "d"}},
 		{"add-adjustment", h.AddContentROIAdjustment, "POST", []string{"dealId", "d"}},
 		{"revise-adjustment", h.ReviseContentROIAdjustment, "POST", []string{"dealId", "d", "adjustmentId", "a"}},
+		{"record-attribution", h.RecordContentROIAttribution, "POST", []string{"dealId", "d"}},
+		{"preview", h.PreviewContentROI, "POST", nil},
 	} {
 		t.Run(endpoint.name, func(t *testing.T) {
 			response := roiCall(t, endpoint.handler, outsider, endpoint.method, "/", "{}", endpoint.params...)
@@ -779,25 +786,8 @@ func TestContentROIAmountsMustBeStringsAndServerFieldsAreIgnored(t *testing.T) {
 	}
 }
 
-// T028: allocations arrive with PR 2. Until then a non-empty one is refused
-// by name on both endpoints; null and [] are no allocation at all.
-func TestContentROIAllocationsAreRefusedUntilPR2(t *testing.T) {
-	if testHandler == nil || testPool == nil {
-		t.Skip("database not available")
-	}
-	wsID, _, _ := roiWorkspace(t, "roi-allocations")
-	h := feedbackHandler(t)
-	allocation := `,"allocations":[{"target_kind":"work","target_id":"w1","weight":1}]`
-	assertROIField(t, roiCall(t, h.CreateContentROICost, wsID, "POST", "/api/content-roi/costs",
-		costJSON("拍摄", "3000.00", allocation)), http.StatusBadRequest, "allocations")
-	costID, _ := roiCreated(t, roiCall(t, h.CreateContentROICost, wsID, "POST", "/api/content-roi/costs",
-		costJSON("拍摄", "3000.00", `,"allocations":[]`)), "cost_id")
-	assertROIField(t, roiCall(t, h.ReviseContentROICost, wsID, "POST", "/revisions",
-		costJSON("拍摄", "3000.00", `,"base_revision":1`+allocation), "costId", costID),
-		http.StatusBadRequest, "allocations")
-	roiCreated(t, roiCall(t, h.ReviseContentROICost, wsID, "POST", "/revisions",
-		costJSON("拍摄", "3100.00", `,"base_revision":1,"allocations":null`), "costId", costID), "cost_id")
-}
+// T028 became TestContentROIAllocationsAreStoredWithTheirRevision in
+// content_roi_calc_test.go when PR 2 accepted allocations.
 
 // A value of the wrong JSON type is refused naming the JSON field alone -
 // never the Go struct path encoding/json reports for an embedded input

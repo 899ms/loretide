@@ -40,9 +40,12 @@ var contentROIRoutes = []struct {
 	{http.MethodPost, "/api/content-roi/deals/{dealId}/revisions", "/api/content-roi/deals/deal-1/revisions"},
 	{http.MethodPost, "/api/content-roi/deals/{dealId}/adjustments", "/api/content-roi/deals/deal-1/adjustments"},
 	{http.MethodPost, "/api/content-roi/deals/{dealId}/adjustments/{adjustmentId}/revisions", "/api/content-roi/deals/deal-1/adjustments/adj-1/revisions"},
+	// PR 2.
+	{http.MethodPost, "/api/content-roi/deals/{dealId}/attribution", "/api/content-roi/deals/deal-1/attribution"},
+	{http.MethodPost, "/api/content-roi/preview", "/api/content-roi/preview"},
 }
 
-// T032 / FR-074: every PR 1 endpoint is mounted, and - every record being
+// T032 / FR-074: every PR 1 and PR 2 endpoint is mounted, and - every record being
 // append-only - no route can rewrite or remove one.
 func TestContentROIEndpointsAreMounted(t *testing.T) {
 	router := NewRouter(nil, realtime.NewHub(), events.New(), analytics.NoopClient{}, nil)
@@ -129,7 +132,7 @@ func roiString(t *testing.T, body map[string]any, key string) string {
 	return value
 }
 
-// T029 / workflow step 12: each of the eleven path-parameter endpoints,
+// T029 / T047 workflow step 12: each of the twelve path-parameter endpoints,
 // through the real router and middleware, with server-chosen ids that are
 // not the workspace id. Every answer has to be about the id in the path; a
 // handler that read the context where it meant chi.URLParam would answer
@@ -143,6 +146,7 @@ func TestContentROIPathIDsSurviveTheRealMiddleware(t *testing.T) {
 	for _, table := range []string{
 		"content_roi_cost_revision", "content_roi_lead_revision", "content_roi_touch_revision",
 		"content_roi_deal_revision", "content_roi_adjustment_revision",
+		"content_roi_cost_allocation", "content_roi_attribution_revision",
 	} {
 		fx.Cleanup(t, `DELETE FROM `+table+` WHERE workspace_id=$1`, testWorkspaceID)
 	}
@@ -195,6 +199,9 @@ func TestContentROIPathIDsSurviveTheRealMiddleware(t *testing.T) {
 		{"revise-adjustment", http.MethodPost, "/api/content-roi/deals/" + dealID + "/adjustments/" + adjustmentID + "/revisions",
 			`{"kind":"refund","amount":"200.00","currency":"CNY","occurred_at":"2026-09-20T02:00:00Z","base_revision":1}`,
 			"adjustment_id", adjustmentID},
+		// PR 2: the judgement answers for the deal in the path.
+		{"record-attribution", http.MethodPost, "/api/content-roi/deals/" + dealID + "/attribution",
+			`{"judgement":"unknown","touch_ids":[],"base_revision":0}`, "deal_id", dealID},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
