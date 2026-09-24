@@ -2074,6 +2074,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/deals/{dealId}/revisions", h.ReviseContentROIDeal)
 			r.Post("/deals/{dealId}/adjustments", h.AddContentROIAdjustment)
 			r.Post("/deals/{dealId}/adjustments/{adjustmentId}/revisions", h.ReviseContentROIAdjustment)
+
+			// specs/034 PR 2: the attribution judgement, and a report
+			// computed once without being saved.
+			r.Post("/deals/{dealId}/attribution", h.RecordContentROIAttribution)
+			r.Post("/preview", h.PreviewContentROI)
 		})
 
 		// --- Workspace-scoped routes (all require workspace membership) ---

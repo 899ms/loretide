@@ -405,6 +405,12 @@ var concurrentIndexCleanups = map[string]string{
 	"563_content_roi_deal_revision_dedupe_idx":     "content_roi_deal_revision_dedupe_idx",
 	"565_content_roi_adjustment_revision_key_idx":  "content_roi_adjustment_revision_key_idx",
 	"566_content_roi_adjustment_revision_deal_idx": "content_roi_adjustment_revision_deal_idx",
+
+	// specs/034 ROI allocation and attribution (PR 2). Its own block, as
+	// above. The two table migrations (567, 569) build no index and are
+	// absent. The numbers are provisional and move with the files at merge.
+	"568_content_roi_cost_allocation_cost_idx":     "content_roi_cost_allocation_cost_idx",
+	"570_content_roi_attribution_revision_key_idx": "content_roi_attribution_revision_key_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction
