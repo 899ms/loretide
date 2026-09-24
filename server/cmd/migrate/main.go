@@ -388,6 +388,23 @@ var concurrentIndexCleanups = map[string]string{
 	"545_content_marketing_node_revision_node_revision_idx": "content_marketing_node_revision_node_revision_idx",
 	"547_content_marketing_node_candidate_id_unique_idx":    "content_marketing_node_candidate_id_unique_idx",
 	"548_content_marketing_node_candidate_key_idx":          "content_marketing_node_candidate_key_idx",
+
+	// specs/034 ROI records (PR 1). Its own block so gofmt aligns these among
+	// themselves and every line above stays exactly as it was. The five table
+	// migrations (549, 553, 557, 560, 564) build no index and are absent.
+	"550_content_roi_cost_revision_key_idx":        "content_roi_cost_revision_key_idx",
+	"551_content_roi_cost_revision_time_idx":       "content_roi_cost_revision_time_idx",
+	"552_content_roi_cost_revision_dedupe_idx":     "content_roi_cost_revision_dedupe_idx",
+	"554_content_roi_lead_revision_key_idx":        "content_roi_lead_revision_key_idx",
+	"555_content_roi_lead_revision_time_idx":       "content_roi_lead_revision_time_idx",
+	"556_content_roi_lead_revision_dedupe_idx":     "content_roi_lead_revision_dedupe_idx",
+	"558_content_roi_touch_revision_key_idx":       "content_roi_touch_revision_key_idx",
+	"559_content_roi_touch_revision_lead_idx":      "content_roi_touch_revision_lead_idx",
+	"561_content_roi_deal_revision_key_idx":        "content_roi_deal_revision_key_idx",
+	"562_content_roi_deal_revision_time_idx":       "content_roi_deal_revision_time_idx",
+	"563_content_roi_deal_revision_dedupe_idx":     "content_roi_deal_revision_dedupe_idx",
+	"565_content_roi_adjustment_revision_key_idx":  "content_roi_adjustment_revision_key_idx",
+	"566_content_roi_adjustment_revision_deal_idx": "content_roi_adjustment_revision_deal_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction

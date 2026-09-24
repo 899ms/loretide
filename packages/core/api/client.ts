@@ -1023,6 +1023,20 @@ export class ApiClient {
     return this.fetch<unknown>("/api/content-feedback/pending");
   }
 
+  // Costs, leads, touches, deals and refunds/adjustments (specs/034). Two
+  // methods rather than one per endpoint: every path lives under
+  // /api/content-roi, every write is a POST of a new revision (there is no
+  // update and no delete), and the caller builds the path with each id
+  // segment already encoded (roiPath in content/feedback-learning/roi).
+  async contentROIGet(path: string, query: Record<string, string> = {}): Promise<unknown> {
+    const search = new URLSearchParams(query).toString();
+    return this.fetch<unknown>(`/api/content-roi/${path}${search ? `?${search}` : ""}`);
+  }
+
+  async contentROIPost(path: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-roi/${path}`, {method: "POST", body: JSON.stringify(body)});
+  }
+
   // The brand's operating rules (specs/029). Brand-scoped: which brand is
   // decided by the workspace header, so neither path carries an id.
   async contentOperatingRules(): Promise<unknown> {

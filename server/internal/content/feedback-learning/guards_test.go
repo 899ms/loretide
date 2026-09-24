@@ -287,6 +287,18 @@ func TestThereIsNoSixthControlledSet(t *testing.T) {
 		}
 		delete(found, name)
 	}
+	// specs/034's sets (contract §3). R-061 gives each of these values, so
+	// they are not the invented kind this test exists to stop; they are named
+	// one by one so an unnamed eighth still fails below.
+	for _, name := range []string{
+		"Pricings", "EvidenceTypes", "TouchRoles", "GrossBases", "AdjustmentKinds",
+		"RecordSources", "TouchPlatforms", "Currencies",
+	} {
+		if !found[name] {
+			t.Errorf("034 controlled set %s is gone", name)
+		}
+		delete(found, name)
+	}
 	for extra := range found {
 		t.Errorf("a controlled set %q was added; SOP 10.1 names those fields but gives no values, and inventing some puts words in the SOP's mouth that every stored row then has to be valid against", extra)
 	}

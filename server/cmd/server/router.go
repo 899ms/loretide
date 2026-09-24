@@ -2041,6 +2041,32 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Get("/pending", h.ListContentFeedbackPending)
 		})
 
+		// Costs, leads, touches, deals and refunds/adjustments (specs/034 PR 1).
+		// Outside RequireWorkspaceMember for the same reason as the two blocks
+		// above: every decision, refusals included, reaches workspace-core's
+		// Authorize in the handler. Every record is append-only, so each
+		// change is a POST of a new revision; there is no PUT, PATCH or DELETE.
+		r.Route("/api/content-roi", func(r chi.Router) {
+			r.Use(h.DiagnosticTrace)
+			r.Get("/costs", h.ListContentROICosts)
+			r.Post("/costs", h.CreateContentROICost)
+			r.Get("/costs/{costId}", h.GetContentROICost)
+			r.Post("/costs/{costId}/revisions", h.ReviseContentROICost)
+			r.Get("/leads", h.ListContentROILeads)
+			r.Post("/leads", h.CreateContentROILead)
+			r.Get("/leads/{leadId}", h.GetContentROILead)
+			r.Post("/leads/{leadId}/revisions", h.ReviseContentROILead)
+			r.Post("/leads/{leadId}/merge", h.MergeContentROILead)
+			r.Post("/leads/{leadId}/touches", h.AddContentROITouch)
+			r.Post("/leads/{leadId}/touches/{touchId}/revisions", h.ReviseContentROITouch)
+			r.Get("/deals", h.ListContentROIDeals)
+			r.Post("/deals", h.CreateContentROIDeal)
+			r.Get("/deals/{dealId}", h.GetContentROIDeal)
+			r.Post("/deals/{dealId}/revisions", h.ReviseContentROIDeal)
+			r.Post("/deals/{dealId}/adjustments", h.AddContentROIAdjustment)
+			r.Post("/deals/{dealId}/adjustments/{adjustmentId}/revisions", h.ReviseContentROIAdjustment)
+		})
+
 		// --- Workspace-scoped routes (all require workspace membership) ---
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireWorkspaceMember(queries))

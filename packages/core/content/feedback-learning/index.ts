@@ -4,3 +4,5 @@ export * from "./form";
 export * from "./pending";
 export * from "./performance";
 export * from "./queries";
+export * from "./roi/contract";
+export * from "./roi/queries";
