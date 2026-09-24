@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_marketing_node_revision_id_unique_idx;

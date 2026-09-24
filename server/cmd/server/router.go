@@ -1912,6 +1912,24 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			})
 		})
 
+		// Marketing nodes (specs/033) live in topic planning and share its
+		// authorization boundary: inside Auth, outside the generic member
+		// middleware, so every decision reaches workspace-core.Authorize.
+		// /import is registered before /{nodeId} so it is never read as an id.
+		r.Route("/api/content-marketing-nodes", func(r chi.Router) {
+			r.Use(h.DiagnosticTrace)
+			r.Get("/", h.ListContentMarketingNodes)
+			r.Post("/", h.CreateContentMarketingNode)
+			r.Post("/import", h.ImportContentMarketingNodes)
+			r.Route("/{nodeId}", func(r chi.Router) {
+				r.Get("/", h.GetContentMarketingNode)
+				r.Get("/revisions", h.ListContentMarketingNodeRevisions)
+				r.Post("/revisions", h.ReviseContentMarketingNode)
+				r.Post("/confirm", h.ConfirmContentMarketingNode)
+				r.Post("/cancel", h.CancelContentMarketingNode)
+			})
+		})
+
 		// Work editor owns its workspace authorization boundary for the same
 		// reason topic planning does: every decision has to reach
 		// workspace-core.Authorize, including refusals that must be recorded.

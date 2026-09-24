@@ -46,6 +46,9 @@ type Store struct {
 	Guard diagnostics.WorkspaceWriteGuard
 	Build string
 	NewID func() string
+	// Now is the current instant a marketing node's "today" is computed from
+	// (specs/033 FR-014). Injected by tests; nil means time.Now.
+	Now func() time.Time
 }
 
 func (s *Store) newID() string {

@@ -20,6 +20,20 @@ import {
   type TopicCardInput,
 } from "./contract";
 import {
+  createMarketingNodeToWire,
+  importMarketingNodesToWire,
+  nodeTransitionToWire,
+  parseImportResult,
+  parseMarketingNode,
+  parseMarketingNodes,
+  parseNodeRevisions,
+  reviseMarketingNodeToWire,
+  type ImportRowResult,
+  type MarketingNode,
+  type MarketingNodeInput,
+  type NodeRevision,
+} from "./marketing-nodes";
+import {
   parseStartSnapshot,
   parseStartSnapshots,
   startInputToWire,
@@ -268,5 +282,123 @@ export function useAppendContentBrief(workspaceId: string) {
       client.invalidateQueries({
         queryKey: topicPlanningKeys.briefs(workspaceId, input.topicCardId),
       }),
+  });
+}
+
+// Marketing nodes (specs/033). Keys carry the workspace id. Every write
+// invalidates the whole node prefix of the workspace, because a revision
+// changes the list (phase, name, status), the detail and the history at once.
+export const marketingNodeKeys = {
+  all: (workspaceId: string) => ["contentMarketingNodes", workspaceId] as const,
+  list: (workspaceId: string, status = "") =>
+    ["contentMarketingNodes", workspaceId, "list", status] as const,
+  detail: (workspaceId: string, nodeId: string) =>
+    ["contentMarketingNodes", workspaceId, "detail", nodeId] as const,
+  revisions: (workspaceId: string, nodeId: string) =>
+    ["contentMarketingNodes", workspaceId, "revisions", nodeId] as const,
+};
+
+export function useMarketingNodes(workspaceId: string, status = "") {
+  return useQuery<MarketingNode[]>({
+    queryKey: marketingNodeKeys.list(workspaceId, status),
+    queryFn: async () =>
+      parseMarketingNodes(await api.listContentMarketingNodes(status)),
+  });
+}
+
+export function useMarketingNode(workspaceId: string, nodeId: string) {
+  return useQuery<MarketingNode>({
+    queryKey: marketingNodeKeys.detail(workspaceId, nodeId),
+    enabled: !!nodeId,
+    queryFn: async () =>
+      parseMarketingNode(await api.getContentMarketingNode(nodeId)),
+  });
+}
+
+export function useMarketingNodeRevisions(workspaceId: string, nodeId: string) {
+  return useQuery<NodeRevision[]>({
+    queryKey: marketingNodeKeys.revisions(workspaceId, nodeId),
+    enabled: !!nodeId,
+    queryFn: async () =>
+      parseNodeRevisions(await api.listContentMarketingNodeRevisions(nodeId)),
+  });
+}
+
+export function useCreateMarketingNode(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { node: MarketingNodeInput; note?: string }) =>
+      parseMarketingNode(
+        await api.createContentMarketingNode(
+          createMarketingNodeToWire(input.node, input.note),
+        ),
+      ),
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: marketingNodeKeys.all(workspaceId) }),
+  });
+}
+
+export function useImportMarketingNodes(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation<ImportRowResult[], Error, MarketingNodeInput[]>({
+    mutationFn: async (rows) =>
+      parseImportResult(
+        await api.importContentMarketingNodes(importMarketingNodesToWire(rows)),
+      ),
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: marketingNodeKeys.all(workspaceId) }),
+  });
+}
+
+// Not optimistic: a revise can be refused with 409 because someone else
+// changed the node, and the page must then show the newer revision rather
+// than a local guess. onSettled re-reads after a refusal as well.
+export function useReviseMarketingNode(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      nodeId: string;
+      baseRevision: number;
+      node: MarketingNodeInput;
+      note?: string;
+    }) =>
+      parseMarketingNode(
+        await api.reviseContentMarketingNode(
+          input.nodeId,
+          reviseMarketingNodeToWire(input.baseRevision, input.node, input.note),
+        ),
+      ),
+    onSettled: () =>
+      client.invalidateQueries({ queryKey: marketingNodeKeys.all(workspaceId) }),
+  });
+}
+
+export function useConfirmMarketingNode(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { nodeId: string; baseRevision: number; note?: string }) =>
+      parseMarketingNode(
+        await api.confirmContentMarketingNode(
+          input.nodeId,
+          nodeTransitionToWire(input.baseRevision, input.note),
+        ),
+      ),
+    onSettled: () =>
+      client.invalidateQueries({ queryKey: marketingNodeKeys.all(workspaceId) }),
+  });
+}
+
+export function useCancelMarketingNode(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { nodeId: string; baseRevision: number; note?: string }) =>
+      parseMarketingNode(
+        await api.cancelContentMarketingNode(
+          input.nodeId,
+          nodeTransitionToWire(input.baseRevision, input.note),
+        ),
+      ),
+    onSettled: () =>
+      client.invalidateQueries({ queryKey: marketingNodeKeys.all(workspaceId) }),
   });
 }

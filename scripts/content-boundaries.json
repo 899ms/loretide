@@ -121,6 +121,7 @@
     "apps/web/app/[workspaceSlug]/(dashboard)/sources/page.tsx",
     "server/internal/handler/content_operating_rules.go",
     "server/internal/handler/content_account_homepage.go",
-    "apps/web/app/[workspaceSlug]/(dashboard)/settings/page.tsx"
+    "apps/web/app/[workspaceSlug]/(dashboard)/settings/page.tsx",
+    "server/internal/handler/content_marketing_node.go"
   ]
 }
