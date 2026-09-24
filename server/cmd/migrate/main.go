@@ -375,6 +375,19 @@ var concurrentIndexCleanups = map[string]string{
 	"528_content_manual_metric_record_idx":       "content_manual_metric_record_idx",
 	"530_content_feedback_excerpt_id_unique_idx": "content_feedback_excerpt_id_unique_idx",
 	"531_content_feedback_excerpt_record_idx":    "content_feedback_excerpt_record_idx",
+
+	// specs/033 marketing nodes. Its own block for the same reason as the ones
+	// above: gofmt aligns a map literal in runs separated by blank lines.
+	//
+	// The three table migrations (540, 543, 546) are deliberately absent: they
+	// build no index. The numbers are provisional and are renumbered together
+	// with the migration files if another branch takes 540+ first.
+	"541_content_marketing_node_id_unique_idx":              "content_marketing_node_id_unique_idx",
+	"542_content_marketing_node_workspace_idx":              "content_marketing_node_workspace_idx",
+	"544_content_marketing_node_revision_id_unique_idx":     "content_marketing_node_revision_id_unique_idx",
+	"545_content_marketing_node_revision_node_revision_idx": "content_marketing_node_revision_node_revision_idx",
+	"547_content_marketing_node_candidate_id_unique_idx":    "content_marketing_node_candidate_id_unique_idx",
+	"548_content_marketing_node_candidate_key_idx":          "content_marketing_node_candidate_key_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction

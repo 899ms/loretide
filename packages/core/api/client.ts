@@ -795,6 +795,57 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}/snapshots/${encodeURIComponent(snapshotId)}`);
   }
 
+  // Marketing nodes (specs/033). Every change appends a revision; revise,
+  // confirm and cancel carry the base_revision they were read at and get 409
+  // when the node moved on. There is no delete.
+  async listContentMarketingNodes(status?: string): Promise<unknown> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    return this.fetch<unknown>(`/api/content-marketing-nodes${query}`);
+  }
+
+  async createContentMarketingNode(body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-marketing-nodes", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async importContentMarketingNodes(body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-marketing-nodes/import", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async getContentMarketingNode(nodeId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-marketing-nodes/${encodeURIComponent(nodeId)}`);
+  }
+
+  async listContentMarketingNodeRevisions(nodeId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-marketing-nodes/${encodeURIComponent(nodeId)}/revisions`);
+  }
+
+  async reviseContentMarketingNode(nodeId: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-marketing-nodes/${encodeURIComponent(nodeId)}/revisions`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async confirmContentMarketingNode(nodeId: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-marketing-nodes/${encodeURIComponent(nodeId)}/confirm`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async cancelContentMarketingNode(nodeId: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-marketing-nodes/${encodeURIComponent(nodeId)}/cancel`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
   // Works, their documents and the append-only version history (specs/024).
   // There is no delete and no version patch: nothing here can remove or
   // rewrite a version, which is how SOP 7.1's "always kept" is kept.
