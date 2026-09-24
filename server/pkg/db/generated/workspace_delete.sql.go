@@ -318,6 +318,15 @@ deleted_content_brief_revisions AS (
 deleted_content_topic_cards AS (
     DELETE FROM content_topic_card WHERE workspace_id = $1::text
 ),
+deleted_content_marketing_node_candidates AS (
+    DELETE FROM content_marketing_node_candidate WHERE workspace_id = $1::text
+),
+deleted_content_marketing_node_revisions AS (
+    DELETE FROM content_marketing_node_revision WHERE workspace_id = $1::text
+),
+deleted_content_marketing_nodes AS (
+    DELETE FROM content_marketing_node WHERE workspace_id = $1::text
+),
 deleted_content_start_snapshots AS (
     DELETE FROM content_start_snapshot WHERE workspace_id = $1::text
 ),
@@ -560,6 +569,11 @@ WHERE channel_media_pending_object.workspace_id = $1
 // cast the handler UUID parameter at this boundary.
 // Topic cards and their immutable brief history are application-related only;
 // both are removed explicitly in this same workspace transaction.
+// Marketing nodes, their append-only revision history and their topic
+// candidates (specs/033). The revision table is insert-only everywhere else;
+// this is the one statement that removes its rows, and it is here rather than
+// behind a cascade because none of the three tables carries a foreign key.
+// Registered in the deletion manifest test alongside this.
 // Input snapshots are append-only everywhere else; this is the one statement
 // that removes them, and it is here rather than behind a cascade because the
 // table carries no foreign key (specs/023). Registered in the deletion
