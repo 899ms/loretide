@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
@@ -796,4 +797,58 @@ func TestContentROIAllocationsAreRefusedUntilPR2(t *testing.T) {
 		http.StatusBadRequest, "allocations")
 	roiCreated(t, roiCall(t, h.ReviseContentROICost, wsID, "POST", "/revisions",
 		costJSON("拍摄", "3100.00", `,"base_revision":1,"allocations":null`), "costId", costID), "cost_id")
+}
+
+// A value of the wrong JSON type is refused naming the JSON field alone -
+// never the Go struct path encoding/json reports for an embedded input
+// ("CostInput.amount"). Every body type, every field a caller could send with
+// the wrong type. No database: this is the decode step only.
+func TestContentROIDecodeErrorsNameOnlyTheJSONField(t *testing.T) {
+	cases := []struct {
+		name   string
+		target func() any
+		body   string
+		field  string
+	}{
+		{"cost amount", func() any { return &roiCostBody{} }, `{"amount":3000}`, "amount"},
+		{"cost labor_rate", func() any { return &roiCostBody{} }, `{"labor_rate":150}`, "labor_rate"},
+		{"cost labor_minutes", func() any { return &roiCostBody{} }, `{"labor_minutes":"360"}`, "labor_minutes"},
+		{"cost category", func() any { return &roiCostBody{} }, `{"category":1}`, "category"},
+		{"cost not_duplicate_of", func() any { return &roiCostBody{} }, `{"not_duplicate_of":"c1"}`, "not_duplicate_of"},
+		{"cost base_revision", func() any { return &roiCostBody{} }, `{"base_revision":"1"}`, "base_revision"},
+		{"cost voided", func() any { return &roiCostBody{} }, `{"voided":"yes"}`, "voided"},
+		{"lead qualified", func() any { return &roiLeadBody{} }, `{"qualified":"true"}`, "qualified"},
+		{"lead first_seen_at", func() any { return &roiLeadBody{} }, `{"first_seen_at":1}`, "first_seen_at"},
+		{"merge target_lead_id", func() any { return &roiMergeBody{} }, `{"target_lead_id":7}`, "target_lead_id"},
+		{"merge base_revision", func() any { return &roiMergeBody{} }, `{"base_revision":"2"}`, "base_revision"},
+		{"touch paid", func() any { return &roiTouchBody{} }, `{"paid":1}`, "paid"},
+		{"touch work_id", func() any { return &roiTouchBody{} }, `{"work_id":1}`, "work_id"},
+		{"deal amount", func() any { return &roiDealBody{} }, `{"amount":1}`, "amount"},
+		{"deal gross_profit", func() any { return &roiDealBody{} }, `{"gross_profit":300}`, "gross_profit"},
+		{"deal cogs", func() any { return &roiDealBody{} }, `{"cogs":700}`, "cogs"},
+		{"adjustment amount", func() any { return &roiAdjustmentBody{} }, `{"amount":10}`, "amount"},
+		{"adjustment gross_delta", func() any { return &roiAdjustmentBody{} }, `{"gross_delta":3}`, "gross_delta"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := testutil.JSONRequest("POST", "/", tc.body)
+			err := decodeROIBody(httptest.NewRecorder(), req, tc.target())
+			fieldErr, ok := errors.AsType[feedbacklearning.FieldError](err)
+			if !ok {
+				t.Fatalf("err = %v, want a FieldError naming %q", err, tc.field)
+			}
+			if fieldErr.Field != tc.field {
+				t.Fatalf("named %q, want %q", fieldErr.Field, tc.field)
+			}
+		})
+	}
+	for field, want := range map[string]string{
+		"CostInput.amount": "amount", "amount": "amount",
+		"roiRevisionFields.base_revision": "base_revision",
+		"Outer.inner.value":               "inner.value", "Only": "",
+	} {
+		if got := jsonFieldPath(field); got != want {
+			t.Errorf("jsonFieldPath(%q) = %q, want %q", field, got, want)
+		}
+	}
 }

@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	feedbacklearning "github.com/multica-ai/multica/server/internal/content/feedback-learning"
@@ -156,12 +158,32 @@ func decodeROIBody(w http.ResponseWriter, r *http.Request, target any) error {
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024*1024))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
-		if typeErr, ok := errors.AsType[*json.UnmarshalTypeError](err); ok && typeErr.Field != "" {
-			return feedbacklearning.FieldError{Field: typeErr.Field, Reason: "wrong JSON type"}
+		if typeErr, ok := errors.AsType[*json.UnmarshalTypeError](err); ok {
+			if field := jsonFieldPath(typeErr.Field); field != "" {
+				return feedbacklearning.FieldError{Field: field, Reason: "wrong JSON type"}
+			}
 		}
 		return feedbacklearning.ErrInvalid
 	}
 	return nil
+}
+
+// jsonFieldPath turns UnmarshalTypeError.Field into the JSON path a caller
+// sent. encoding/json writes an embedded struct into that path by its Go type
+// name ("CostInput.amount"), and the bodies here are built from embedded
+// module inputs and unexported helper structs ("roiRevisionFields"); a Go
+// type name is not part of the contract and must not reach a response. Every
+// JSON name in these bodies is snake_case, so a segment holding any
+// upper-case letter is a Go name and is dropped.
+func jsonFieldPath(field string) string {
+	kept := []string{}
+	for _, segment := range strings.Split(field, ".") {
+		if segment == "" || strings.IndexFunc(segment, unicode.IsUpper) >= 0 {
+			continue
+		}
+		kept = append(kept, segment)
+	}
+	return strings.Join(kept, ".")
 }
 
 func hasAllocations(raw json.RawMessage) bool {
