@@ -126,6 +126,7 @@ type NavKey =
   | "today"
   | "sources"
   | "topics"
+  | "marketingNodes"
   | "accounts"
   | "contentDiagnostics";
 
@@ -147,6 +148,7 @@ type NavLabelKey =
   | "today"
   | "sources"
   | "topics"
+  | "marketing_nodes"
   | "accounts"
   | "content_diagnostics";
 
@@ -179,6 +181,7 @@ const contentNav: { key: NavKey; labelKey: NavLabelKey }[] = [
   { key: "today", labelKey: "today" },
   { key: "sources", labelKey: "sources" },
   { key: "topics", labelKey: "topics" },
+  { key: "marketingNodes", labelKey: "marketing_nodes" },
   { key: "accounts", labelKey: "accounts" },
   { key: "contentDiagnostics", labelKey: "content_diagnostics" },
 ];

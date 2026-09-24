@@ -79,6 +79,7 @@ function workspaceScoped(slug: string) {
     today: () => `${ws}/today`,
     sources: () => `${ws}/sources`,
     topics: () => `${ws}/topics`,
+    marketingNodes: () => `${ws}/marketing-nodes`,
     accounts: () => `${ws}/accounts`,
     historicalImport: () => `${ws}/historical-import`,
     contentDiagnostics: () => `${ws}/diagnostics`,
