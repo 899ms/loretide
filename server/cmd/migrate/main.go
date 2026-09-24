@@ -411,6 +411,12 @@ var concurrentIndexCleanups = map[string]string{
 	// absent. The numbers are provisional and move with the files at merge.
 	"568_content_roi_cost_allocation_cost_idx":     "content_roi_cost_allocation_cost_idx",
 	"570_content_roi_attribution_revision_key_idx": "content_roi_attribution_revision_key_idx",
+
+	// specs/034 ROI import (PR 3). Its own block, as above. The two table
+	// migrations (571, 574) build no index and are absent.
+	"572_content_roi_import_batch_key_idx":  "content_roi_import_batch_key_idx",
+	"573_content_roi_import_batch_time_idx": "content_roi_import_batch_time_idx",
+	"575_content_roi_import_claim_key_idx":  "content_roi_import_claim_key_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction

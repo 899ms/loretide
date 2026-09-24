@@ -2079,6 +2079,12 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			// computed once without being saved.
 			r.Post("/deals/{dealId}/attribution", h.RecordContentROIAttribution)
 			r.Post("/preview", h.PreviewContentROI)
+
+			// specs/034 PR 3: import pasted rows, with Idempotency-Key and
+			// the per-row duplicate trail, and read the import batches.
+			r.Post("/imports", h.ImportContentROI)
+			r.Get("/imports", h.ListContentROIImports)
+			r.Get("/imports/{batchId}", h.GetContentROIImport)
 		})
 
 		// --- Workspace-scoped routes (all require workspace membership) ---
