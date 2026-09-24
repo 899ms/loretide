@@ -369,6 +369,21 @@ deleted_content_manual_metrics AS (
 deleted_content_feedback_excerpts AS (
     DELETE FROM content_feedback_excerpt WHERE workspace_id = $1::text
 ),
+deleted_content_roi_cost_revisions AS (
+    DELETE FROM content_roi_cost_revision WHERE workspace_id = $1::text
+),
+deleted_content_roi_lead_revisions AS (
+    DELETE FROM content_roi_lead_revision WHERE workspace_id = $1::text
+),
+deleted_content_roi_touch_revisions AS (
+    DELETE FROM content_roi_touch_revision WHERE workspace_id = $1::text
+),
+deleted_content_roi_deal_revisions AS (
+    DELETE FROM content_roi_deal_revision WHERE workspace_id = $1::text
+),
+deleted_content_roi_adjustment_revisions AS (
+    DELETE FROM content_roi_adjustment_revision WHERE workspace_id = $1::text
+),
 deleted_content_accounts AS (
     DELETE FROM content_account WHERE workspace_id = $1::text
 ),
@@ -605,6 +620,12 @@ WHERE channel_media_pending_object.workspace_id = $1
 // rather than behind a cascade because the tables carry no foreign key
 // (specs/027). Registered in the deletion manifest test alongside this: doing
 // only one of the two leaves either orphaned rows or a drifting manifest.
+// Costs, leads, touches, deals and refunds/adjustments (specs/034). All five
+// are append-only revision tables everywhere else; these statements are the
+// only ones that remove them, and they are here rather than behind a cascade
+// because the tables carry no foreign key. Registered in the deletion manifest
+// test alongside this: doing only one of the two leaves either orphaned rows or
+// a drifting manifest.
 // Brand content accounts go with the workspace. Registered in the deletion
 // manifest test alongside this, because only doing one of the two leaves
 // either orphaned rows (manifest only) or a drifting manifest (delete only).

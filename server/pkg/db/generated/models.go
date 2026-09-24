@@ -711,6 +711,17 @@ type ContentFeedbackExcerpt struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentImportIdempotency struct {
+	WorkspaceID        string             `json:"workspace_id"`
+	Operation          string             `json:"operation"`
+	ResourceScope      string             `json:"resource_scope"`
+	IdempotencyKey     string             `json:"idempotency_key"`
+	RequestFingerprint string             `json:"request_fingerprint"`
+	ResponseBody       []byte             `json:"response_body"`
+	Completed          bool               `json:"completed"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContentManualMetric struct {
 	ManualMetricID      string             `json:"manual_metric_id"`
 	WorkspaceID         string             `json:"workspace_id"`
@@ -726,6 +737,57 @@ type ContentManualMetric struct {
 	EvidenceNote        string             `json:"evidence_note"`
 	SourceType          string             `json:"source_type"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentMarketingNode struct {
+	NodeID          string             `json:"node_id"`
+	WorkspaceID     string             `json:"workspace_id"`
+	Status          string             `json:"status"`
+	Origin          string             `json:"origin"`
+	CurrentRevision int64              `json:"current_revision"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ContentMarketingNodeCandidate struct {
+	CandidateID            string             `json:"candidate_id"`
+	WorkspaceID            string             `json:"workspace_id"`
+	NodeID                 string             `json:"node_id"`
+	AccountID              string             `json:"account_id"`
+	Angle                  string             `json:"angle"`
+	Status                 string             `json:"status"`
+	DismissReason          string             `json:"dismiss_reason"`
+	TopicCardID            string             `json:"topic_card_id"`
+	AdoptedRevision        pgtype.Int8        `json:"adopted_revision"`
+	ImpactDecision         string             `json:"impact_decision"`
+	ImpactDecisionNote     string             `json:"impact_decision_note"`
+	ImpactDecisionRevision pgtype.Int8        `json:"impact_decision_revision"`
+	ImpactDecidedBy        string             `json:"impact_decided_by"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ContentMarketingNodeRevision struct {
+	RevisionID        string             `json:"revision_id"`
+	NodeID            string             `json:"node_id"`
+	WorkspaceID       string             `json:"workspace_id"`
+	Revision          int64              `json:"revision"`
+	ChangeKind        string             `json:"change_kind"`
+	StatusAfter       string             `json:"status_after"`
+	Name              string             `json:"name"`
+	Kind              string             `json:"kind"`
+	StartsOn          pgtype.Date        `json:"starts_on"`
+	EndsOn            pgtype.Date        `json:"ends_on"`
+	Timezone          string             `json:"timezone"`
+	LeadDays          pgtype.Int4        `json:"lead_days"`
+	Accounts          []byte             `json:"accounts"`
+	Goal              string             `json:"goal"`
+	MaterialSourceIds []byte             `json:"material_source_ids"`
+	DateCertainty     string             `json:"date_certainty"`
+	DateBasis         string             `json:"date_basis"`
+	Note              string             `json:"note"`
+	Actor             string             `json:"actor"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
 type ContentOperationAudit struct {
@@ -756,6 +818,8 @@ type ContentPublicationRecord struct {
 	EditNote            string             `json:"edit_note"`
 	VersionMatch        string             `json:"version_match"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	HistoricalImport    bool               `json:"historical_import"`
+	VersionID           string             `json:"version_id"`
 }
 
 type ContentReviewRequest struct {
@@ -787,6 +851,109 @@ type ContentReviewTransition struct {
 	Reason       string             `json:"reason"`
 	ActorID      string             `json:"actor_id"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentRoiAdjustmentRevision struct {
+	WorkspaceID       string             `json:"workspace_id"`
+	AdjustmentID      string             `json:"adjustment_id"`
+	Revision          int32              `json:"revision"`
+	Voided            bool               `json:"voided"`
+	DealID            string             `json:"deal_id"`
+	Kind              string             `json:"kind"`
+	RevenueDeltaMinor int64              `json:"revenue_delta_minor"`
+	GrossDeltaMinor   pgtype.Int8        `json:"gross_delta_minor"`
+	Currency          string             `json:"currency"`
+	OccurredAt        pgtype.Timestamptz `json:"occurred_at"`
+	Note              string             `json:"note"`
+	RecordedBy        string             `json:"recorded_by"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentRoiCostRevision struct {
+	WorkspaceID    string             `json:"workspace_id"`
+	CostID         string             `json:"cost_id"`
+	Revision       int32              `json:"revision"`
+	Voided         bool               `json:"voided"`
+	Category       string             `json:"category"`
+	Pricing        string             `json:"pricing"`
+	AmountMinor    pgtype.Int8        `json:"amount_minor"`
+	Currency       string             `json:"currency"`
+	LaborMinutes   pgtype.Int4        `json:"labor_minutes"`
+	LaborRateMinor pgtype.Int8        `json:"labor_rate_minor"`
+	IncurredAt     pgtype.Timestamptz `json:"incurred_at"`
+	AdSpend        bool               `json:"ad_spend"`
+	AccountID      string             `json:"account_id"`
+	WorkID         string             `json:"work_id"`
+	CampaignLabel  string             `json:"campaign_label"`
+	EvidenceNote   string             `json:"evidence_note"`
+	Note           string             `json:"note"`
+	DedupeKey      string             `json:"dedupe_key"`
+	NotDuplicateOf []string           `json:"not_duplicate_of"`
+	SourceType     string             `json:"source_type"`
+	ImportBatchID  string             `json:"import_batch_id"`
+	RecordedBy     string             `json:"recorded_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentRoiDealRevision struct {
+	WorkspaceID      string             `json:"workspace_id"`
+	DealID           string             `json:"deal_id"`
+	Revision         int32              `json:"revision"`
+	Voided           bool               `json:"voided"`
+	LeadID           string             `json:"lead_id"`
+	OrderRef         string             `json:"order_ref"`
+	AmountMinor      int64              `json:"amount_minor"`
+	Currency         string             `json:"currency"`
+	ClosedAt         pgtype.Timestamptz `json:"closed_at"`
+	GrossBasis       string             `json:"gross_basis"`
+	GrossProfitMinor pgtype.Int8        `json:"gross_profit_minor"`
+	CogsMinor        pgtype.Int8        `json:"cogs_minor"`
+	Note             string             `json:"note"`
+	DedupeKey        string             `json:"dedupe_key"`
+	NotDuplicateOf   []string           `json:"not_duplicate_of"`
+	SourceType       string             `json:"source_type"`
+	ImportBatchID    string             `json:"import_batch_id"`
+	RecordedBy       string             `json:"recorded_by"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentRoiLeadRevision struct {
+	WorkspaceID    string             `json:"workspace_id"`
+	LeadID         string             `json:"lead_id"`
+	Revision       int32              `json:"revision"`
+	Voided         bool               `json:"voided"`
+	CustomerRef    string             `json:"customer_ref"`
+	Stage          string             `json:"stage"`
+	Qualified      bool               `json:"qualified"`
+	FirstSeenAt    pgtype.Timestamptz `json:"first_seen_at"`
+	MergedInto     string             `json:"merged_into"`
+	Note           string             `json:"note"`
+	DedupeKey      string             `json:"dedupe_key"`
+	NotDuplicateOf []string           `json:"not_duplicate_of"`
+	SourceType     string             `json:"source_type"`
+	ImportBatchID  string             `json:"import_batch_id"`
+	RecordedBy     string             `json:"recorded_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentRoiTouchRevision struct {
+	WorkspaceID         string             `json:"workspace_id"`
+	TouchID             string             `json:"touch_id"`
+	Revision            int32              `json:"revision"`
+	Voided              bool               `json:"voided"`
+	LeadID              string             `json:"lead_id"`
+	EvidenceType        string             `json:"evidence_type"`
+	Platform            string             `json:"platform"`
+	AccountID           string             `json:"account_id"`
+	WorkID              string             `json:"work_id"`
+	PublicationRecordID string             `json:"publication_record_id"`
+	Role                string             `json:"role"`
+	Paid                bool               `json:"paid"`
+	OccurredAt          pgtype.Timestamptz `json:"occurred_at"`
+	EvidenceNote        string             `json:"evidence_note"`
+	Note                string             `json:"note"`
+	RecordedBy          string             `json:"recorded_by"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 
 type ContentSource struct {
@@ -861,16 +1028,19 @@ type ContentTopicCard struct {
 	StartedBriefRevisionID    pgtype.Text        `json:"started_brief_revision_id"`
 	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+	FitSourceIds              []byte             `json:"fit_source_ids"`
+	EvidenceSourceIds         []byte             `json:"evidence_source_ids"`
 }
 
 type ContentWork struct {
-	WorkID      string             `json:"work_id"`
-	WorkspaceID string             `json:"workspace_id"`
-	TopicCardID string             `json:"topic_card_id"`
-	SnapshotID  string             `json:"snapshot_id"`
-	Title       string             `json:"title"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	WorkID           string             `json:"work_id"`
+	WorkspaceID      string             `json:"workspace_id"`
+	TopicCardID      string             `json:"topic_card_id"`
+	SnapshotID       string             `json:"snapshot_id"`
+	Title            string             `json:"title"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	HistoricalImport bool               `json:"historical_import"`
 }
 
 type DaemonConnection struct {
