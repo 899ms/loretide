@@ -1927,6 +1927,15 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Post("/revisions", h.ReviseContentMarketingNode)
 				r.Post("/confirm", h.ConfirmContentMarketingNode)
 				r.Post("/cancel", h.CancelContentMarketingNode)
+				// specs/033 PR 2: candidates, adoption and schedule impact.
+				// /sync is registered before /{candidateId} so it is never
+				// read as a candidate id.
+				r.Get("/candidates", h.ListContentMarketingCandidates)
+				r.Post("/candidates/sync", h.SyncContentMarketingCandidates)
+				r.Patch("/candidates/{candidateId}", h.EditContentMarketingCandidate)
+				r.Post("/candidates/{candidateId}/adopt", h.AdoptContentMarketingCandidate)
+				r.Post("/candidates/{candidateId}/impact-decision", h.DecideContentMarketingImpact)
+				r.Get("/impact", h.ListContentMarketingImpact)
 			})
 		})
 

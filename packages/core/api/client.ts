@@ -846,6 +846,44 @@ export class ApiClient {
     });
   }
 
+  // Candidates and schedule impact (specs/033 PR 2). Adoption creates or links
+  // a draft topic card and starts nothing; an impact decision writes only the
+  // candidate.
+  async listContentMarketingCandidates(nodeId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-marketing-nodes/${encodeURIComponent(nodeId)}/candidates`);
+  }
+
+  async syncContentMarketingCandidates(nodeId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-marketing-nodes/${encodeURIComponent(nodeId)}/candidates/sync`, {
+      method: "POST",
+    });
+  }
+
+  async editContentMarketingCandidate(nodeId: string, candidateId: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-marketing-nodes/${encodeURIComponent(nodeId)}/candidates/${encodeURIComponent(candidateId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async adoptContentMarketingCandidate(nodeId: string, candidateId: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-marketing-nodes/${encodeURIComponent(nodeId)}/candidates/${encodeURIComponent(candidateId)}/adopt`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async listContentMarketingImpact(nodeId: string): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-marketing-nodes/${encodeURIComponent(nodeId)}/impact`);
+  }
+
+  async decideContentMarketingImpact(nodeId: string, candidateId: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-marketing-nodes/${encodeURIComponent(nodeId)}/candidates/${encodeURIComponent(candidateId)}/impact-decision`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
   // Works, their documents and the append-only version history (specs/024).
   // There is no delete and no version patch: nothing here can remove or
   // rewrite a version, which is how SOP 7.1's "always kept" is kept.
