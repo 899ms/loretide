@@ -91,6 +91,24 @@ const labels: Record<string, string> = {
   search: "搜索失败",
   clock_skew: "时钟偏差",
 };
+// Fixed component reason codes the diagnostics server can emit
+// (server/internal/content/diagnostics). Any other code is shown as-is.
+const componentReasonCodes = [
+  "config_unknown",
+  "liveness_unverified",
+  "config_unconfigured",
+  "storage_not_configured",
+  "heartbeat_without_configuration",
+  "heartbeat_expired",
+  "clock_skew",
+  "execution_disabled",
+  "database_connectivity_unavailable",
+  "heartbeat_missing_timestamp",
+] as const;
+type ComponentReasonCode = (typeof componentReasonCodes)[number];
+function isComponentReasonCode(reason: string): reason is ComponentReasonCode {
+  return (componentReasonCodes as readonly string[]).includes(reason);
+}
 // The "view trace" affordance. An event whose trace id is absent or malformed
 // has nothing to jump to, so the button is disabled and says why. Jumping
 // anyway would clear every filter and show the whole technical log, which the
@@ -710,7 +728,18 @@ function DiagnosticsContent({ wsId, copy, download }: Props) {
                       label={c.name}
                       description={
                         <>
-                          {c.reason || "当前连接可用"}
+                          {c.reason
+                            ? isComponentReasonCode(c.reason)
+                              ? t(
+                                  ($) =>
+                                    $.diagnostics.reasons[
+                                      c.reason as ComponentReasonCode
+                                    ],
+                                )
+                              : c.reason
+                            : c.status === "healthy"
+                              ? t(($) => $.diagnostics.reasonHealthy)
+                              : null}
                           <br />
                           {t(($) => $.diagnostics.text032)}
                           {c.lastSeen ?? "未收到"}

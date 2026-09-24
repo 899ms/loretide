@@ -248,7 +248,20 @@
     "text115": "연결된 추적 없음",
     "text116": "객체 및 버전",
     "text117": "버전 기록 없음",
-    "text118": "이 페이지에 나타난 버전만 집계"
+    "text118": "이 페이지에 나타난 버전만 집계",
+    "reasonHealthy": "연결을 사용할 수 있습니다",
+    "reasons": {
+      "config_unknown": "이 구성 요소의 설정 출처가 없어 상태를 알 수 없습니다",
+      "liveness_unverified": "설정되었지만 아직 실행 확인을 받지 못했습니다",
+      "config_unconfigured": "이 구성 요소는 설정되지 않았습니다",
+      "storage_not_configured": "파일 저장소가 설정되지 않았습니다",
+      "heartbeat_without_configuration": "하트비트를 받았지만 이 구성 요소는 설정되지 않았습니다",
+      "heartbeat_expired": "하트비트 시간이 초과되었습니다. 구성 요소가 멈췄을 수 있습니다",
+      "clock_skew": "하트비트 시간이 서버 시간보다 앞서 있습니다. 시계가 어긋났을 수 있습니다",
+      "execution_disabled": "정책에 의해 실행이 꺼져 있습니다",
+      "database_connectivity_unavailable": "데이터베이스에 연결할 수 없습니다",
+      "heartbeat_missing_timestamp": "하트비트에 시간이 없어 상태를 판단할 수 없습니다"
+    }
   },
   "contentAccounts": {
     "title": "계정",
