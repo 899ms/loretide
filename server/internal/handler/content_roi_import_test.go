@@ -204,7 +204,7 @@ func TestContentROIImportMarksDuplicatesRowByRow(t *testing.T) {
 
 	// Composed and decomposed spellings of one order reference are one order.
 	nfc := decodeImport(t, importCall(t, h, wsID, "", importBody("deal",
-		importDealRow("TB-é", "1.00", ""), importDealRow("TB-é", "1.00", ""))), http.StatusCreated)
+		importDealRow("TB-\u00e9", "1.00", ""), importDealRow("TB-e\u0301", "1.00", ""))), http.StatusCreated)
 	if nfc.Rows[1].Outcome != "duplicate" || nfc.Rows[1].DuplicateOf[0] != nfc.Rows[0].RecordID {
 		t.Errorf("NFC: second spelling = %+v", nfc.Rows[1])
 	}
