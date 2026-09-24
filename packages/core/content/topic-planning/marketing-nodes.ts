@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseWithFallback } from "@multica/core/api/schema";
+import { parseTopicCard, type TopicCard } from "./contract";
 
 // Marketing nodes (specs/033). Contract:
 // specs/033-marketing-nodes/contracts/marketing-nodes.md §2, §3.2, §6.
@@ -344,4 +345,335 @@ export function nodeTransitionToWire(
   note = "",
 ): Record<string, unknown> {
   return { base_revision: baseRevision, note };
+}
+
+// ---------------------------------------------------------------------------
+// Candidates and schedule impact (specs/033 PR 2, contract §4, §5).
+//
+// Everything below the stored fields is computed by the server on each read
+// from what people filled in; nothing in a candidate is generated text.
+
+export const MATERIAL_GAP_KINDS = ["none", "archived", "missing"] as const;
+export type KnownMaterialGapKind = (typeof MATERIAL_GAP_KINDS)[number];
+export type MaterialGapKind =
+  | { kind: KnownMaterialGapKind }
+  | { kind: "unknown"; raw: string };
+
+export const DUPLICATE_REASONS = ["name_match", "adopted_from_node"] as const;
+export type KnownDuplicateReason = (typeof DUPLICATE_REASONS)[number];
+export type DuplicateReason =
+  | { kind: KnownDuplicateReason }
+  | { kind: "unknown"; raw: string };
+
+const toGapKind = known(MATERIAL_GAP_KINDS);
+const toDuplicateReason = known(DUPLICATE_REASONS);
+
+/**
+ * Whether the time left is shorter than the lead time. "unknown" when no lead
+ * time was set: that is no answer, and must not render as "enough".
+ */
+export type LeadShort = boolean | "unknown";
+
+// Only a literal true is short (constitution VI): a string "true" or 1 from a
+// confused server is not read as a warning, and null is "unknown".
+const leadShortSchema = z
+  .unknown()
+  .transform((value): LeadShort =>
+    value === null || value === undefined ? "unknown" : value === true,
+  );
+
+const optionalRevision = z.number().int().positive().nullable().catch(null);
+
+const profileFieldSchema = z
+  .object({ value: z.string().catch(""), status: z.string().catch("pending") })
+  .loose()
+  .transform((field) => ({ value: field.value, status: field.status }));
+
+const accountRelationSchema = z
+  .object({
+    audience: profileFieldSchema,
+    content_pillars: profileFieldSchema,
+    content_goals: profileFieldSchema,
+  })
+  .loose()
+  .transform((account) => ({
+    audience: account.audience,
+    contentPillars: account.content_pillars,
+    contentGoals: account.content_goals,
+  }));
+
+const candidateTimingSchema = z
+  .object({
+    today: z.string(),
+    timezone: z.string(),
+    phase: z.string(),
+    preparation_starts_on: z.string().nullable(),
+    days_until_start: z.number().int(),
+    lead_days: leadDaysSchema,
+    lead_short: leadShortSchema,
+  })
+  .loose()
+  .transform((timing) => ({
+    today: timing.today,
+    timezone: timing.timezone,
+    phase: toPhase(timing.phase) as NodePhase,
+    preparationStartsOn: timing.preparation_starts_on,
+    daysUntilStart: timing.days_until_start,
+    leadDays: timing.lead_days,
+    leadShort: timing.lead_short,
+  }));
+
+const collisionSchema = z
+  .object({
+    node_id: z.string(),
+    name: z.string(),
+    starts_on: z.string(),
+    ends_on: z.string(),
+  })
+  .loose()
+  .transform((c) => ({
+    nodeId: c.node_id,
+    name: c.name,
+    startsOn: c.starts_on,
+    endsOn: c.ends_on,
+  }));
+
+const materialGapSchema = z
+  .object({ kind: z.string(), source_id: z.string().optional() })
+  .loose()
+  .transform((gap) => ({
+    kind: toGapKind(gap.kind) as MaterialGapKind,
+    sourceId: gap.source_id ?? "",
+  }));
+
+const duplicateRiskSchema = z
+  .object({ topic_card_id: z.string(), reason: z.string() })
+  .loose()
+  .transform((risk) => ({
+    topicCardId: risk.topic_card_id,
+    reason: toDuplicateReason(risk.reason) as DuplicateReason,
+  }));
+
+/** A malformed entry in a candidate's list drops that entry, not the candidate. */
+function lenientArray<T extends z.ZodType>(item: T) {
+  return z
+    .array(z.unknown())
+    .catch([])
+    .transform((values) =>
+      values.flatMap((value) => {
+        const parsed = item.safeParse(value);
+        return parsed.success ? [parsed.data as z.output<T>] : [];
+      }),
+    );
+}
+
+export const nodeCandidateSchema = z
+  .object({
+    candidate_id: z.string(),
+    node_id: z.string(),
+    account_id: z.string(),
+    angle: z.string(),
+    // Open-ended: a newer status renders as its raw value.
+    status: z.string(),
+    dismiss_reason: z.string().catch(""),
+    topic_card_id: z.string().catch(""),
+    adopted_revision: optionalRevision,
+    impact_decision: z.string().catch(""),
+    impact_decision_note: z.string().catch(""),
+    impact_decision_revision: optionalRevision,
+    impact_decided_by: z.string().catch(""),
+    in_scope: z.boolean(),
+    timing: candidateTimingSchema,
+    relation: z
+      .object({
+        goal: z.string(),
+        role: z.string(),
+        account: accountRelationSchema.nullable().catch(null),
+      })
+      .loose(),
+    collisions: lenientArray(collisionSchema),
+    material_gaps: lenientArray(materialGapSchema),
+    duplicate_risks: lenientArray(duplicateRiskSchema),
+    origin: z.string(),
+    date_certainty: z.string(),
+    date_basis: z.string(),
+  })
+  .loose()
+  .transform((c) => ({
+    candidateId: c.candidate_id,
+    nodeId: c.node_id,
+    accountId: c.account_id,
+    angle: c.angle,
+    status: c.status,
+    dismissReason: c.dismiss_reason,
+    topicCardId: c.topic_card_id,
+    adoptedRevision: c.adopted_revision,
+    impactDecision: c.impact_decision,
+    impactDecisionNote: c.impact_decision_note,
+    impactDecisionRevision: c.impact_decision_revision,
+    impactDecidedBy: c.impact_decided_by,
+    inScope: c.in_scope,
+    timing: c.timing,
+    relation: {
+      goal: c.relation.goal,
+      role: c.relation.role,
+      account: c.relation.account,
+    },
+    collisions: c.collisions,
+    materialGaps: c.material_gaps,
+    duplicateRisks: c.duplicate_risks,
+    origin: c.origin,
+    dateCertainty: c.date_certainty,
+    dateBasis: c.date_basis,
+  }));
+
+const impactDatesSchema = z
+  .object({
+    starts_on: z.string(),
+    ends_on: z.string(),
+    timezone: z.string(),
+    lead_days: leadDaysSchema,
+  })
+  .loose()
+  .transform((dates) => ({
+    startsOn: dates.starts_on,
+    endsOn: dates.ends_on,
+    timezone: dates.timezone,
+    leadDays: dates.lead_days,
+  }));
+
+export const impactItemSchema = z
+  .object({
+    candidate_id: z.string(),
+    topic_card_id: z.string(),
+    account_id: z.string(),
+    // The card's own status, or "missing"; open-ended.
+    card_status: z.string(),
+    adopted_revision: z.number().int().positive(),
+    current_revision: z.number().int().positive(),
+    before: impactDatesSchema,
+    after: impactDatesSchema,
+    cancelled: z.boolean(),
+  })
+  .loose()
+  .transform((item) => ({
+    candidateId: item.candidate_id,
+    topicCardId: item.topic_card_id,
+    accountId: item.account_id,
+    cardStatus: item.card_status,
+    adoptedRevision: item.adopted_revision,
+    currentRevision: item.current_revision,
+    before: item.before,
+    after: item.after,
+    cancelled: item.cancelled === true,
+  }));
+
+export type NodeCandidate = z.infer<typeof nodeCandidateSchema>;
+export type ImpactItem = z.infer<typeof impactItemSchema>;
+
+export const EMPTY_NODE_CANDIDATE: NodeCandidate = {
+  candidateId: "",
+  nodeId: "",
+  accountId: "",
+  angle: "",
+  status: "",
+  dismissReason: "",
+  topicCardId: "",
+  adoptedRevision: null,
+  impactDecision: "",
+  impactDecisionNote: "",
+  impactDecisionRevision: null,
+  impactDecidedBy: "",
+  inScope: false,
+  timing: {
+    today: "",
+    timezone: "",
+    phase: { kind: "unknown", raw: "" },
+    preparationStartsOn: null,
+    daysUntilStart: 0,
+    leadDays: { set: false },
+    leadShort: "unknown",
+  },
+  relation: { goal: "", role: "", account: null },
+  collisions: [],
+  materialGaps: [],
+  duplicateRisks: [],
+  origin: "",
+  dateCertainty: "",
+  dateBasis: "",
+};
+
+export function parseNodeCandidate(data: unknown): NodeCandidate {
+  return parseWithFallback(data, nodeCandidateSchema, EMPTY_NODE_CANDIDATE, {
+    endpoint: "content-marketing-nodes/candidate",
+  });
+}
+
+export function parseNodeCandidates(data: unknown): NodeCandidate[] {
+  return parseItems<NodeCandidate>(
+    data,
+    "candidates",
+    nodeCandidateSchema,
+    "content-marketing-nodes/candidates",
+  );
+}
+
+export function parseImpactItems(data: unknown): ImpactItem[] {
+  return parseItems<ImpactItem>(
+    data,
+    "impact",
+    impactItemSchema,
+    "content-marketing-nodes/impact",
+  );
+}
+
+export interface AdoptResult {
+  candidate: NodeCandidate;
+  topicCard: TopicCard;
+}
+
+/** The candidate and the card it now points at; each half falls back alone. */
+export function parseAdoptResult(data: unknown): AdoptResult {
+  const envelope = parseWithFallback<{ candidate: unknown; topic_card: unknown }>(
+    data,
+    z.object({ candidate: z.unknown(), topic_card: z.unknown() }).loose(),
+    { candidate: null, topic_card: null },
+    { endpoint: "content-marketing-nodes/adopt" },
+  );
+  return {
+    candidate: parseNodeCandidate(envelope.candidate),
+    topicCard: parseTopicCard(envelope.topic_card),
+  };
+}
+
+/** Each key is optional; a missing key leaves that field as it is (§2.1). */
+export interface CandidatePatchInput {
+  angle?: string;
+  status?: "open" | "dismissed";
+  dismissReason?: string;
+}
+
+export function candidatePatchToWire(
+  input: CandidatePatchInput,
+): Record<string, unknown> {
+  const wire: Record<string, unknown> = {};
+  if (input.angle !== undefined) wire.angle = input.angle;
+  if (input.status !== undefined) wire.status = input.status;
+  if (input.dismissReason !== undefined) wire.dismiss_reason = input.dismissReason;
+  return wire;
+}
+
+export type AdoptInput = { mode: "create" } | { mode: "link"; topicCardId: string };
+
+export function adoptToWire(input: AdoptInput): Record<string, unknown> {
+  return input.mode === "link"
+    ? { mode: "link", topic_card_id: input.topicCardId }
+    : { mode: "create" };
+}
+
+export function impactDecisionToWire(
+  decision: "kept" | "handled",
+  note = "",
+): Record<string, unknown> {
+  return { decision, note };
 }

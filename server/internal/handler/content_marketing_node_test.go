@@ -265,3 +265,416 @@ func TestContentMarketingNodeWritesAreFencedByWorkspaceDeletion(t *testing.T) {
 		t.Errorf("content_operation_audit = %d after the refused writes, want %d", got, auditBefore)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// specs/033 PR 2: candidates, adoption and impact against the full schema.
+
+func candidateCall(t *testing.T, handler http.HandlerFunc, method, wsID, nodeID, candidateID, body string) *testutil.Response {
+	t.Helper()
+	req := testutil.WithHeaders(testutil.JSONRequest(method, "/api/content-marketing-nodes", body),
+		"X-User-ID", testUserID, "X-Workspace-ID", wsID)
+	params := []string{"nodeId", nodeID}
+	if candidateID != "" {
+		params = append(params, "candidateId", candidateID)
+	}
+	return testutil.Call(t, handler, testutil.WithURLParams(req, params...))
+}
+
+// candidateWorkspace is nodeWorkspace plus one account, and cleanup for the
+// cards and downstream rows the tests below write.
+func candidateWorkspace(t *testing.T, slug string) (string, string) {
+	t.Helper()
+	wsID := nodeWorkspace(t, slug)
+	accountID := "acct-" + diagnostics.NewID()
+	dbfx.Exec(t, `INSERT INTO content_account (account_id, workspace_id, platform, display_name, settings)
+		VALUES ($1, $2, 'xiaohongshu', '节点账号', '{}'::jsonb)`, accountID, wsID)
+	t.Cleanup(func() {
+		background := context.Background()
+		for _, statement := range []string{
+			`DELETE FROM content_publication_record WHERE workspace_id = $1`,
+			`DELETE FROM content_delivery_task WHERE workspace_id = $1`,
+			`DELETE FROM content_review_request WHERE workspace_id = $1`,
+			`DELETE FROM content_artifact_version WHERE workspace_id = $1`,
+			`DELETE FROM content_artifact WHERE workspace_id = $1`,
+			`DELETE FROM content_work WHERE workspace_id = $1`,
+			`DELETE FROM content_start_snapshot WHERE workspace_id = $1`,
+			`DELETE FROM content_brief_revision WHERE workspace_id = $1`,
+			`DELETE FROM content_topic_card WHERE workspace_id = $1`,
+			`DELETE FROM content_account WHERE workspace_id = $1`,
+		} {
+			_, _ = testPool.Exec(background, statement, wsID)
+		}
+	})
+	return wsID, accountID
+}
+
+type candidateView struct {
+	CandidateID     string `json:"candidate_id"`
+	AccountID       string `json:"account_id"`
+	Status          string `json:"status"`
+	TopicCardID     string `json:"topic_card_id"`
+	AdoptedRevision *int64 `json:"adopted_revision"`
+}
+
+func syncOne(t *testing.T, h *Handler, wsID, nodeID string) candidateView {
+	t.Helper()
+	var synced struct {
+		Candidates []candidateView `json:"candidates"`
+	}
+	candidateCall(t, h.SyncContentMarketingCandidates, "POST", wsID, nodeID, "", "").Want(http.StatusOK).JSON(&synced)
+	if len(synced.Candidates) != 1 {
+		t.Fatalf("sync = %+v, want one candidate", synced.Candidates)
+	}
+	return synced.Candidates[0]
+}
+
+func withAccount(body, accountID string) string {
+	return strings.Replace(body, `"accounts":[]`, `"accounts":[{"account_id":"`+accountID+`","role":"主推"}]`, 1)
+}
+
+// D14-V01 for candidates: another brand's node, candidate and card are the
+// same 404 as a random id, and a refused link writes nothing.
+func TestContentMarketingCandidateHandlersAnswerTheContract(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	h := nodeHandler(t)
+	brandA, accountA := candidateWorkspace(t, "cand-brand-a")
+	brandB, accountB := candidateWorkspace(t, "cand-brand-b")
+
+	var nodeA, nodeB topicplanning.MarketingNode
+	nodeCall(t, h.CreateContentMarketingNode, "POST", brandA, "", withAccount(nodeBody(""), accountA)).
+		Want(http.StatusCreated).JSON(&nodeA)
+	nodeCall(t, h.CreateContentMarketingNode, "POST", brandB, "", withAccount(nodeBody(""), accountB)).
+		Want(http.StatusCreated).JSON(&nodeB)
+	candA := syncOne(t, h, brandA, nodeA.NodeID)
+	candB := syncOne(t, h, brandB, nodeB.NodeID)
+	if candA.AccountID != accountA {
+		t.Fatalf("candidate A = %+v", candA)
+	}
+
+	missing := diagnostics.NewID()
+	for name, call := range map[string]struct {
+		handler http.HandlerFunc
+		method  string
+	}{
+		"list":   {h.ListContentMarketingCandidates, "GET"},
+		"sync":   {h.SyncContentMarketingCandidates, "POST"},
+		"impact": {h.ListContentMarketingImpact, "GET"},
+	} {
+		foreign := candidateCall(t, call.handler, call.method, brandB, nodeA.NodeID, "", "").Want(http.StatusNotFound).Text()
+		random := candidateCall(t, call.handler, call.method, brandB, missing, "", "").Want(http.StatusNotFound).Text()
+		if foreign != random {
+			t.Errorf("%s: foreign 404 %q differs from missing 404 %q", name, foreign, random)
+		}
+	}
+	for name, call := range map[string]struct {
+		handler http.HandlerFunc
+		method  string
+		body    string
+	}{
+		"edit":     {h.EditContentMarketingCandidate, "PATCH", `{"angle":"x"}`},
+		"adopt":    {h.AdoptContentMarketingCandidate, "POST", `{"mode":"create"}`},
+		"decision": {h.DecideContentMarketingImpact, "POST", `{"decision":"kept"}`},
+	} {
+		// Brand B's candidate named under brand A's node, as brand A.
+		foreign := candidateCall(t, call.handler, call.method, brandA, nodeA.NodeID, candB.CandidateID, call.body).
+			Want(http.StatusNotFound).Text()
+		random := candidateCall(t, call.handler, call.method, brandA, nodeA.NodeID, missing, call.body).
+			Want(http.StatusNotFound).Text()
+		if foreign != random {
+			t.Errorf("%s: foreign 404 %q differs from missing 404 %q", name, foreign, random)
+		}
+	}
+
+	// Brand B's card cannot be linked to brand A's candidate; nothing of the
+	// candidate is written.
+	var adoptedB struct {
+		TopicCard topicplanning.TopicCard `json:"topic_card"`
+	}
+	candidateCall(t, h.AdoptContentMarketingCandidate, "POST", brandB, nodeB.NodeID, candB.CandidateID,
+		`{"mode":"create"}`).Want(http.StatusOK).JSON(&adoptedB)
+	if adoptedB.TopicCard.TopicCardID == "" {
+		t.Fatal("brand B adoption returned no card")
+	}
+	candidateRow := func() string {
+		var row string
+		if err := testPool.QueryRow(context.Background(), `SELECT row_to_json(c)::text
+			FROM content_marketing_node_candidate c WHERE candidate_id=$1`, candA.CandidateID).Scan(&row); err != nil {
+			t.Fatal(err)
+		}
+		return row
+	}
+	before := candidateRow()
+	foreignCard := candidateCall(t, h.AdoptContentMarketingCandidate, "POST", brandA, nodeA.NodeID, candA.CandidateID,
+		`{"mode":"link","topic_card_id":"`+adoptedB.TopicCard.TopicCardID+`"}`).Want(http.StatusNotFound).Text()
+	randomCard := candidateCall(t, h.AdoptContentMarketingCandidate, "POST", brandA, nodeA.NodeID, candA.CandidateID,
+		`{"mode":"link","topic_card_id":"`+missing+`"}`).Want(http.StatusNotFound).Text()
+	if foreignCard != randomCard {
+		t.Errorf("foreign card 404 %q differs from missing card 404 %q", foreignCard, randomCard)
+	}
+	if after := candidateRow(); after != before {
+		t.Fatalf("a refused link wrote the candidate:\n%s\n%s", before, after)
+	}
+
+	// 400 names the field.
+	for _, tc := range []struct {
+		handler     http.HandlerFunc
+		body, field string
+	}{
+		{h.AdoptContentMarketingCandidate, `{"mode":"clone"}`, "mode"},
+		{h.AdoptContentMarketingCandidate, `{"mode":"link"}`, "topic_card_id"},
+		{h.EditContentMarketingCandidate, `{"status":"adopted"}`, "status"},
+		{h.DecideContentMarketingImpact, `{"decision":"ignored"}`, "decision"},
+		{h.DecideContentMarketingImpact, `{"decision":"kept"}`, "status"},
+	} {
+		body := candidateCall(t, tc.handler, "POST", brandA, nodeA.NodeID, candA.CandidateID, tc.body).
+			Want(http.StatusBadRequest).Map()
+		if body["field"] != tc.field {
+			t.Errorf("%s -> field %v, want %s", tc.body, body["field"], tc.field)
+		}
+	}
+}
+
+// D14-V02 "采用前不启动创作" and D14-V03 "历史快照与已发布记录不变" against
+// the full schema: adoption adds one draft card and no row to the six
+// downstream tables; reschedule, cancel and an impact decision change no row
+// of any card, brief, snapshot, work, version, review, delivery or
+// publication (T036, T042, SC-005, SC-007).
+func TestContentMarketingAdoptionAndImpactLeaveDownstreamRowsAlone(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	ctx := context.Background()
+	h := nodeHandler(t)
+	wsID, accountID := candidateWorkspace(t, "cand-downstream")
+
+	// A card that has already been through the whole chain.
+	existing, err := h.topicPlanningStore().Create(ctx, testUserID, topicplanning.TopicCard{
+		WorkspaceID: wsID, AccountID: &accountID, Timing: "双十一之前的旧卡",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	card := existing.TopicCardID
+	dbfx.Exec(t, `INSERT INTO content_brief_revision (brief_revision_id, topic_card_id, workspace_id, revision,
+		audience, core_problem, claim_and_boundaries, channels, format, structure, citation_requirements,
+		source_scope, deliverable, time_limit, cost_limit)
+		VALUES ($1,$2,$3,1,'a','b','c','[]'::jsonb,'d','e','f','g','h','i','j')`, "brief-"+card, card, wsID)
+	dbfx.Exec(t, `INSERT INTO content_start_snapshot (snapshot_id, workspace_id, topic_card_id, brief_revision_id,
+		account_id, project_id, actor_id, snapshot)
+		VALUES ($1,$2,$3,$4,$5,'',$6,'{}'::jsonb)`, "snap-"+card, wsID, card, "brief-"+card, accountID, testUserID)
+	dbfx.Exec(t, `INSERT INTO content_work (work_id, workspace_id, topic_card_id, snapshot_id, title)
+		VALUES ($1,$2,$3,$4,'旧作品')`, "work-"+card, wsID, card, "snap-"+card)
+	dbfx.Exec(t, `INSERT INTO content_artifact (artifact_id, work_id, workspace_id, kind, title, position)
+		VALUES ($1,$2,$3,'channel_draft','稿',1)`, "artifact-"+card, "work-"+card, wsID)
+	dbfx.Exec(t, `INSERT INTO content_artifact_version (version_id, artifact_id, work_id, workspace_id,
+		revision, source, action, body, actor_id)
+		VALUES ($1,$2,$3,$4,1,'edited','saved','正文',$5)`, "version-"+card, "artifact-"+card, "work-"+card, wsID, testUserID)
+	dbfx.Exec(t, `INSERT INTO content_review_request (review_request_id, workspace_id, work_id, artifact_id,
+		version_id, account_id, channel, snapshot, status, requested_by)
+		VALUES ($1,$2,$3,$4,$5,$6,'xiaohongshu','{}'::jsonb,'approved',$7)`,
+		"review-"+card, wsID, "work-"+card, "artifact-"+card, "version-"+card, accountID, testUserID)
+	dbfx.Exec(t, `INSERT INTO content_delivery_task (delivery_task_id, workspace_id, work_id, artifact_id,
+		review_request_id, channel, status)
+		VALUES ($1,$2,$3,$4,$5,'xiaohongshu','handed_off')`,
+		"task-"+card, wsID, "work-"+card, "artifact-"+card, "review-"+card)
+	dbfx.Exec(t, `INSERT INTO content_publication_record (publication_record_id, workspace_id, work_id,
+		artifact_id, delivery_task_id, channel, status, actor_id, page_url_or_content_id, published_at)
+		VALUES ($1,$2,$3,$4,$5,'xiaohongshu','reported_published',$6,'https://example.invalid/p/1', now())`,
+		"pub-"+card, wsID, "work-"+card, "artifact-"+card, "task-"+card, testUserID)
+
+	downstream := []string{"content_brief_revision", "content_start_snapshot", "content_work",
+		"content_review_request", "content_delivery_task", "content_publication_record"}
+	counts := func() map[string]int {
+		result := map[string]int{}
+		for _, table := range append([]string{"content_topic_card"}, downstream...) {
+			var n int
+			if err := testPool.QueryRow(ctx, `SELECT count(*) FROM `+table+` WHERE workspace_id=$1`, wsID).Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			result[table] = n
+		}
+		return result
+	}
+	rows := func() string {
+		var all strings.Builder
+		for _, table := range []string{"content_topic_card", "content_brief_revision", "content_start_snapshot",
+			"content_work", "content_artifact_version", "content_review_request", "content_delivery_task",
+			"content_publication_record"} {
+			var value string
+			if err := testPool.QueryRow(ctx, `SELECT COALESCE(json_agg(row_to_json(x) ORDER BY row_to_json(x)::text), '[]')::text
+				FROM `+table+` x WHERE workspace_id=$1`, wsID).Scan(&value); err != nil {
+				t.Fatal(err)
+			}
+			all.WriteString(table + "=" + value + "\n")
+		}
+		return all.String()
+	}
+	for table, n := range counts() {
+		if n != 1 {
+			t.Fatalf("fixture wrote %d rows to %s, want 1", n, table)
+		}
+	}
+
+	var node topicplanning.MarketingNode
+	nodeCall(t, h.CreateContentMarketingNode, "POST", wsID, "", withAccount(nodeBody(""), accountID)).
+		Want(http.StatusCreated).JSON(&node)
+	candidate := syncOne(t, h, wsID, node.NodeID)
+
+	before := counts()
+	var adopted struct {
+		Candidate candidateView           `json:"candidate"`
+		TopicCard topicplanning.TopicCard `json:"topic_card"`
+	}
+	for range 2 {
+		candidateCall(t, h.AdoptContentMarketingCandidate, "POST", wsID, node.NodeID, candidate.CandidateID,
+			`{"mode":"create"}`).Want(http.StatusOK).JSON(&adopted)
+	}
+	after := counts()
+	if after["content_topic_card"] != before["content_topic_card"]+1 || adopted.TopicCard.Status != topicplanning.StatusDraft {
+		t.Fatalf("cards %d -> %d, card %+v; want one more draft card", before["content_topic_card"],
+			after["content_topic_card"], adopted.TopicCard)
+	}
+	for _, table := range downstream {
+		if after[table] != before[table] {
+			t.Errorf("%s: %d rows before adoption, %d after; adoption must start nothing", table, before[table], after[table])
+		}
+	}
+
+	untouched := rows()
+	rescheduled := strings.Replace(withAccount(nodeBody(`"base_revision":1`), accountID),
+		`"starts_on":"2026-11-11","ends_on":"2026-11-11"`, `"starts_on":"2026-11-18","ends_on":"2026-11-18"`, 1)
+	nodeCall(t, h.ReviseContentMarketingNode, "POST", wsID, node.NodeID, rescheduled).Want(http.StatusOK)
+	var impact struct {
+		Impact []topicplanning.ImpactItem `json:"impact"`
+	}
+	candidateCall(t, h.ListContentMarketingImpact, "GET", wsID, node.NodeID, "", "").Want(http.StatusOK).JSON(&impact)
+	if len(impact.Impact) != 1 || impact.Impact[0].TopicCardID != adopted.TopicCard.TopicCardID ||
+		impact.Impact[0].Before.StartsOn != "2026-11-11" || impact.Impact[0].After.StartsOn != "2026-11-18" {
+		t.Fatalf("impact after reschedule = %+v", impact.Impact)
+	}
+	candidateCall(t, h.DecideContentMarketingImpact, "POST", wsID, node.NodeID, candidate.CandidateID,
+		`{"decision":"handled","note":"已手改"}`).Want(http.StatusOK)
+	nodeCall(t, h.CancelContentMarketingNode, "POST", wsID, node.NodeID, `{"base_revision":2,"note":"取消"}`).Want(http.StatusOK)
+	candidateCall(t, h.ListContentMarketingImpact, "GET", wsID, node.NodeID, "", "").Want(http.StatusOK).JSON(&impact)
+	if len(impact.Impact) != 1 || !impact.Impact[0].Cancelled {
+		t.Fatalf("impact after cancel = %+v", impact.Impact)
+	}
+	if got := rows(); got != untouched {
+		t.Fatalf("reschedule, decision or cancel changed a downstream row:\nbefore %s\nafter  %s", untouched, got)
+	}
+	var list struct {
+		Candidates []candidateView `json:"candidates"`
+	}
+	candidateCall(t, h.ListContentMarketingCandidates, "GET", wsID, node.NodeID, "", "").Want(http.StatusOK).JSON(&list)
+	if len(list.Candidates) != 1 || list.Candidates[0].TopicCardID != adopted.TopicCard.TopicCardID ||
+		list.Candidates[0].AdoptedRevision == nil || *list.Candidates[0].AdoptedRevision != 1 {
+		t.Fatalf("the adoption record moved: %+v", list.Candidates)
+	}
+}
+
+// FR-048 for the PR 2 write paths: after a committed workspace deletion,
+// sync, edit, adopt and an impact decision are refused as not found and leave
+// no candidate, card or audit row behind.
+func TestContentMarketingCandidateWritesAreFencedByWorkspaceDeletion(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	ctx := t.Context()
+	h := nodeHandler(t)
+	store := h.marketingNodeStore()
+	slug := fmt.Sprintf("cand-fence-%d", time.Now().UnixNano())
+	var workspaceID string
+	if err := testPool.QueryRow(ctx, `INSERT INTO workspace (name, slug) VALUES ($1, $2) RETURNING id`,
+		slug, slug).Scan(&workspaceID); err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+	t.Cleanup(func() {
+		background := context.Background()
+		for _, statement := range []string{
+			`DELETE FROM content_marketing_node_candidate WHERE workspace_id = $1`,
+			`DELETE FROM content_marketing_node_revision WHERE workspace_id = $1`,
+			`DELETE FROM content_marketing_node WHERE workspace_id = $1`,
+			`DELETE FROM content_topic_card WHERE workspace_id = $1`,
+			`DELETE FROM content_operation_audit WHERE workspace_id = $1`,
+			`DELETE FROM content_technical_log WHERE workspace_id = $1`,
+			`DELETE FROM workspace WHERE id = $1`,
+		} {
+			_, _ = testPool.Exec(background, statement, workspaceID)
+		}
+	})
+	content := topicplanning.NodeContent{
+		Name: "双十一", Kind: topicplanning.NodeKindMarketing, StartsOn: "2026-11-11", EndsOn: "2026-11-11",
+		Timezone: "Asia/Shanghai", DateCertainty: topicplanning.DateConfirmed,
+	}
+	node, err := store.CreateNode(ctx, workspaceID, testUserID, topicplanning.CreateNodeRequest{Content: content})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidates, err := store.SyncCandidates(ctx, workspaceID, testUserID, node.NodeID)
+	if err != nil || len(candidates) != 1 {
+		t.Fatalf("sync while the workspace exists = %+v, %v", candidates, err)
+	}
+	candidateID := candidates[0].CandidateID
+	count := func(table string) int {
+		var total int
+		if err := testPool.QueryRow(ctx, `SELECT count(*) FROM `+table+` WHERE workspace_id = $1`, workspaceID).Scan(&total); err != nil {
+			t.Fatalf("count %s: %v", table, err)
+		}
+		return total
+	}
+	candidateRow := func() string {
+		var row string
+		if err := testPool.QueryRow(ctx, `SELECT row_to_json(c)::text FROM content_marketing_node_candidate c
+			WHERE candidate_id=$1`, candidateID).Scan(&row); err != nil {
+			t.Fatal(err)
+		}
+		return row
+	}
+	candidatesBefore, cardsBefore, auditBefore, rowBefore := count("content_marketing_node_candidate"),
+		count("content_topic_card"), count("content_operation_audit"), candidateRow()
+
+	if _, err = testPool.Exec(ctx, `DELETE FROM workspace WHERE id = $1`, workspaceID); err != nil {
+		t.Fatalf("delete workspace: %v", err)
+	}
+	for _, write := range []struct {
+		name string
+		call func() error
+	}{
+		{"sync", func() error { _, err := store.SyncCandidates(ctx, workspaceID, testUserID, node.NodeID); return err }},
+		{"edit", func() error {
+			_, err := store.EditCandidate(ctx, workspaceID, testUserID, node.NodeID, candidateID,
+				topicplanning.CandidatePatch{Angle: topicplanning.PatchString{Set: true, Value: "x"}})
+			return err
+		}},
+		{"adopt", func() error {
+			_, err := store.AdoptCandidate(ctx, workspaceID, testUserID, node.NodeID, candidateID,
+				topicplanning.AdoptRequest{Mode: topicplanning.AdoptCreate})
+			return err
+		}},
+		{"decide", func() error {
+			_, err := store.DecideImpact(ctx, workspaceID, testUserID, node.NodeID, candidateID,
+				topicplanning.ImpactDecisionRequest{Decision: topicplanning.ImpactKept})
+			return err
+		}},
+	} {
+		t.Run(write.name, func(t *testing.T) {
+			if err := write.call(); !errors.Is(err, topicplanning.ErrNotFound) {
+				t.Fatalf("%s after the delete committed = %v, want ErrNotFound", write.name, err)
+			}
+		})
+	}
+	if got := count("content_marketing_node_candidate"); got != candidatesBefore {
+		t.Errorf("candidates = %d after refused writes, want %d", got, candidatesBefore)
+	}
+	if got := count("content_topic_card"); got != cardsBefore {
+		t.Errorf("cards = %d after refused writes, want %d", got, cardsBefore)
+	}
+	if got := count("content_operation_audit"); got != auditBefore {
+		t.Errorf("audit rows = %d after refused writes, want %d", got, auditBefore)
+	}
+	if got := candidateRow(); got != rowBefore {
+		t.Errorf("candidate changed after refused writes:\n%s\n%s", rowBefore, got)
+	}
+}

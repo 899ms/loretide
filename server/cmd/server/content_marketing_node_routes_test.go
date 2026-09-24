@@ -31,6 +31,13 @@ var contentMarketingNodeRoutes = []struct {
 	{http.MethodPost, "/api/content-marketing-nodes/{nodeId}/revisions", "/api/content-marketing-nodes/node-1/revisions"},
 	{http.MethodPost, "/api/content-marketing-nodes/{nodeId}/confirm", "/api/content-marketing-nodes/node-1/confirm"},
 	{http.MethodPost, "/api/content-marketing-nodes/{nodeId}/cancel", "/api/content-marketing-nodes/node-1/cancel"},
+	// specs/033 PR 2.
+	{http.MethodGet, "/api/content-marketing-nodes/{nodeId}/candidates", "/api/content-marketing-nodes/node-1/candidates"},
+	{http.MethodPost, "/api/content-marketing-nodes/{nodeId}/candidates/sync", "/api/content-marketing-nodes/node-1/candidates/sync"},
+	{http.MethodPatch, "/api/content-marketing-nodes/{nodeId}/candidates/{candidateId}", "/api/content-marketing-nodes/node-1/candidates/cand-1"},
+	{http.MethodPost, "/api/content-marketing-nodes/{nodeId}/candidates/{candidateId}/adopt", "/api/content-marketing-nodes/node-1/candidates/cand-1/adopt"},
+	{http.MethodPost, "/api/content-marketing-nodes/{nodeId}/candidates/{candidateId}/impact-decision", "/api/content-marketing-nodes/node-1/candidates/cand-1/impact-decision"},
+	{http.MethodGet, "/api/content-marketing-nodes/{nodeId}/impact", "/api/content-marketing-nodes/node-1/impact"},
 }
 
 func TestContentMarketingNodeEndpointsAreMounted(t *testing.T) {
@@ -228,5 +235,131 @@ func TestContentMarketingNodeImportIsNotANodeID(t *testing.T) {
 		`{"base_revision":1}`), http.StatusOK, &confirmed)
 	if confirmed.NodeID != nodeID || confirmed.Status != "active" || confirmed.Current.ChangeKind != "confirm" {
 		t.Fatalf("confirm via path = %+v", confirmed)
+	}
+}
+
+// specs/033 PR 2, T046: the candidate endpoints carry two path parameters.
+// Behind the real router both differ from the workspace id in the request
+// context and from each other, and every handler must answer for the node and
+// the candidate named in the URL. A handler that read the context, or read one
+// parameter where it meant the other, would 404 here.
+func TestContentMarketingCandidatePathIDsSurviveTheRealMiddleware(t *testing.T) {
+	if testPool == nil || testServer == nil {
+		t.Skip("database not available")
+	}
+	fx := testutil.New(testPool, testWorkspaceID, testUserID)
+	name := fmt.Sprintf("路由候选-%d", time.Now().UnixNano())
+
+	var node routedNode
+	decodeRouted(t, accountAPIRequest(t, http.MethodPost, "/api/content-marketing-nodes",
+		`{"name":"`+name+`",`+fmt.Sprintf(routedNodeBody, "初版")+`,"note":""}`), http.StatusCreated, &node)
+	cleanupRoutedNodes(t, fx, node.NodeID)
+	fx.Cleanup(t, `DELETE FROM content_marketing_node_candidate WHERE node_id=$1`, node.NodeID)
+	nodePath := "/api/content-marketing-nodes/" + node.NodeID
+
+	type routedCandidate struct {
+		CandidateID            string `json:"candidate_id"`
+		NodeID                 string `json:"node_id"`
+		Angle                  string `json:"angle"`
+		Status                 string `json:"status"`
+		TopicCardID            string `json:"topic_card_id"`
+		ImpactDecision         string `json:"impact_decision"`
+		ImpactDecisionRevision *int64 `json:"impact_decision_revision"`
+	}
+	var synced struct {
+		Candidates []routedCandidate `json:"candidates"`
+	}
+	decodeRouted(t, accountAPIRequest(t, http.MethodPost, nodePath+"/candidates/sync", ""), http.StatusOK, &synced)
+	if len(synced.Candidates) != 1 {
+		t.Fatalf("sync via path = %+v", synced.Candidates)
+	}
+	candidateID := synced.Candidates[0].CandidateID
+	if candidateID == "" || candidateID == testWorkspaceID || candidateID == node.NodeID ||
+		node.NodeID == testWorkspaceID || synced.Candidates[0].NodeID != node.NodeID {
+		t.Fatalf("ids %q / %q / %q cannot prove path and context are kept apart", testWorkspaceID, node.NodeID, candidateID)
+	}
+	candidatePath := nodePath + "/candidates/" + candidateID
+
+	var listed struct {
+		Candidates []routedCandidate `json:"candidates"`
+	}
+	decodeRouted(t, accountAPIRequest(t, http.MethodGet, nodePath+"/candidates", ""), http.StatusOK, &listed)
+	if len(listed.Candidates) != 1 || listed.Candidates[0].CandidateID != candidateID {
+		t.Fatalf("list via path = %+v", listed.Candidates)
+	}
+
+	var edited routedCandidate
+	decodeRouted(t, accountAPIRequest(t, http.MethodPatch, candidatePath, `{"angle":"路由角度"}`), http.StatusOK, &edited)
+	if edited.CandidateID != candidateID || edited.NodeID != node.NodeID || edited.Angle != "路由角度" {
+		t.Fatalf("edit via path = %+v", edited)
+	}
+
+	var adopted struct {
+		Candidate routedCandidate `json:"candidate"`
+		TopicCard struct {
+			TopicCardID string `json:"topic_card_id"`
+			WorkspaceID string `json:"workspace_id"`
+			Status      string `json:"status"`
+			IPFit       string `json:"ip_fit"`
+		} `json:"topic_card"`
+	}
+	decodeRouted(t, accountAPIRequest(t, http.MethodPost, candidatePath+"/adopt", `{"mode":"create"}`), http.StatusOK, &adopted)
+	cardID := adopted.TopicCard.TopicCardID
+	fx.Cleanup(t, `DELETE FROM content_topic_card WHERE topic_card_id=$1`, cardID)
+	fx.Cleanup(t, `DELETE FROM content_operation_audit WHERE workspace_id=$1 AND payload->>'object_id'=$2`, testWorkspaceID, candidateID)
+	if adopted.Candidate.CandidateID != candidateID || adopted.Candidate.TopicCardID != cardID || cardID == "" ||
+		adopted.TopicCard.WorkspaceID != testWorkspaceID || adopted.TopicCard.Status != "draft" ||
+		adopted.TopicCard.IPFit != "路由角度" {
+		t.Fatalf("adopt via path = %+v", adopted)
+	}
+
+	// Reschedule, then the impact list names the candidate and a decision on
+	// it goes to that candidate.
+	decodeRouted(t, accountAPIRequest(t, http.MethodPost, nodePath+"/revisions",
+		`{"base_revision":1,"name":"`+name+`",`+strings.Replace(fmt.Sprintf(routedNodeBody, "初版"),
+			`"lead_days":14`, `"lead_days":7`, 1)+`}`), http.StatusOK, nil)
+	var impact struct {
+		Impact []struct {
+			CandidateID string `json:"candidate_id"`
+			TopicCardID string `json:"topic_card_id"`
+		} `json:"impact"`
+	}
+	decodeRouted(t, accountAPIRequest(t, http.MethodGet, nodePath+"/impact", ""), http.StatusOK, &impact)
+	if len(impact.Impact) != 1 || impact.Impact[0].CandidateID != candidateID || impact.Impact[0].TopicCardID != cardID {
+		t.Fatalf("impact via path = %+v", impact.Impact)
+	}
+	var decided routedCandidate
+	decodeRouted(t, accountAPIRequest(t, http.MethodPost, candidatePath+"/impact-decision",
+		`{"decision":"kept","note":"不动"}`), http.StatusOK, &decided)
+	if decided.CandidateID != candidateID || decided.ImpactDecision != "kept" ||
+		decided.ImpactDecisionRevision == nil || *decided.ImpactDecisionRevision != 2 {
+		t.Fatalf("impact decision via path = %+v", decided)
+	}
+	decodeRouted(t, accountAPIRequest(t, http.MethodGet, nodePath+"/impact", ""), http.StatusOK, &impact)
+	if len(impact.Impact) != 0 {
+		t.Fatalf("impact after the decision = %+v", impact.Impact)
+	}
+}
+
+// POST /candidates/sync is a static segment beside /candidates/{candidateId}:
+// no candidate may ever be created or read under the id "sync".
+func TestContentMarketingCandidateSyncIsNotACandidateID(t *testing.T) {
+	if testPool == nil || testServer == nil {
+		t.Skip("database not available")
+	}
+	fx := testutil.New(testPool, testWorkspaceID, testUserID)
+	var node routedNode
+	decodeRouted(t, accountAPIRequest(t, http.MethodPost, "/api/content-marketing-nodes",
+		`{"name":"`+fmt.Sprintf("同步段-%d", time.Now().UnixNano())+`",`+fmt.Sprintf(routedNodeBody, "")+`}`),
+		http.StatusCreated, &node)
+	cleanupRoutedNodes(t, fx, node.NodeID)
+	fx.Cleanup(t, `DELETE FROM content_marketing_node_candidate WHERE node_id=$1`, node.NodeID)
+	decodeRouted(t, accountAPIRequest(t, http.MethodPost, "/api/content-marketing-nodes/"+node.NodeID+"/candidates/sync", ""),
+		http.StatusOK, nil)
+	if n := fx.Count(t, `SELECT count(*) FROM content_marketing_node_candidate WHERE candidate_id='sync'`); n != 0 {
+		t.Fatalf("a candidate with id \"sync\" exists")
+	}
+	if n := fx.Count(t, `SELECT count(*) FROM content_marketing_node_candidate WHERE node_id=$1`, node.NodeID); n != 1 {
+		t.Fatalf("sync via the static segment made %d candidates, want 1", n)
 	}
 }

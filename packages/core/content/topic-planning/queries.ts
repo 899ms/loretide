@@ -28,9 +28,21 @@ import {
   parseMarketingNodes,
   parseNodeRevisions,
   reviseMarketingNodeToWire,
+  adoptToWire,
+  candidatePatchToWire,
+  impactDecisionToWire,
+  parseAdoptResult,
+  parseImpactItems,
+  parseNodeCandidate,
+  parseNodeCandidates,
+  type AdoptInput,
+  type AdoptResult,
+  type CandidatePatchInput,
+  type ImpactItem,
   type ImportRowResult,
   type MarketingNode,
   type MarketingNodeInput,
+  type NodeCandidate,
   type NodeRevision,
 } from "./marketing-nodes";
 import {
@@ -296,6 +308,10 @@ export const marketingNodeKeys = {
     ["contentMarketingNodes", workspaceId, "detail", nodeId] as const,
   revisions: (workspaceId: string, nodeId: string) =>
     ["contentMarketingNodes", workspaceId, "revisions", nodeId] as const,
+  candidates: (workspaceId: string, nodeId: string) =>
+    ["contentMarketingNodes", workspaceId, "candidates", nodeId] as const,
+  impact: (workspaceId: string, nodeId: string) =>
+    ["contentMarketingNodes", workspaceId, "impact", nodeId] as const,
 };
 
 export function useMarketingNodes(workspaceId: string, status = "") {
@@ -396,6 +412,103 @@ export function useCancelMarketingNode(workspaceId: string) {
         await api.cancelContentMarketingNode(
           input.nodeId,
           nodeTransitionToWire(input.baseRevision, input.note),
+        ),
+      ),
+    onSettled: () =>
+      client.invalidateQueries({ queryKey: marketingNodeKeys.all(workspaceId) }),
+  });
+}
+
+// Candidates and schedule impact (specs/033 PR 2). Every candidate write
+// invalidates the node prefix: a sync, an adoption or a decision changes the
+// candidate list, the impact list and the duplicate risks of the others at
+// once. An adoption also invalidates the topic cards, because it may have
+// created one.
+export function useMarketingNodeCandidates(workspaceId: string, nodeId: string) {
+  return useQuery<NodeCandidate[]>({
+    queryKey: marketingNodeKeys.candidates(workspaceId, nodeId),
+    enabled: !!nodeId,
+    queryFn: async () =>
+      parseNodeCandidates(await api.listContentMarketingCandidates(nodeId)),
+  });
+}
+
+export function useMarketingNodeImpact(workspaceId: string, nodeId: string) {
+  return useQuery<ImpactItem[]>({
+    queryKey: marketingNodeKeys.impact(workspaceId, nodeId),
+    enabled: !!nodeId,
+    queryFn: async () =>
+      parseImpactItems(await api.listContentMarketingImpact(nodeId)),
+  });
+}
+
+export function useSyncMarketingCandidates(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation<NodeCandidate[], Error, string>({
+    mutationFn: async (nodeId) =>
+      parseNodeCandidates(await api.syncContentMarketingCandidates(nodeId)),
+    onSettled: () =>
+      client.invalidateQueries({ queryKey: marketingNodeKeys.all(workspaceId) }),
+  });
+}
+
+export function useEditMarketingCandidate(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      nodeId: string;
+      candidateId: string;
+      patch: CandidatePatchInput;
+    }) =>
+      parseNodeCandidate(
+        await api.editContentMarketingCandidate(
+          input.nodeId,
+          input.candidateId,
+          candidatePatchToWire(input.patch),
+        ),
+      ),
+    onSettled: () =>
+      client.invalidateQueries({ queryKey: marketingNodeKeys.all(workspaceId) }),
+  });
+}
+
+export function useAdoptMarketingCandidate(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation<
+    AdoptResult,
+    Error,
+    { nodeId: string; candidateId: string; adopt: AdoptInput }
+  >({
+    mutationFn: async (input) =>
+      parseAdoptResult(
+        await api.adoptContentMarketingCandidate(
+          input.nodeId,
+          input.candidateId,
+          adoptToWire(input.adopt),
+        ),
+      ),
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: marketingNodeKeys.all(workspaceId) }),
+        client.invalidateQueries({ queryKey: topicPlanningKeys.all(workspaceId) }),
+      ]),
+  });
+}
+
+export function useDecideMarketingImpact(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      nodeId: string;
+      candidateId: string;
+      decision: "kept" | "handled";
+      note?: string;
+    }) =>
+      parseNodeCandidate(
+        await api.decideContentMarketingImpact(
+          input.nodeId,
+          input.candidateId,
+          impactDecisionToWire(input.decision, input.note),
         ),
       ),
     onSettled: () =>

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -140,6 +142,9 @@ func (s *Store) ImportNodes(ctx context.Context, workspaceID, actor string, rows
 	if ctx, err = s.audit(ctx, tx, workspaceID, actor, "", step); err != nil {
 		return fail(err)
 	}
+	if err = lockImportKeys(ctx, tx, workspaceID, rows); err != nil {
+		return fail(err)
+	}
 
 	results := make([]ImportRowResult, len(rows))
 	// Rows created earlier in this same batch, keyed like the stored check.
@@ -187,6 +192,43 @@ func (s *Store) ImportNodes(ctx context.Context, workspaceID, actor string, rows
 		return fail(ErrStorage)
 	}
 	return ImportResult{Results: results}, nil
+}
+
+// lockImportKeys closes the gap between "no such node yet" and the insert when
+// two imports carry the same row at the same time. Without it both would read
+// "not found" under their own snapshots and both would create the node.
+//
+// Each valid row's dedupe key - brand, trimmed name, start date - takes a
+// transaction-scoped advisory lock inside the fence, before any row is judged.
+// A second import of the same key waits here until the first commits; its
+// findDuplicateNode then runs as a new statement with a new snapshot and sees
+// the committed node, so the row is reported as a duplicate. Keys are locked
+// in sorted order, so two imports holding the same keys in different row
+// orders cannot deadlock. A hash collision between two different keys only
+// makes two imports wait for each other; it never changes an outcome.
+//
+// An advisory lock rather than a unique index: the key is the name of the
+// node's current revision, which lives in the revision table and changes with
+// edits, and only nodes that are not cancelled take part - neither fits an
+// index on either table.
+func lockImportKeys(ctx context.Context, tx pgx.Tx, workspaceID string, rows []ImportRow) error {
+	keys := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if row.Err != nil {
+			continue
+		}
+		// Length-prefixed so no name can be crafted to collide with another
+		// name plus date. PostgreSQL text cannot hold a NUL separator.
+		keys = append(keys, fmt.Sprintf("content-marketing-node-import:%s:%d:%s:%s",
+			workspaceID, len(row.Content.Name), row.Content.Name, row.Content.StartsOn))
+	}
+	slices.Sort(keys)
+	for _, key := range slices.Compact(keys) {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, key); err != nil {
+			return ErrStorage
+		}
+	}
+	return nil
 }
 
 func invalidField(err error) string {

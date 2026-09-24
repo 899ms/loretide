@@ -37,6 +37,9 @@ type Store struct {
 	Diagnostics DiagnosticStore
 	Accounts    AccountReader
 	Sources     SourceReader
+	// SourceStatuses reports whether a material a marketing node refers to
+	// is archived or gone (specs/033 FR-026). Only candidate reads use it.
+	SourceStatuses SourceStatusReader
 	// Guard is workspace-core's delete/write fence. Every write transaction
 	// takes it as its first statement, so a workspace deletion that has
 	// already committed cannot be followed by an orphan card or brief. The
@@ -172,38 +175,10 @@ func (s *Store) Create(ctx context.Context, actor string, card TopicCard) (Topic
 		return TopicCard{}, err
 	}
 	card.TopicCardID = s.newID()
-	card.Status = StatusDraft
-	card.Channels = normalizeStrings(card.Channels)
-	card.DecisionReason = ""
-	card.DecisionNote = ""
-	card.StartedBriefRevisionID = nil
-	channels, err := encodeStrings(card.Channels)
-	if err != nil {
-		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", ErrInvalid)
-		return TopicCard{}, ErrInvalid
-	}
-
-	fitSources, err := NormalizeSourceIDs("fit_source_ids", card.FitSourceIDs)
+	card, err := prepareNewCard(card)
 	if err != nil {
 		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
 		return TopicCard{}, err
-	}
-	evidenceSources, err := NormalizeSourceIDs("evidence_source_ids", card.EvidenceSourceIDs)
-	if err != nil {
-		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
-		return TopicCard{}, err
-	}
-	card.FitSourceIDs = fitSources
-	card.EvidenceSourceIDs = evidenceSources
-	encodedFit, err := encodeStrings(card.FitSourceIDs)
-	if err != nil {
-		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", ErrInvalid)
-		return TopicCard{}, ErrInvalid
-	}
-	encodedEvidence, err := encodeStrings(card.EvidenceSourceIDs)
-	if err != nil {
-		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", ErrInvalid)
-		return TopicCard{}, ErrInvalid
 	}
 
 	tx, err := s.begin(ctx, card.WorkspaceID)
@@ -218,10 +193,67 @@ func (s *Store) Create(ctx context.Context, actor string, card TopicCard) (Topic
 		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
 		return TopicCard{}, err
 	}
-	if err = s.checkSources(ctx, card.WorkspaceID, card.FitSourceIDs, card.EvidenceSourceIDs); err != nil {
+	card, err = s.insertCardTx(ctx, tx, card)
+	if err != nil {
 		_ = tx.Rollback(ctx)
 		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
 		return TopicCard{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
+		return TopicCard{}, ErrStorage
+	}
+	return card, nil
+}
+
+// prepareNewCard puts a card into the shape every new card is stored in: a
+// draft with no decision and no brief, channels never null, source references
+// cleaned. It is pure and runs before the transaction, as it always has in
+// Create. The id is the caller's: Create and marketing node adoption each
+// report failures under it.
+func prepareNewCard(card TopicCard) (TopicCard, error) {
+	card.Status = StatusDraft
+	card.Channels = normalizeStrings(card.Channels)
+	card.DecisionReason = ""
+	card.DecisionNote = ""
+	card.StartedBriefRevisionID = nil
+	fitSources, err := NormalizeSourceIDs("fit_source_ids", card.FitSourceIDs)
+	if err != nil {
+		return card, err
+	}
+	evidenceSources, err := NormalizeSourceIDs("evidence_source_ids", card.EvidenceSourceIDs)
+	if err != nil {
+		return card, err
+	}
+	card.FitSourceIDs = fitSources
+	card.EvidenceSourceIDs = evidenceSources
+	return card, nil
+}
+
+// insertCardTx checks the card's source references and inserts it, inside the
+// caller's fenced write transaction. It is the only statement in this package
+// that writes a new topic card: Create calls it in its own transaction, and
+// marketing node adoption calls it in the transaction that also marks the
+// candidate adopted, so neither can happen without the other (specs/033
+// FR-032). The card must have been through prepareNewCard.
+//
+// The account is not checked here. Create checks it before its transaction
+// (a known gap, specs/033 Out of Scope 10); adoption checks it inside.
+func (s *Store) insertCardTx(ctx context.Context, tx pgx.Tx, card TopicCard) (TopicCard, error) {
+	channels, err := encodeStrings(card.Channels)
+	if err != nil {
+		return card, ErrInvalid
+	}
+	encodedFit, err := encodeStrings(card.FitSourceIDs)
+	if err != nil {
+		return card, ErrInvalid
+	}
+	encodedEvidence, err := encodeStrings(card.EvidenceSourceIDs)
+	if err != nil {
+		return card, ErrInvalid
+	}
+	if err = s.checkSources(ctx, card.WorkspaceID, card.FitSourceIDs, card.EvidenceSourceIDs); err != nil {
+		return card, err
 	}
 	err = tx.QueryRow(ctx, `
 		INSERT INTO content_topic_card (
@@ -236,13 +268,7 @@ func (s *Store) Create(ctx context.Context, actor string, card TopicCard) (Topic
 		channels, encodedFit, encodedEvidence, card.RecommendedAction, card.Status,
 	).Scan(&card.CreatedAt, &card.UpdatedAt)
 	if err != nil {
-		_ = tx.Rollback(ctx)
-		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
-		return TopicCard{}, ErrStorage
-	}
-	if err = tx.Commit(ctx); err != nil {
-		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
-		return TopicCard{}, ErrStorage
+		return card, ErrStorage
 	}
 	return card, nil
 }
