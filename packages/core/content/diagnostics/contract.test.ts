@@ -90,6 +90,15 @@ describe("diagnostic API contracts",()=>{
   // the field is optional rather than required.
   expect(parsed.components).toHaveLength(1);
   expect(parsed.metrics.sampleCount).toBe(1);
+  expect(parsed.components[0]?.configState).toBe("unknown");
+  expect(parsed.components[0]?.healthState).toBe("unknown");
+  expect(parsed.components[0]?.executionState).toBe("not_applicable");
+  expect(parsed.components[0]?.configObservedAt).toBeNull();
+  expect(parsed.components[0]?.configReason).toBe("");
+ });
+ it("keeps optional component fact fields when a current server sends them",()=>{
+  const parsed=parseDiagnostic({...wireOverview,components:[{...wireOverview.components[0],config_state:"configured",health_state:"unverified",execution_state:"not_applicable",config_observed_at:"2026-01-01T00:00:00Z",config_reason:"server_boot"}]},overviewSchema);
+  expect(parsed.components[0]).toMatchObject({configState:"configured",healthState:"unverified",executionState:"not_applicable",configObservedAt:"2026-01-01T00:00:00Z",configReason:"server_boot"});
  });
  it("does not sink the overview when one scenario kind is malformed",()=>{
   const parsed=parseDiagnostic({...wireOverview,scenarios:[{id:"normal",expected_code:"",kind:42}]},overviewSchema);

@@ -247,3 +247,68 @@ func TestNewServiceBuildsFactRegistryWithoutStore(t *testing.T) {
 		t.Fatal("NewService must initialize the in-memory fact registry")
 	}
 }
+
+func TestHostFactsStaySeparateFromLiveness(t *testing.T) {
+	now := time.Date(2026, 9, 22, 0, 0, 0, 0, time.UTC)
+	service := NewService(nil, "test", false)
+	if err := service.RegisterServerBootFacts(now); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RegisterStorageFacts(now, "", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RegisterExecutionPolicyDisabled(now); err != nil {
+		t.Fatal(err)
+	}
+	service.Heartbeat("web", "browser", now)
+
+	components := make(map[string]Component)
+	for _, component := range service.overviewComponents(now, healthHealthy) {
+		components[component.Name] = component
+	}
+	if api := components["api"]; api.Status != "unverified" || api.ConfigState != "configured" || api.HealthState != "unverified" {
+		t.Fatalf("api must be configured but not listener-healthy: %#v", api)
+	}
+	if database := components["database"]; database.Status != "healthy" || database.ConfigState != "configured" || database.HealthState != "healthy" || database.Version != "PostgreSQL" || database.Reason != "" {
+		t.Fatalf("database config and connectivity must remain distinct: %#v", database)
+	}
+	for _, component := range service.overviewComponents(now, healthUnavailable) {
+		if component.Name == "database" && (component.Status != "unavailable" || component.ConfigState != "configured" || component.HealthState != "unavailable" || component.Reason != "database_connectivity_unavailable") {
+			t.Fatalf("database probe failure must not erase configuration: %#v", component)
+		}
+	}
+	if files := components["files"]; files.Status != "unconfigured" || files.ConfigState != "unconfigured" || files.Version != "" || files.ConfigReason != "storage_not_configured" {
+		t.Fatalf("files must expose no path or category when unconfigured: %#v", files)
+	}
+	if web := components["web"]; web.Status != "unknown" || web.ConfigState != "unknown" || web.HealthState != "healthy" || web.Version != "browser" {
+		t.Fatalf("web heartbeat cannot invent configuration: %#v", web)
+	}
+	if executor := components["executor"]; executor.Status != "disabled" || executor.ExecutionState != "disabled" || executor.Reason != "execution_disabled" {
+		t.Fatalf("read-only policy must remain disabled: %#v", executor)
+	}
+	for _, name := range []string{"daemon", "search"} {
+		if component := components[name]; component.Status != "unknown" || component.ConfigState != "unknown" {
+			t.Fatalf("%s without a host source must remain unknown: %#v", name, component)
+		}
+	}
+}
+
+func TestStorageFactsRejectUnknownCategory(t *testing.T) {
+	service := NewService(nil, "test", false)
+	if err := service.RegisterStorageFacts(time.Now().UTC(), "bucket-name", true); !errors.Is(err, errInvalidSourceSnapshot) {
+		t.Fatalf("storage registration error = %v, want invalid source snapshot", err)
+	}
+}
+
+func TestStorageFactsExposeOnlyAllowedCategory(t *testing.T) {
+	now := time.Date(2026, 9, 22, 0, 0, 0, 0, time.UTC)
+	service := NewService(nil, "test", false)
+	if err := service.RegisterStorageFacts(now, "s3", true); err != nil {
+		t.Fatal(err)
+	}
+	for _, component := range service.overviewComponents(now, healthUnknown) {
+		if component.Name == "files" && (component.Status != "unverified" || component.ConfigState != "configured" || component.Version != "s3" || component.ConfigReason != "storage_s3") {
+			t.Fatalf("configured storage response = %#v", component)
+		}
+	}
+}

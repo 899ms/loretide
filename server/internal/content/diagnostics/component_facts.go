@@ -76,6 +76,7 @@ type componentConfigFact struct {
 }
 
 type livenessFact struct {
+	State    healthState
 	LastSeen time.Time
 	Version  string
 	Reason   string
@@ -284,6 +285,9 @@ func reduceHealth(liveness *livenessFact, now time.Time) (healthState, string, *
 		return healthUnknown, "heartbeat_missing_timestamp", nil
 	}
 	lastSeen := liveness.LastSeen.UTC()
+	if liveness.State == healthUnavailable {
+		return healthUnavailable, safeToken(liveness.Reason), &lastSeen
+	}
 	if lastSeen.After(now.Add(maximumClockSkew)) {
 		return healthUnknown, "clock_skew", &lastSeen
 	}
