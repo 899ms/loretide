@@ -100,3 +100,38 @@ func TestMarketingNodeCodeImportsNoExecutor(t *testing.T) {
 		}
 	}
 }
+
+// T043 / FR-041: adoption creates a card, and it does so only through
+// store.go's insertCardTx - the one statement Create uses too. No marketing
+// node file spells an INSERT into the card table of its own, and store.go has
+// exactly one, inside that function. A second card insert would be a second
+// place where "what a new card looks like" is decided.
+func TestMarketingNodeCodeCreatesCardsOnlyThroughTheSharedInsert(t *testing.T) {
+	for name, source := range marketingNodeSources(t) {
+		flat := whitespace.ReplaceAllString(source, " ")
+		if strings.Contains(flat, "INSERT INTO CONTENT_TOPIC_CARD") {
+			t.Errorf("%s inserts a topic card itself; adoption must call insertCardTx", name)
+		}
+	}
+	_, current, _, _ := runtime.Caller(0)
+	body, err := os.ReadFile(filepath.Join(filepath.Dir(current), "store.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := whitespace.ReplaceAllString(string(body), " ")
+	const insert = "INSERT INTO content_topic_card"
+	if n := strings.Count(store, insert); n != 1 {
+		t.Fatalf("store.go has %d topic card inserts, want exactly 1 (in insertCardTx)", n)
+	}
+	start := strings.Index(store, "func (s *Store) insertCardTx(")
+	if start < 0 {
+		t.Fatal("store.go has no insertCardTx")
+	}
+	end := strings.Index(store[start+1:], " func ")
+	if end < 0 {
+		end = len(store) - start - 1
+	}
+	if !strings.Contains(store[start:start+1+end], insert) {
+		t.Fatal("store.go's topic card insert is not inside insertCardTx")
+	}
+}

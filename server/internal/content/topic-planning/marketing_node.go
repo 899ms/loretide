@@ -2,6 +2,7 @@ package topicplanning
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -69,8 +70,8 @@ const (
 	DateTentative DateCertainty = "tentative"
 )
 
-// Limits from the contract (§1.1, §2.1). The note and role limits are not in
-// the contract; they only keep a single field from being unbounded.
+// Limits from the contract (§1.1, §2.1). The note and role limits were added
+// to the contract with PR 2; they keep a single field from being unbounded.
 const (
 	MaxNodeNameLength      = 200
 	MaxNodeGoalLength      = 2000
@@ -491,4 +492,20 @@ func ParseNodeStatusFilter(value string) (NodeStatus, error) {
 		return "", FieldError{Field: "status", Reason: "unknown status"}
 	}
 	return status, nil
+}
+
+// SourceStatusReader reports where a material a node refers to stands: its
+// status ("inbox", "organized", "archived") and whether it exists in this
+// brand at all (FR-026). Strings only, like SourceReader, so topic-planning
+// does not import source-inbox; the adapter lives in
+// handler/content_marketing_node.go.
+//
+// There is deliberately no account parameter. A material today belongs to the
+// brand and to no account (spec Current State 6), so "does it exist in this
+// brand" is the whole authorization question. The day a material gains an
+// account owner, this port - and SourceReader with it - must take the account
+// and route the answer through workspace-core.CanRead in the same change
+// (FR-045); TestSourcePortsTakeNoAccount fails until that is done on purpose.
+type SourceStatusReader interface {
+	Status(ctx context.Context, workspaceID, sourceID string) (status string, found bool, err error)
 }

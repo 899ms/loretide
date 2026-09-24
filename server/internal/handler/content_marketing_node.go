@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
 	topicplanning "github.com/multica-ai/multica/server/internal/content/topic-planning"
 )
@@ -198,4 +199,155 @@ func (h *Handler) marketingNodeError(w http.ResponseWriter, err error) {
 		return
 	}
 	h.topicError(w, err)
+}
+
+// Candidates, adoption and schedule impact (specs/033 PR 2, contract §2).
+// Both path parameters come from chi.URLParam only.
+
+func marketingCandidateIDFromURL(r *http.Request) string { return chi.URLParam(r, "candidateId") }
+
+// marketingSourceStatusReader is the SourceStatusReader adapter: a material's
+// status, read by brand and id from content_source. Strings only, so
+// topic-planning does not import source-inbox. No row is "not found", the
+// same answer for a foreign material as for a missing one.
+type marketingSourceStatusReader struct {
+	db dbExecutor
+}
+
+func (r marketingSourceStatusReader) Status(ctx context.Context, workspaceID, sourceID string) (string, bool, error) {
+	if r.db == nil {
+		return "", false, topicplanning.ErrStorage
+	}
+	var status string
+	err := r.db.QueryRow(ctx, `SELECT status FROM content_source WHERE workspace_id=$1 AND source_id=$2`,
+		workspaceID, sourceID).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return status, true, nil
+}
+
+// marketingNodeStore is the topic planning store with the material status
+// port attached, which only candidate reads need.
+func (h *Handler) marketingNodeStore() *topicplanning.Store {
+	store := h.topicPlanningStore()
+	store.SourceStatuses = marketingSourceStatusReader{db: h.DB}
+	return store
+}
+
+func (h *Handler) ListContentMarketingCandidates(w http.ResponseWriter, r *http.Request) {
+	workspace, actor, ok := h.topicScope(w, r)
+	if !ok {
+		return
+	}
+	candidates, err := h.marketingNodeStore().ListCandidates(r.Context(), workspace, actor, marketingNodeIDFromURL(r))
+	if err != nil {
+		h.marketingNodeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"candidates": candidates})
+}
+
+func (h *Handler) SyncContentMarketingCandidates(w http.ResponseWriter, r *http.Request) {
+	workspace, actor, ok := h.topicScope(w, r)
+	if !ok {
+		return
+	}
+	candidates, err := h.marketingNodeStore().SyncCandidates(r.Context(), workspace, actor, marketingNodeIDFromURL(r))
+	if err != nil {
+		h.marketingNodeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"candidates": candidates})
+}
+
+func (h *Handler) EditContentMarketingCandidate(w http.ResponseWriter, r *http.Request) {
+	workspace, actor, ok := h.topicScope(w, r)
+	if !ok {
+		return
+	}
+	body, ok := readMarketingNodeBody(w, r)
+	if !ok {
+		h.marketingNodeError(w, topicplanning.ErrInvalid)
+		return
+	}
+	patch, err := topicplanning.DecodeCandidatePatch(body)
+	if err != nil {
+		h.marketingNodeError(w, err)
+		return
+	}
+	candidate, err := h.marketingNodeStore().EditCandidate(r.Context(), workspace, actor,
+		marketingNodeIDFromURL(r), marketingCandidateIDFromURL(r), patch)
+	if err != nil {
+		h.marketingNodeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, candidate)
+}
+
+// AdoptContentMarketingCandidate creates or links a draft topic card. It
+// answers 200 with the same body whether the card was made now or by an
+// earlier adoption of the same candidate.
+func (h *Handler) AdoptContentMarketingCandidate(w http.ResponseWriter, r *http.Request) {
+	workspace, actor, ok := h.topicScope(w, r)
+	if !ok {
+		return
+	}
+	body, ok := readMarketingNodeBody(w, r)
+	if !ok {
+		h.marketingNodeError(w, topicplanning.ErrInvalid)
+		return
+	}
+	req, err := topicplanning.DecodeAdopt(body)
+	if err != nil {
+		h.marketingNodeError(w, err)
+		return
+	}
+	result, err := h.marketingNodeStore().AdoptCandidate(r.Context(), workspace, actor,
+		marketingNodeIDFromURL(r), marketingCandidateIDFromURL(r), req)
+	if err != nil {
+		h.marketingNodeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) ListContentMarketingImpact(w http.ResponseWriter, r *http.Request) {
+	workspace, actor, ok := h.topicScope(w, r)
+	if !ok {
+		return
+	}
+	items, err := h.marketingNodeStore().ListImpact(r.Context(), workspace, actor, marketingNodeIDFromURL(r))
+	if err != nil {
+		h.marketingNodeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"impact": items})
+}
+
+func (h *Handler) DecideContentMarketingImpact(w http.ResponseWriter, r *http.Request) {
+	workspace, actor, ok := h.topicScope(w, r)
+	if !ok {
+		return
+	}
+	body, ok := readMarketingNodeBody(w, r)
+	if !ok {
+		h.marketingNodeError(w, topicplanning.ErrInvalid)
+		return
+	}
+	req, err := topicplanning.DecodeImpactDecision(body)
+	if err != nil {
+		h.marketingNodeError(w, err)
+		return
+	}
+	candidate, err := h.marketingNodeStore().DecideImpact(r.Context(), workspace, actor,
+		marketingNodeIDFromURL(r), marketingCandidateIDFromURL(r), req)
+	if err != nil {
+		h.marketingNodeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, candidate)
 }

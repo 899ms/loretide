@@ -35,12 +35,12 @@
 | `starts_on` / `ends_on` | `date NOT NULL` | 节点时区里的日历日期，含首尾（Q2=A） |
 | `timezone` | `text NOT NULL` | IANA，非空、非 `Local` |
 | `lead_days` | `integer` **可空** | NULL = 未设置；0 = 不需要准备（§3.2） |
-| `accounts` | `jsonb NOT NULL DEFAULT '[]'::jsonb` | `[{ "account_id": "...", "role": "..." }]`，≤ 20 条，按 `account_id` 去重保留首次 |
+| `accounts` | `jsonb NOT NULL DEFAULT '[]'::jsonb` | `[{ "account_id": "...", "role": "..." }]`，≤ 20 条，按 `account_id` 去重保留首次；每条 `role` ≤ 200 字 |
 | `goal` | `text NOT NULL DEFAULT ''` | 运营目标，≤ 2000 字 |
 | `material_source_ids` | `jsonb NOT NULL DEFAULT '[]'::jsonb` | 复用 030 的 `NormalizeSourceIDs`（去空白、去重、≤ 50） |
 | `date_certainty` | `text NOT NULL CHECK (date_certainty IN ('confirmed','tentative'))` | |
 | `date_basis` | `text NOT NULL DEFAULT ''` | 日期依据，≤ 1000 字 |
-| `note` | `text NOT NULL DEFAULT ''` | 这次修改的备注 |
+| `note` | `text NOT NULL DEFAULT ''` | 这次修改的备注，≤ 2000 字（新建、修改、确认、取消同一上限） |
 | `actor` | `text NOT NULL` | |
 | `created_at` | `timestamptz NOT NULL DEFAULT now()` | |
 
@@ -55,11 +55,11 @@
 | `account_id` | `text NOT NULL DEFAULT ''` | `''` = 品牌级候选。**用空串不用 NULL**：唯一索引里 NULL 互不相等，会让品牌级候选可以重复 |
 | `angle` | `text NOT NULL DEFAULT ''` | 人写的切入角度，≤ 2000 字 |
 | `status` | `text NOT NULL DEFAULT 'open' CHECK (status IN ('open','adopted','dismissed'))` | |
-| `dismiss_reason` | `text NOT NULL DEFAULT ''` | |
+| `dismiss_reason` | `text NOT NULL DEFAULT ''` | ≤ 2000 字 |
 | `topic_card_id` | `text NOT NULL DEFAULT ''` | 采用后非空 |
 | `adopted_revision` | `bigint` 可空 | 采用时节点的 `current_revision` |
 | `impact_decision` | `text NOT NULL DEFAULT '' CHECK (impact_decision IN ('','kept','handled'))` | |
-| `impact_decision_note` | `text NOT NULL DEFAULT ''` | |
+| `impact_decision_note` | `text NOT NULL DEFAULT ''` | ≤ 2000 字 |
 | `impact_decision_revision` | `bigint` 可空 | 做决定时节点的版本号 |
 | `impact_decided_by` | `text NOT NULL DEFAULT ''` | |
 | `created_at` / `updated_at` | `timestamptz NOT NULL DEFAULT now()` | |
@@ -174,7 +174,10 @@
 | `base_revision` 不是当前版本 | 409 |
 | 对 `unconfirmed` / `cancelled` 节点整理候选；对 `cancelled` 节点修改 / 确认；对已 `active` 节点确认 | 400，`field` 为 `status` |
 | 挂的卡账号与候选账号不同 | 400，`field` 为 `topic_card_id` |
-| 已采用的候选改为 `dismissed` | 400，`field` 为 `status` |
+| 已采用的候选改 `status`（改为 `dismissed` 或 `open`） | 400，`field` 为 `status` |
+| 采用 `cancelled` 节点的未采用候选 | 400，`field` 为 `status`（已采用的候选再次采用仍返回原卡） |
+| 对未采用的候选记影响决定 | 400，`field` 为 `status` |
+| 采用请求 `mode` 不是 `create` / `link`；`link` 缺 `topic_card_id`；`create` 带 `topic_card_id` | 400，`field` 为 `mode` 或 `topic_card_id` |
 
 ---
 
@@ -211,13 +214,15 @@ func Phase(today, startsOn, endsOn Date, leadDays *int) Phase
 
 事务内逐行：同品牌、`status <> 'cancelled'` 的节点，当前版本 `btrim(name)` 与本行相同且 `starts_on` 相同 → 本行记为 `duplicate`（带已有节点号）。同一批里后出现的相同行也记为 `duplicate`。每行结果：`{"row": 3, "outcome": "created" | "duplicate" | "invalid", "node_id"?: "...", "field"?: "..."}`。
 
+**并发导入同一行**（PR 2 补）：栅栏与审计之后、逐行判重之前，对本批每个合法行的判重键（品牌 + 去首尾空白的名称 + 开始日）取事务级 advisory lock（`pg_advisory_xact_lock(hashtextextended(key, 0))`），按键排序后依次取，避免两批行序相反时死锁。第二个导入在锁上等第一个提交，之后的判重查询是新语句、新快照，能看到已提交的节点，于是报 `duplicate`。不用唯一索引：判重键里的名称在版本表、会随修改变，且只有非 `cancelled` 节点参与，放不进任何一张表的索引。哈希碰撞只会让两个无关导入互相等待，不改变结果。
+
 ---
 
 ## 4. 候选规则
 
 ### 4.1 整理（sync）
 
-事务内：栅栏 → 锁节点行 → 节点必须 `active` → 对当前版本的每个 `account_id`（没有则 `''`）执行
+事务内：栅栏 → 锁节点行（`FOR SHARE`：挡住并发的修改 / 取消，但允许两个整理同时进行，由唯一索引裁决）→ 节点必须 `active` → 对当前版本的每个 `account_id`（没有则 `''`）执行
 
 ```sql
 INSERT INTO content_marketing_node_candidate (candidate_id, workspace_id, node_id, account_id)
@@ -231,15 +236,16 @@ ON CONFLICT (workspace_id, node_id, account_id) DO NOTHING
 
 ### 4.2 改候选（PATCH）
 
-只改 `angle`、`status`（`open` ↔ `dismissed`）、`dismiss_reason`。`status` 为 `adopted` 时拒绝改为 `dismissed`（FR-036）；`angle` 在采用后仍可改（卡已经建好，改角度不影响卡）。
+只改 `angle`、`status`（`open` ↔ `dismissed`）、`dismiss_reason`；请求至少带一个键，`null` 与未知键 400。`status` 为 `adopted` 时拒绝任何 `status` 修改（改为 `dismissed` 或 `open` 都会让候选与已存在的卡不符，FR-036）；改为 `open` 不自动清空 `dismiss_reason`，要清空就显式传 `""`；`angle` 在采用后仍可改（卡已经建好，改角度不影响卡）。
 
 ### 4.3 采用
 
-事务内：栅栏 → `SELECT ... FROM content_marketing_node_candidate ... FOR UPDATE` →
+事务内：栅栏 → 节点行 `FOR SHARE`（与修改 / 取消的 `FOR UPDATE` 互斥，`adopted_revision` 一定是采用者看到的那一版）→ `SELECT ... FROM content_marketing_node_candidate ... FOR UPDATE` →
 
 1. 候选已 `adopted` → 直接返回已有的卡（200，同一响应体），**不再建**（FR-033）。
+1a. 节点已 `cancelled` → 400（`field: "status"`）。取消是终态，不为它建卡。
 2. `mode=create` → 在同一事务里校验候选账号仍属于本品牌（`AccountReader`）、节点引用的素材仍属于本品牌（`SourceReader`）→ 调用从 `Create` 抽出的事务内插入函数建 `draft` 卡 → 更新候选 `status='adopted'`、`topic_card_id`、`adopted_revision = 节点 current_revision` → 审计 `adopt-marketing-candidate` → 提交。
-3. `mode=link` → 读卡（`workspace_id` 过滤，不存在即 404）→ 卡有账号且 ≠ 候选账号（品牌级候选不限）→ 400 → 更新候选 → 审计 → 提交。**卡的行不被写**。
+3. `mode=link` → 读卡（`workspace_id` 过滤，`FOR SHARE`，不存在即 404）→ 卡有账号且 ≠ 候选账号（品牌级候选不限）→ 400 → 更新候选 → 审计 → 提交。**卡的行不被写**。
 
 预填（FR-031）：
 
@@ -259,11 +265,11 @@ ON CONFLICT (workspace_id, node_id, account_id) DO NOTHING
 读取时计算：本节点所有 `status='adopted'` 的候选中，满足
 
 - 版本表里存在 `revision > adopted_revision` 且 `change_kind IN ('reschedule','cancel')` 的版本；并且
-- `impact_decision_revision IS NULL` 或 `impact_decision_revision < current_revision`
+- 这个改期 / 取消版本还晚于最近一次决定：`revision > GREATEST(adopted_revision, COALESCE(impact_decision_revision, 0))`
 
-的那些。每条返回：`candidate_id`、`topic_card_id`、`account_id`、卡的当前 `status`（同模块直接读 `content_topic_card`，卡不存在时写 `missing`）、`adopted_revision`、`current_revision`、`before`（采用时版本的四个日期字段）、`after`（当前版本的四个字段）、`cancelled`（布尔）。
+的那些。两条合成一句：**采用之后、且最近一次决定之后，发生过改期或取消**。这样「决定后只改了运营目标」不会让它重新出现，「决定后又改期」会（FR-039、SC-008）。每条返回：`candidate_id`、`topic_card_id`、`account_id`、卡的当前 `status`（同模块直接读 `content_topic_card`，卡不存在时写 `missing`）、`adopted_revision`、`current_revision`、`before`（采用时版本的四个日期字段）、`after`（当前版本的四个字段）、`cancelled`（布尔）。
 
-影响决定：写 `impact_decision`、`impact_decision_note`、`impact_decision_revision = current_revision`、`impact_decided_by`，审计 `decide-marketing-impact`。**不写卡、不写任何其他表**（FR-040）。
+影响决定：只对 `adopted` 的候选；事务内栅栏 → 节点行 `FOR SHARE` → 候选行 `FOR UPDATE`，写 `impact_decision`、`impact_decision_note`、`impact_decision_revision = current_revision`、`impact_decided_by`，审计 `decide-marketing-impact`。**不写卡、不写任何其他表**（FR-040）。
 
 ---
 
