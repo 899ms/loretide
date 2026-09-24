@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_roi_lead_revision_time_idx;
