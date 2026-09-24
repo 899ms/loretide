@@ -175,6 +175,9 @@ type CostRevision struct {
 	ImportBatchID  string       `json:"import_batch_id"`
 	RecordedBy     string       `json:"recorded_by"`
 	CreatedAt      time.Time    `json:"created_at"`
+	// Allocations are this revision's shares, ordered by target; empty for a
+	// cost that is not shared (specs/034 PR 2).
+	Allocations []CostAllocation `json:"allocations"`
 
 	amountMinor    *int64
 	laborRateMinor *int64
@@ -268,6 +271,8 @@ type AdjustmentRevision struct {
 	Kind              AdjustmentKind `json:"kind"`
 	RevenueDeltaMinor Minor          `json:"revenue_delta_minor"`
 	RevenueDelta      string         `json:"revenue_delta"`
+	// GrossDeltaMinor is SIGNED and added to gross profit (FR-025): a
+	// reduction of 300.00 is -30000, unlike the revenue delta above.
 	// GrossDeltaMinor nil is "the operator did not say" (ruling Q3=A), and
 	// makes the deal's gross profit not computable. It is never read as 0.
 	GrossDeltaMinor *Minor    `json:"gross_delta_minor"`
@@ -298,6 +303,10 @@ type CostInput struct {
 	EvidenceNote   string   `json:"evidence_note"`
 	Note           string   `json:"note"`
 	NotDuplicateOf []string `json:"not_duplicate_of"`
+	// Allocations splits a shared cost (PR 2). Absent or null: a revision
+	// keeps the previous revision's split, recomputed on its amount; [] says
+	// the cost is no longer shared.
+	Allocations *[]AllocationInput `json:"allocations"`
 }
 
 type LeadInput struct {
@@ -503,6 +512,9 @@ func (c *CostRevision) fill() {
 	}
 	if c.NotDuplicateOf == nil {
 		c.NotDuplicateOf = []string{}
+	}
+	if c.Allocations == nil {
+		c.Allocations = []CostAllocation{}
 	}
 }
 

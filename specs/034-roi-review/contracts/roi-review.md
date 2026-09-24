@@ -110,7 +110,7 @@
 | `adjustment_id`, `deal_id` | |
 | `kind` CHECK `refund`/`adjustment` | |
 | `revenue_delta_minor` bigint NOT NULL | 退款为正数，表示减少；调整可正可负 |
-| `gross_delta_minor` bigint NULL | NULL = 未给出（FR-025） |
+| `gross_delta_minor` bigint NULL | 带符号，冲减为负（「毛利冲减 300」存为 `-30000`），计算时加到毛利上（FR-025，主控已裁定 2026-09-25）；NULL = 未给出 |
 | `currency` | 必须与成交相同（Go 校验） |
 | `occurred_at` | |
 
@@ -242,7 +242,7 @@
 
 ## 5. 计算器
 
-纯函数 `roiCalculate(input ReportInput) Result`，文件 `roi_calc.go`，**不读库、不读时钟、不用浮点**。
+纯函数 `CalculateROI(input ReportInput) (Result, error)`，文件 `roi_calc.go`，**不读库、不读时钟、不用浮点**；error 只在参数不可用时返回，并点名字段（主控已裁定 2026-09-25）。
 
 ### 5.1 输入 `params`
 
@@ -320,6 +320,15 @@
 | `split-10001` | 成交 `10001`，两个采信触点，`even_split` | 两份 `5001`、`5000` |
 | `alloc-10000` | 成本 `10000`，三个作品权重 1:1:1 | `3334`、`3333`、`3333`（目标键字典序最小的拿余数） |
 | `one-booking-two-works` | 一条线索阶段「预约」、两个作品触点、一笔成交 | `bookings = 1`、`deals = 1` |
+
+### 5.5 主控已裁定 2026-09-25（PR #263）
+
+1. **毛利变动带符号**：`gross_delta` 带符号，冲减为负；`stated_gross_profit` 或「确认金额 − 销售成本」再**加上**各有效调整的 `gross_delta`（FR-025 字面）。`revenue_delta` 仍是「正数表示减少」，两者约定不同。页面以后可以让用户输入「冲减 300」再换算成 `-300`，不在 PR 2。
+2. **签名**：`CalculateROI(input) (Result, error)`，见 §5 开头。
+3. **范围过滤**：`scope` 只作用于投入（有分摊时取落在范围内的份额，无分摊时看成本自身的账号/作品/活动标签）与归因到作品、账号的份额；线索、预约、成交数与成交净额、覆盖率是品牌层面的数。这条作为固定文字进 `result.rules`。
+4. **期间份额的窗口**：分摊到 `period`（`YYYY-MM`）的份额按该月第一天（报告时区）是否在窗口内决定是否计入；其余份额按成本的 `incurred_at`。相邻两个窗口不会重复计同一期间。
+5. **两种缺参**：`booking_stage` 为空时 `bookings` 为 `not_computable`，原因 `no_data`；`conversion.from_stage` 或 `to_stage` 为空时 `conversion_rate` 为 `not_computable`，原因 `missing_denominator`。
+6. **受控集登记**：PR 2 的六个受控集（`AllocationTargets`、`AllocationMethods`、`Judgements`、`AttributionMethods`、`ReasonCodes`、`MetricIDs`，均出自 §3）登记进 027 的 `guards_test.go`「没有第六个受控集」守卫。
 
 ---
 

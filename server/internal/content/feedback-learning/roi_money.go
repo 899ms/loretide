@@ -178,3 +178,82 @@ func divRoundHalfAwayFromZero(numerator, denominator *big.Int) *big.Int {
 	}
 	return quotient
 }
+
+// UnmarshalJSON reads the decimal integer string MarshalJSON writes, so a
+// stored snapshot of a revision reads back as the same revision. A JSON
+// number is refused: it may already have been through a float.
+func (m *Minor) UnmarshalJSON(data []byte) error {
+	text, err := strconv.Unquote(string(data))
+	if err != nil || text == "" || (text[0] == '-' && len(text) == 1) {
+		return ErrInvalid
+	}
+	value, parseErr := strconv.ParseInt(text, 10, 64)
+	if parseErr != nil {
+		return ErrInvalid
+	}
+	*m = Minor(value)
+	return nil
+}
+
+// MaxRatePlaces is FR-006: a rate is a decimal string of at most twelve
+// places.
+const MaxRatePlaces = 12
+
+// ParseRate reads a user-entered exchange rate: units of the target currency
+// per one unit of the source, a positive decimal string with at most twelve
+// places. The same spelling rules as an amount: no sign, no spaces, no
+// separators, no exponent.
+func ParseRate(field, text string) (*big.Rat, error) {
+	refused := FieldError{Field: field, Reason: "not a positive decimal rate"}
+	whole, fraction, hasPoint := strings.Cut(text, ".")
+	if whole == "" || !allDigits(whole) || (hasPoint && (fraction == "" || !allDigits(fraction))) {
+		return nil, refused
+	}
+	if len(fraction) > MaxRatePlaces || len(whole) > 15 {
+		return nil, refused
+	}
+	rate, ok := new(big.Rat).SetString(text)
+	if !ok || rate.Sign() <= 0 {
+		return nil, refused
+	}
+	return rate, nil
+}
+
+// ConvertMinor converts an amount in minor units of one currency into minor
+// units of another at rate (target units per source unit), rounded half away
+// from zero (FR-005). Exact until that one rounding.
+func ConvertMinor(minor *big.Int, fromDigits, toDigits int, rate *big.Rat) *big.Int {
+	numerator := new(big.Int).Mul(minor, rate.Num())
+	numerator.Mul(numerator, pow10(toDigits))
+	denominator := new(big.Int).Mul(rate.Denom(), pow10(fromDigits))
+	return divRoundHalfAwayFromZero(numerator, denominator)
+}
+
+func pow10(places int) *big.Int {
+	return new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(places)), nil)
+}
+
+// displayMinus is the minus sign a report shows (contract §5.2): U+2212, not
+// the ASCII hyphen the stored spelling uses.
+const displayMinus = "−"
+
+// FormatRat writes a rational number with exactly places decimals, rounded
+// half away from zero, with U+2212 for a negative result. A value that
+// rounds to zero is written without a sign.
+func FormatRat(value *big.Rat, places int) string {
+	scaled := new(big.Int).Mul(value.Num(), pow10(places))
+	rounded := divRoundHalfAwayFromZero(scaled, value.Denom())
+	sign := ""
+	if rounded.Sign() < 0 {
+		sign = displayMinus
+		rounded.Neg(rounded)
+	}
+	text := rounded.String()
+	if places == 0 {
+		return sign + text
+	}
+	if len(text) <= places {
+		text = strings.Repeat("0", places-len(text)+1) + text
+	}
+	return sign + text[:len(text)-places] + "." + text[len(text)-places:]
+}

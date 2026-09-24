@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -112,14 +111,12 @@ func (f roiRevisionFields) revision() feedbacklearning.Revision {
 	return feedbacklearning.Revision{BaseRevision: f.BaseRevision, Voided: f.Voided}
 }
 
+// roiCostBody carries the split in CostInput.Allocations (specs/034 PR 2):
+// absent or null keeps the previous revision's split, [] ends it.
 type roiCostBody struct {
 	feedbacklearning.CostInput
 	roiRevisionFields
 	roiServerWritten
-	// Allocations arrive with PR 2. Until then a non-empty one is refused by
-	// name rather than silently dropped: dropping it would store a shared
-	// cost as if it were not shared.
-	Allocations json.RawMessage `json:"allocations"`
 }
 
 type roiLeadBody struct {
@@ -147,6 +144,14 @@ type roiDealBody struct {
 
 type roiAdjustmentBody struct {
 	feedbacklearning.AdjustmentInput
+	roiRevisionFields
+	roiServerWritten
+}
+
+// roiAttributionBody is a judgement revision. base_revision is 0 for the
+// first judgement on a deal.
+type roiAttributionBody struct {
+	feedbacklearning.AttributionInput
 	roiRevisionFields
 	roiServerWritten
 }
@@ -184,11 +189,6 @@ func jsonFieldPath(field string) string {
 		kept = append(kept, segment)
 	}
 	return strings.Join(kept, ".")
-}
-
-func hasAllocations(raw json.RawMessage) bool {
-	trimmed := bytes.TrimSpace(raw)
-	return len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null")) && !bytes.Equal(trimmed, []byte("[]"))
 }
 
 // roiError maps the module's errors. A refusal and a missing row answer
@@ -266,10 +266,6 @@ func (h *Handler) CreateContentROICost(w http.ResponseWriter, r *http.Request) {
 		h.roiError(w, err)
 		return
 	}
-	if hasAllocations(body.Allocations) {
-		h.roiError(w, feedbacklearning.FieldError{Field: "allocations", Reason: "not supported yet"})
-		return
-	}
 	cost, err := h.roiStore().CreateCost(r.Context(), workspace, actor, body.CostInput, feedbacklearning.RecordManual)
 	if err != nil {
 		h.roiError(w, err)
@@ -300,10 +296,6 @@ func (h *Handler) ReviseContentROICost(w http.ResponseWriter, r *http.Request) {
 	var body roiCostBody
 	if err := decodeROIBody(w, r, &body); err != nil {
 		h.roiError(w, err)
-		return
-	}
-	if hasAllocations(body.Allocations) {
-		h.roiError(w, feedbacklearning.FieldError{Field: "allocations", Reason: "not supported yet"})
 		return
 	}
 	cost, err := h.roiStore().ReviseCost(r.Context(), workspace, actor, chi.URLParam(r, "costId"),
@@ -550,4 +542,26 @@ func (h *Handler) ReviseContentROIAdjustment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusCreated, adjustment)
+}
+
+// RecordContentROIAttribution writes the next revision of the operator's
+// judgement on the deal in the path (specs/034 PR 2, FR-020). It writes that
+// one row and nothing else; the touches it names are read, not revised.
+func (h *Handler) RecordContentROIAttribution(w http.ResponseWriter, r *http.Request) {
+	workspace, actor, ok := h.feedbackScope(w, r)
+	if !ok {
+		return
+	}
+	var body roiAttributionBody
+	if err := decodeROIBody(w, r, &body); err != nil {
+		h.roiError(w, err)
+		return
+	}
+	attribution, err := h.roiStore().RecordAttribution(r.Context(), workspace, actor, chi.URLParam(r, "dealId"),
+		body.AttributionInput, body.revision())
+	if err != nil {
+		h.roiError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, attribution)
 }

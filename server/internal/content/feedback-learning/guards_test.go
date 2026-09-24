@@ -299,6 +299,18 @@ func TestThereIsNoSixthControlledSet(t *testing.T) {
 		}
 		delete(found, name)
 	}
+	// specs/034 PR 2's sets, also contract §3: allocation target and method
+	// (FR-031), judgement (FR-020), attribution method (FR-034), the ordered
+	// not-computable reasons (FR-042) and the metric ids (FR-043 to FR-049).
+	for _, name := range []string{
+		"AllocationTargets", "AllocationMethods", "Judgements", "AttributionMethods",
+		"ReasonCodes", "MetricIDs",
+	} {
+		if !found[name] {
+			t.Errorf("034 PR 2 controlled set %s is gone", name)
+		}
+		delete(found, name)
+	}
 	for extra := range found {
 		t.Errorf("a controlled set %q was added; SOP 10.1 names those fields but gives no values, and inventing some puts words in the SOP's mouth that every stored row then has to be valid against", extra)
 	}
