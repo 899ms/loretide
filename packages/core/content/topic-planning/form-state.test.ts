@@ -2,6 +2,10 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_BRIEF_REVISION, EMPTY_TOPIC_CARD, type BriefRevision } from "./contract";
 import {
+  TOPIC_BODY_KEYS,
+  editTopicBodyDraft,
+  topicBodyDraftChanged,
+  topicBodyFieldValue,
   actionKeepsReason,
   briefDraftDiffers,
   briefDraftFromRevision,
@@ -247,5 +251,81 @@ describe("topic source references", () => {
   it("does not create a write when a draft returns to the stored value", () => {
     const draft = addTopicSource({}, "fitSourceIds", "fit-1", []);
     expect(topicSourceDraftDiffers(draft, card)).toBe(false);
+  });
+});
+
+// The body draft (#244). Canonical layer for the page's edit rules; the
+// component only wires these to textareas and a button.
+describe("topic body draft", () => {
+  const card = {
+    ...EMPTY_TOPIC_CARD,
+    audienceProblemJudgment: "读者分不清",
+    ipFit: "贴合",
+    timing: "本周",
+    existingContentRelation: "没有",
+    evidenceGapsAndInvestment: "缺一个数据",
+  };
+
+  it("lists exactly the five editable answers", () => {
+    expect([...TOPIC_BODY_KEYS]).toEqual([
+      "audienceProblemJudgment",
+      "ipFit",
+      "timing",
+      "existingContentRelation",
+      "evidenceGapsAndInvestment",
+    ]);
+  });
+
+  it("records only the field that was edited", () => {
+    const draft = editTopicBodyDraft({}, card, "timing", "下周");
+    expect(draft).toEqual({ timing: "下周" });
+    expect(topicBodyDraftChanged(draft)).toBe(true);
+  });
+
+  it("drops a field typed back to the stored answer", () => {
+    const edited = editTopicBodyDraft({}, card, "timing", "下周");
+    const reverted = editTopicBodyDraft(edited, card, "timing", "本周");
+    expect(reverted).toEqual({});
+    expect(topicBodyDraftChanged(reverted)).toBe(false);
+  });
+
+  it("keeps an empty string as a pending clear", () => {
+    const draft = editTopicBodyDraft({}, card, "ipFit", "");
+    expect(draft).toEqual({ ipFit: "" });
+    expect(topicBodyDraftChanged(draft)).toBe(true);
+    // The field shows the pending clear, not the stored answer behind it.
+    expect(topicBodyFieldValue(draft, card, "ipFit")).toBe("");
+  });
+
+  it("does not treat an empty stored answer as a change when left empty", () => {
+    const blank = { ...card, timing: "" };
+    expect(editTopicBodyDraft({}, blank, "timing", "")).toEqual({});
+  });
+
+  it("leaves the other keys alone when one changes", () => {
+    const one = editTopicBodyDraft({}, card, "ipFit", "不太贴合");
+    const two = editTopicBodyDraft(one, card, "timing", "下月");
+    expect(two).toEqual({ ipFit: "不太贴合", timing: "下月" });
+  });
+
+  it("returns the same object when nothing changed", () => {
+    const draft = { timing: "下周" };
+    expect(editTopicBodyDraft(draft, card, "timing", "下周")).toBe(draft);
+    const empty = {};
+    expect(editTopicBodyDraft(empty, card, "timing", "本周")).toBe(empty);
+  });
+
+  it("shows the stored answer for a field with no pending edit", () => {
+    expect(topicBodyFieldValue({}, card, "evidenceGapsAndInvestment")).toBe("缺一个数据");
+  });
+
+  // Another session changed a field this operator never touched. The draft
+  // still holds only what this operator edited, so saving it cannot write the
+  // stale value back over the newer one.
+  it("never carries an untouched field, whatever the card now says", () => {
+    const draft = editTopicBodyDraft({}, card, "timing", "下周");
+    const refreshed = { ...card, ipFit: "别人刚改过" };
+    expect(topicBodyFieldValue(draft, refreshed, "ipFit")).toBe("别人刚改过");
+    expect(Object.keys(draft)).toEqual(["timing"]);
   });
 });

@@ -6,6 +6,7 @@ import {
   parseBriefRevision,
   parseTopicCard,
   setContentTopicSourcesInputToWire,
+  topicBodyPatchInputToWire,
   topicStatusLabel,
 } from "./contract";
 
@@ -125,5 +126,54 @@ describe("topic planning response parsing", () => {
       fit_source_ids: [],
       evidence_source_ids: ["s-2"],
     });
+  });
+});
+
+// PATCH /api/content-topics/{id}/body (#240): omitted keys keep the stored
+// answer, "" clears it. The wire body carries exactly the keys the operator
+// changed, and never anything outside the five.
+describe("topicBodyPatchInputToWire", () => {
+  it("sends only the keys that are present", () => {
+    expect(topicBodyPatchInputToWire({ timing: "本周写" })).toEqual({ timing: "本周写" });
+  });
+
+  it("keeps an empty string as a deliberate clear", () => {
+    const wire = topicBodyPatchInputToWire({ ipFit: "" });
+    expect(wire).toEqual({ ip_fit: "" });
+    expect("ip_fit" in wire).toBe(true);
+  });
+
+  it("maps all five keys to the server's snake_case names", () => {
+    expect(
+      topicBodyPatchInputToWire({
+        audienceProblemJudgment: "a",
+        ipFit: "b",
+        timing: "c",
+        existingContentRelation: "d",
+        evidenceGapsAndInvestment: "e",
+      }),
+    ).toEqual({
+      audience_problem_judgment: "a",
+      ip_fit: "b",
+      timing: "c",
+      existing_content_relation: "d",
+      evidence_gaps_and_investment: "e",
+    });
+  });
+
+  it("drops anything outside the five, even if a caller smuggles it in", () => {
+    // The server answers an unknown key with 400; the transport should never
+    // be the thing that sends one.
+    const smuggled = {
+      timing: "x",
+      channels: ["zhihu"],
+      status: "started",
+      account_id: "acct",
+    } as unknown as Parameters<typeof topicBodyPatchInputToWire>[0];
+    expect(topicBodyPatchInputToWire(smuggled)).toEqual({ timing: "x" });
+  });
+
+  it("produces an empty object for an empty input, which callers must not send", () => {
+    expect(topicBodyPatchInputToWire({})).toEqual({});
   });
 });

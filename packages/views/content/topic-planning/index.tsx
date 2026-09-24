@@ -40,12 +40,16 @@ import {
   useContentTopic,
   useContentTopics,
   useCreateContentTopic,
+  editTopicBodyDraft,
+  topicBodyDraftChanged,
+  topicBodyFieldValue,
   usePatchContentTopicBody,
   useSetContentTopicAccount,
   useSetContentTopicSources,
   type BriefDraft,
   type BriefRevision,
   type TopicAction,
+  type TopicBodyKey,
   type TopicBodyPatchInput,
   type TopicCard,
   type TopicCardDraft,
@@ -787,7 +791,7 @@ function TopicCardDetail({
 }
 
 const TOPIC_BODY_FIELDS: {
-  key: keyof TopicBodyPatchInput;
+  key: TopicBodyKey;
   label: (t: Translate) => string;
   placeholder: (t: Translate) => string;
 }[] = [
@@ -818,6 +822,12 @@ const TOPIC_BODY_FIELDS: {
   },
 ];
 
+// The five body answers, editable in place (#244).
+//
+// Mounted with key={topicCardId}, so each card gets its own draft and its own
+// mutation: switching cards starts from an empty draft rather than carrying
+// one card's unsaved text onto another. The draft/diff rules themselves live
+// in core (editTopicBodyDraft and friends, form-state.test.ts).
 function TopicBodyEditSection({
   wsId,
   card,
@@ -829,19 +839,16 @@ function TopicBodyEditSection({
   const patchBody = usePatchContentTopicBody(wsId);
   const [draft, setDraft] = useState<TopicBodyPatchInput>({});
   const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
-  const changed = Object.keys(draft).length > 0;
+  const changed = topicBodyDraftChanged(draft);
 
-  const edit = (key: keyof TopicBodyPatchInput, value: string) => {
-    setDraft((current) => {
-      if (value === card[key]) {
-        const { [key]: _unchanged, ...rest } = current;
-        return rest;
-      }
-      return { ...current, [key]: value };
-    });
+  const edit = (key: TopicBodyKey, value: string) => {
+    setDraft((current) => editTopicBodyDraft(current, card, key, value));
   };
 
   const save = () => {
+    // The server answers an empty body with 400; the button is disabled in
+    // that state, and this keeps a stray call from reaching it anyway.
+    if (!changed || patchBody.isPending) return;
     setOutcome(null);
     patchBody.mutate(
       { topicCardId: card.topicCardId, body: draft },
@@ -869,7 +876,7 @@ function TopicBodyEditSection({
             align="start"
           >
             <Textarea
-              value={draft[field.key] ?? card[field.key]}
+              value={topicBodyFieldValue(draft, card, field.key)}
               onChange={(event) => edit(field.key, event.target.value)}
               placeholder={field.placeholder(t)}
               rows={2}
