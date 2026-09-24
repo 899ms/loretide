@@ -455,6 +455,87 @@ func TestCreateRejectsAnAccountFromAnotherWorkspace(t *testing.T) {
 	}
 }
 
+// fenceRecordingGuard records whether the workspace delete fence has been
+// taken, and can refuse it the way workspace-core does once the workspace's
+// deletion has committed.
+type fenceRecordingGuard struct {
+	held   bool
+	denied bool
+}
+
+func (g *fenceRecordingGuard) LockForContentDiagnosticWrite(context.Context, pgx.Tx, string) error {
+	if g.denied {
+		return diagnostics.ErrDenied
+	}
+	g.held = true
+	return nil
+}
+
+// fenceCheckingAccounts records, for every account read, whether the fence was
+// already held when the read ran.
+type fenceCheckingAccounts struct {
+	testAccountReader
+	guard    *fenceRecordingGuard
+	reads    int
+	unfenced int
+}
+
+func (a *fenceCheckingAccounts) Get(ctx context.Context, workspaceID, accountID string) (ipprofile.Account, error) {
+	a.reads++
+	if !a.guard.held {
+		a.unfenced++
+	}
+	return a.testAccountReader.Get(ctx, workspaceID, accountID)
+}
+
+// Create checks the card's account inside the workspace delete fence, as
+// SetAccount and marketing node adoption do: the account is read only after
+// the fence is held, and not at all when the fence refuses because the
+// workspace is gone. A check taken before the fence could be answered before a
+// workspace deletion (or an account removal) commits and the insert applied
+// after it.
+func TestCreateChecksTheAccountInsideTheWorkspaceFence(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, account = "workspace-create-fence", "account-create-fence"
+	fx.db.InsertNoID(t, "content_account", testutil.Cols{
+		"account_id": account, "workspace_id": workspace, "platform": "zhihu", "display_name": "Fenced",
+		"settings": testutil.Raw(`'{}'::jsonb`),
+	}, "account_id=$1", account)
+	guard := &fenceRecordingGuard{}
+	accounts := &fenceCheckingAccounts{testAccountReader: fx.store.Accounts.(testAccountReader), guard: guard}
+	fx.store.Guard = guard
+	fx.store.Accounts = accounts
+
+	card := completeCard(workspace)
+	card.AccountID = new(account)
+	created, err := fx.store.Create(ctx, "actor-a", card)
+	if err != nil {
+		t.Fatalf("create with this brand's account: %v", err)
+	}
+	if created.AccountID == nil || *created.AccountID != account {
+		t.Fatalf("created account = %v, want %s", created.AccountID, account)
+	}
+	if accounts.reads != 1 || accounts.unfenced != 0 {
+		t.Fatalf("account reads = %d, %d of them before the fence; want 1 and 0", accounts.reads, accounts.unfenced)
+	}
+
+	// The workspace's deletion has committed: the fence refuses, and the
+	// account must not have been consulted at all.
+	*guard = fenceRecordingGuard{denied: true}
+	accounts.reads, accounts.unfenced = 0, 0
+	if _, err = fx.store.Create(ctx, "actor-a", card); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("create after the workspace deletion = %v, want ErrNotFound", err)
+	}
+	if accounts.reads != 0 {
+		t.Fatalf("account read %d times although the fence refused, want 0", accounts.reads)
+	}
+	count := fx.db.Count(t, `SELECT count(*) FROM content_topic_card WHERE workspace_id=$1`, workspace)
+	if count != 1 {
+		t.Fatalf("content_topic_card = %d, want only the card created before the deletion", count)
+	}
+}
+
 func TestAuditFailureRollsBackTheTopicWrite(t *testing.T) {
 	fx := newTopicFixture(t)
 	ctx := t.Context()

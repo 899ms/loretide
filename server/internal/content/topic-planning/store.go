@@ -162,6 +162,12 @@ func (s *Store) reportFailure(ctx context.Context, workspaceID, actor, objectID,
 	s.Diagnostics.Technical(child, event)
 }
 
+// Create writes a new draft card.
+//
+// The whole thing runs inside the workspace delete fence, the account check
+// included, in the order marketing node adoption uses: fence, account, card
+// shape, insert. A check taken before the fence could be answered before the
+// workspace is deleted and the insert applied after.
 func (s *Store) Create(ctx context.Context, actor string, card TopicCard) (TopicCard, error) {
 	if s == nil {
 		return TopicCard{}, ErrStorage
@@ -170,16 +176,7 @@ func (s *Store) Create(ctx context.Context, actor string, card TopicCard) (Topic
 		s.reportFailure(ctx, card.WorkspaceID, actor, "", "create", ErrInvalid)
 		return TopicCard{}, ErrInvalid
 	}
-	if err := s.checkAccount(ctx, card.WorkspaceID, card.AccountID); err != nil {
-		s.reportFailure(ctx, card.WorkspaceID, actor, "", "create", err)
-		return TopicCard{}, err
-	}
 	card.TopicCardID = s.newID()
-	card, err := prepareNewCard(card)
-	if err != nil {
-		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
-		return TopicCard{}, err
-	}
 
 	tx, err := s.begin(ctx, card.WorkspaceID)
 	if err != nil {
@@ -188,6 +185,17 @@ func (s *Store) Create(ctx context.Context, actor string, card TopicCard) (Topic
 	}
 	defer tx.Rollback(ctx)
 	ctx, err = s.audit(ctx, tx, card.WorkspaceID, actor, card.TopicCardID, "create")
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
+		return TopicCard{}, err
+	}
+	if err = s.checkAccount(ctx, card.WorkspaceID, card.AccountID); err != nil {
+		_ = tx.Rollback(ctx)
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
+		return TopicCard{}, err
+	}
+	card, err = prepareNewCard(card)
 	if err != nil {
 		_ = tx.Rollback(ctx)
 		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
@@ -208,9 +216,9 @@ func (s *Store) Create(ctx context.Context, actor string, card TopicCard) (Topic
 
 // prepareNewCard puts a card into the shape every new card is stored in: a
 // draft with no decision and no brief, channels never null, source references
-// cleaned. It is pure and runs before the transaction, as it always has in
-// Create. The id is the caller's: Create and marketing node adoption each
-// report failures under it.
+// cleaned. It is pure; Create and marketing node adoption both call it inside
+// their fenced transaction, after the account check. The id is the caller's:
+// Create and marketing node adoption each report failures under it.
 func prepareNewCard(card TopicCard) (TopicCard, error) {
 	card.Status = StatusDraft
 	card.Channels = normalizeStrings(card.Channels)
@@ -237,8 +245,8 @@ func prepareNewCard(card TopicCard) (TopicCard, error) {
 // candidate adopted, so neither can happen without the other (specs/033
 // FR-032). The card must have been through prepareNewCard.
 //
-// The account is not checked here. Create checks it before its transaction
-// (a known gap, specs/033 Out of Scope 10); adoption checks it inside.
+// The account is not checked here. Create and adoption each check it inside
+// the same fenced transaction, before calling this.
 func (s *Store) insertCardTx(ctx context.Context, tx pgx.Tx, card TopicCard) (TopicCard, error) {
 	channels, err := encodeStrings(card.Channels)
 	if err != nil {
