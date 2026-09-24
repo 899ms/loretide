@@ -406,12 +406,15 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	// Initialize storage with S3 as primary, fallback to local
 	var store storage.Storage
 	s3 := storage.NewS3StorageFromEnv()
+	storageKind := ""
 	if s3 != nil {
 		store = s3
+		storageKind = "s3"
 	} else {
 		local := storage.NewLocalStorageFromEnv()
 		if local != nil {
 			store = local
+			storageKind = "local"
 		}
 	}
 
@@ -441,6 +444,9 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	}
 	h := handler.New(queries, pool, hub, bus, emailSvc, store, cfSigner, analyticsClient, signupConfig, daemonHub)
 	h.ContentDiagnostics = diagnostics.NewService(h.NewContentDiagnosticsStore(pool), os.Getenv("LORETIDE_BUILD"), os.Getenv("APP_ENV") == "development" && os.Getenv("LORETIDE_DIAGNOSTICS_TEST") == "1")
+	if err := h.ContentDiagnostics.RegisterStorageFacts(time.Now().UTC(), storageKind, storageKind != ""); err != nil {
+		panic(err)
+	}
 	if err := h.ContentDiagnostics.Store.ConfigureLimits(os.Getenv("LORETIDE_DIAG_MAX_LOGS"), os.Getenv("LORETIDE_DIAG_RETENTION_DAYS")); err != nil {
 		panic(err)
 	}

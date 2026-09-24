@@ -95,7 +95,7 @@ search 或 executor configuration 发明来源。
 |---|---|---|
 | 修改 | `server/internal/content/diagnostics/service.go` | `NewService` 持有 A1 registry；`Overview` 从纯 reducer 取得组件行。数据库现有 `Store.Check` 仍只提供活性，不得读取或回显 DSN。 |
 | 修改 | `server/cmd/server/router.go` | `NewRouterWithOptions` 在 `storage.NewS3StorageFromEnv` / `storage.NewLocalStorageFromEnv` 的既有选择结果处注册 `router_storage` 的 files 事实（仅 configured/unconfigured 与允许的类别）。 |
-| 修改 | `server/cmd/server/main.go` | `main` 已在 `pool.Ping` 后调用 `NewRouterWithOptions` 并取得 `h`；通过 `h.ContentDiagnostics` 注入 `server_boot` 和当前 `executionpolicy.Check` 的只读 disabled 事实。api 的事实不得伪装为监听成功：在没有显式 listener-ready 生命周期改造前只能是配置已知、活性 unknown。 |
+| 修改 | `server/cmd/server/main.go` | `main` 已在 `pool.Ping` 后调用 `NewRouterWithOptions` 并取得 `h`；通过 `h.ContentDiagnostics` 注入 `server_boot` 和当前 `executionpolicy.Check` 的只读 disabled 事实。api 的事实不得伪装为监听成功：在没有显式 listener-ready 生命周期改造前只能是配置已知、活性 unverified（以 spec §3 为准）。 |
 | 可选、后置 | `packages/core/content/diagnostics/contract.ts` | 仅以 `.default("unknown")` 等方式解析新增可选 `config_state`、`health_state`、`execution_state`、安全原因/时间字段；不改变旧字段或触碰视图。 |
 | 可选、后置 | `packages/core/content/diagnostics/contract.test.ts` | 旧 wire payload 缺失新增字段时安全回落；只测 parser，不是 UI 测试。 |
 
@@ -104,7 +104,7 @@ search 或 executor configuration 发明来源。
 | 案例 | 断言 |
 |---|---|
 | 宿主来源 | pool 成功建立后的 boot 事实不含连接值；S3/local 成功或两者都无的装配结果分别生成 files 的 configured/unconfigured；现有 policy 只产生 disabled。 |
-| 不作伪 | listener 尚未有 ready 回调时 api health 仍为 unknown；`Store.Check` 成功/失败仅改变 database health，不改变 database config。 |
+| 不作伪 | listener 尚未有 ready 回调时 api 已配置但无活性证据，health 为 unverified（以 spec §3 为准）；`Store.Check` 成功/失败仅改变 database health，不改变 database config。 |
 | 无来源组件 | web/daemon/search 和 executor configuration 在本卡仍为 unknown；现有 browser/daemon heartbeat 不能改变其配置。 |
 | 响应兼容 | 若可选 wire 字段落地，旧客户端忽略字段；新 parser 面对旧后端缺字段回落 unknown/not_applicable，既有 `status`/metrics/scenarios 完整。 |
 | 回归边界 | `ContentDiagnosticClient → Heartbeat("web", ...)` 未变为 registrar；`executionpolicy.Check` 没有 enable 分支；simulation 不写事实。 |

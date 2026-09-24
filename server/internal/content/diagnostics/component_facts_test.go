@@ -187,16 +187,16 @@ func TestReduceComponentStatus(t *testing.T) {
 		health    healthState
 		reason    string
 	}{
-		{"missing fact", componentFiles, nil, nil, nil, "unknown", healthUnverified, ""},
-		{"configured unverified", componentFiles, &configured, nil, nil, "unverified", healthUnverified, ""},
+		{"missing fact", componentFiles, nil, nil, nil, "unknown", healthUnknown, "config_unknown"},
+		{"configured unverified", componentFiles, &configured, nil, nil, "unverified", healthUnverified, "liveness_unverified"},
 		{"configured fresh", componentFiles, &configured, &livenessFact{LastSeen: now.Add(-componentHeartbeatTTL), Version: "browser"}, nil, "healthy", healthHealthy, ""},
 		{"configured expired", componentFiles, &configured, &livenessFact{LastSeen: now.Add(-componentHeartbeatTTL - time.Nanosecond)}, nil, "unavailable", healthUnavailable, "heartbeat_expired"},
 		{"unconfigured heartbeat conflict", componentFiles, &unconfigured, &livenessFact{LastSeen: now}, nil, "unconfigured", healthHealthy, "heartbeat_without_configuration"},
-		{"unknown config keeps evidence", componentFiles, &componentConfigFact{Component: componentFiles, State: configUnknown, ObservedAt: now}, &livenessFact{LastSeen: now}, nil, "unknown", healthHealthy, ""},
+		{"unknown config keeps evidence", componentFiles, &componentConfigFact{Component: componentFiles, State: configUnknown, ObservedAt: now}, &livenessFact{LastSeen: now}, nil, "unknown", healthHealthy, "config_unknown"},
 		{"clock skew", componentFiles, &configured, &livenessFact{LastSeen: now.Add(maximumClockSkew + time.Nanosecond)}, nil, "unknown", healthUnknown, "clock_skew"},
 		{"policy disabled", componentExecutor, nil, &livenessFact{LastSeen: now}, &executionFact{Component: componentExecutor, State: executionDisabled, ObservedAt: now}, "disabled", healthHealthy, "execution_disabled"},
 		{"executor policy cannot disable files", componentFiles, &configured, &livenessFact{LastSeen: now}, &executionFact{Component: componentExecutor, State: executionDisabled, ObservedAt: now}, "healthy", healthHealthy, ""},
-		{"mismatched config cannot promote", componentFiles, &componentConfigFact{Component: componentAPI, State: configConfigured, ObservedAt: now}, &livenessFact{LastSeen: now}, nil, "unknown", healthHealthy, ""},
+		{"mismatched config cannot promote", componentFiles, &componentConfigFact{Component: componentAPI, State: configConfigured, ObservedAt: now}, &livenessFact{LastSeen: now}, nil, "unknown", healthHealthy, "config_unknown"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -205,6 +205,127 @@ func TestReduceComponentStatus(t *testing.T) {
 				t.Fatalf("assessment = %#v, want status=%q health=%q reason=%q", got, tt.status, tt.health, tt.reason)
 			}
 		})
+	}
+}
+
+// Without a configuration fact and without liveness evidence nothing has been
+// asserted, so health is unknown; a configured component with no evidence is
+// "configured, not yet verified" (spec §3).
+func TestReduceHealthWithoutEvidenceDependsOnConfig(t *testing.T) {
+	now := time.Date(2026, 9, 22, 0, 0, 40, 0, time.UTC)
+	if got := reduceComponentStatus(componentWeb, nil, nil, nil, now); got.Health != healthUnknown {
+		t.Fatalf("missing config fact without evidence: health = %q, want unknown", got.Health)
+	}
+	unknown := factAt(componentWeb, configUnknown, now)
+	if got := reduceComponentStatus(componentWeb, &unknown, nil, nil, now); got.Health != healthUnknown {
+		t.Fatalf("unknown config fact without evidence: health = %q, want unknown", got.Health)
+	}
+	configured := factAt(componentWeb, configConfigured, now)
+	if got := reduceComponentStatus(componentWeb, &configured, nil, nil, now); got.Health != healthUnverified || got.Status != "unverified" {
+		t.Fatalf("configured without evidence = %#v, want unverified", got)
+	}
+	disabled := &executionFact{Component: componentExecutor, State: executionDisabled, ObservedAt: now}
+	if got := reduceComponentStatus(componentExecutor, nil, nil, disabled, now); got.Status != "disabled" || got.Reason != "execution_disabled" {
+		t.Fatalf("disabled executor without evidence = %#v", got)
+	}
+}
+
+// A row whose reducer found no evidence reason still carries a fixed code.
+func TestEmptyReasonUnknownStatusUsesConfigUnknown(t *testing.T) {
+	now := time.Date(2026, 9, 22, 0, 0, 40, 0, time.UTC)
+	got := reduceComponentStatus(componentSearch, nil, &livenessFact{LastSeen: now}, nil, now)
+	if got.Status != "unknown" || got.Reason != "config_unknown" {
+		t.Fatalf("assessment = %#v, want unknown/config_unknown", got)
+	}
+}
+
+func TestEmptyReasonUnverifiedStatusUsesLivenessUnverified(t *testing.T) {
+	now := time.Date(2026, 9, 22, 0, 0, 40, 0, time.UTC)
+	configured := factAt(componentAPI, configConfigured, now)
+	got := reduceComponentStatus(componentAPI, &configured, nil, nil, now)
+	if got.Status != "unverified" || got.Reason != "liveness_unverified" {
+		t.Fatalf("assessment = %#v, want unverified/liveness_unverified", got)
+	}
+}
+
+func TestEmptyReasonUnconfiguredStatusPrefersConfigReason(t *testing.T) {
+	now := time.Date(2026, 9, 22, 0, 0, 40, 0, time.UTC)
+	fact := factAt(componentFiles, configUnconfigured, now)
+	fact.Reason = "storage_not_configured"
+	if got := reduceComponentStatus(componentFiles, &fact, nil, nil, now); got.Status != "unconfigured" || got.Reason != "storage_not_configured" {
+		t.Fatalf("assessment = %#v, want unconfigured/storage_not_configured", got)
+	}
+	fact.Reason = ""
+	if got := reduceComponentStatus(componentFiles, &fact, nil, nil, now); got.Status != "unconfigured" || got.Reason != "config_unconfigured" {
+		t.Fatalf("assessment = %#v, want unconfigured/config_unconfigured", got)
+	}
+}
+
+func TestUnconfiguredHeartbeatKeepsConflictReason(t *testing.T) {
+	now := time.Date(2026, 9, 22, 0, 0, 40, 0, time.UTC)
+	fact := factAt(componentFiles, configUnconfigured, now)
+	fact.Reason = "storage_not_configured"
+	got := reduceComponentStatus(componentFiles, &fact, &livenessFact{LastSeen: now}, nil, now)
+	if got.Reason != "heartbeat_without_configuration" {
+		t.Fatalf("assessment = %#v, want heartbeat_without_configuration", got)
+	}
+}
+
+func TestEvidenceReasonsWinOverFixedCodes(t *testing.T) {
+	now := time.Date(2026, 9, 22, 0, 0, 40, 0, time.UTC)
+	skewed := &livenessFact{LastSeen: now.Add(maximumClockSkew + time.Nanosecond)}
+	if got := reduceComponentStatus(componentDaemon, nil, skewed, nil, now); got.Status != "unknown" || got.Reason != "clock_skew" {
+		t.Fatalf("clock skew on unknown config = %#v", got)
+	}
+	expired := &livenessFact{LastSeen: now.Add(-componentHeartbeatTTL - time.Second)}
+	if got := reduceComponentStatus(componentDaemon, nil, expired, nil, now); got.Reason != "heartbeat_expired" {
+		t.Fatalf("expired heartbeat on unknown config = %#v", got)
+	}
+	disabled := &executionFact{Component: componentExecutor, State: executionDisabled, ObservedAt: now}
+	if got := reduceComponentStatus(componentExecutor, nil, nil, disabled, now); got.Reason != "execution_disabled" {
+		t.Fatalf("disabled executor = %#v", got)
+	}
+}
+
+// The observable the page depends on: every non-healthy overview row explains
+// itself, both in the default production wiring and with no host facts at all.
+func TestOverviewRowsNeverHaveEmptyReasonUnlessHealthy(t *testing.T) {
+	now := time.Date(2026, 9, 22, 0, 0, 0, 0, time.UTC)
+	wired := NewService(nil, "test", false)
+	if err := wired.RegisterServerBootFacts(now); err != nil {
+		t.Fatal(err)
+	}
+	if err := wired.RegisterStorageFacts(now, "", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := wired.RegisterExecutionPolicyDisabled(now); err != nil {
+		t.Fatal(err)
+	}
+	wired.Heartbeat("web", "browser", now)
+	bare := NewService(nil, "test", false)
+	for _, service := range []*Service{wired, bare} {
+		for _, database := range []healthState{healthHealthy, healthUnavailable, healthUnknown} {
+			for _, row := range service.overviewComponents(now, database) {
+				if row.Status != "healthy" && row.Reason == "" {
+					t.Errorf("row %q status %q has an empty reason: %#v", row.Name, row.Status, row)
+				}
+			}
+		}
+	}
+	rows := make(map[string]Component)
+	for _, row := range wired.overviewComponents(now, healthHealthy) {
+		rows[row.Name] = row
+	}
+	want := map[string]string{"api": "liveness_unverified", "web": "config_unknown", "files": "storage_not_configured", "daemon": "config_unknown", "search": "config_unknown", "executor": "execution_disabled"}
+	for name, reason := range want {
+		if rows[name].Reason != reason {
+			t.Errorf("%s reason = %q, want %q", name, rows[name].Reason, reason)
+		}
+	}
+	for _, name := range []string{"daemon", "search"} {
+		if rows[name].HealthState != "unknown" {
+			t.Errorf("%s health without config or evidence = %q, want unknown", name, rows[name].HealthState)
+		}
 	}
 }
 
@@ -245,5 +366,70 @@ func TestNewServiceBuildsFactRegistryWithoutStore(t *testing.T) {
 	service := NewService(nil, "test", false)
 	if service.facts == nil {
 		t.Fatal("NewService must initialize the in-memory fact registry")
+	}
+}
+
+func TestHostFactsStaySeparateFromLiveness(t *testing.T) {
+	now := time.Date(2026, 9, 22, 0, 0, 0, 0, time.UTC)
+	service := NewService(nil, "test", false)
+	if err := service.RegisterServerBootFacts(now); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RegisterStorageFacts(now, "", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RegisterExecutionPolicyDisabled(now); err != nil {
+		t.Fatal(err)
+	}
+	service.Heartbeat("web", "browser", now)
+
+	components := make(map[string]Component)
+	for _, component := range service.overviewComponents(now, healthHealthy) {
+		components[component.Name] = component
+	}
+	if api := components["api"]; api.Status != "unverified" || api.ConfigState != "configured" || api.HealthState != "unverified" {
+		t.Fatalf("api must be configured but not listener-healthy: %#v", api)
+	}
+	if database := components["database"]; database.Status != "healthy" || database.ConfigState != "configured" || database.HealthState != "healthy" || database.Version != "PostgreSQL" || database.Reason != "" {
+		t.Fatalf("database config and connectivity must remain distinct: %#v", database)
+	}
+	for _, component := range service.overviewComponents(now, healthUnavailable) {
+		if component.Name == "database" && (component.Status != "unavailable" || component.ConfigState != "configured" || component.HealthState != "unavailable" || component.Reason != "database_connectivity_unavailable") {
+			t.Fatalf("database probe failure must not erase configuration: %#v", component)
+		}
+	}
+	if files := components["files"]; files.Status != "unconfigured" || files.ConfigState != "unconfigured" || files.Version != "" || files.ConfigReason != "storage_not_configured" {
+		t.Fatalf("files must expose no path or category when unconfigured: %#v", files)
+	}
+	if web := components["web"]; web.Status != "unknown" || web.ConfigState != "unknown" || web.HealthState != "healthy" || web.Version != "browser" {
+		t.Fatalf("web heartbeat cannot invent configuration: %#v", web)
+	}
+	if executor := components["executor"]; executor.Status != "disabled" || executor.ExecutionState != "disabled" || executor.Reason != "execution_disabled" {
+		t.Fatalf("read-only policy must remain disabled: %#v", executor)
+	}
+	for _, name := range []string{"daemon", "search"} {
+		if component := components[name]; component.Status != "unknown" || component.ConfigState != "unknown" {
+			t.Fatalf("%s without a host source must remain unknown: %#v", name, component)
+		}
+	}
+}
+
+func TestStorageFactsRejectUnknownCategory(t *testing.T) {
+	service := NewService(nil, "test", false)
+	if err := service.RegisterStorageFacts(time.Now().UTC(), "bucket-name", true); !errors.Is(err, errInvalidSourceSnapshot) {
+		t.Fatalf("storage registration error = %v, want invalid source snapshot", err)
+	}
+}
+
+func TestStorageFactsExposeOnlyAllowedCategory(t *testing.T) {
+	now := time.Date(2026, 9, 22, 0, 0, 0, 0, time.UTC)
+	service := NewService(nil, "test", false)
+	if err := service.RegisterStorageFacts(now, "s3", true); err != nil {
+		t.Fatal(err)
+	}
+	for _, component := range service.overviewComponents(now, healthUnknown) {
+		if component.Name == "files" && (component.Status != "unverified" || component.ConfigState != "configured" || component.Version != "s3" || component.ConfigReason != "storage_s3") {
+			t.Fatalf("configured storage response = %#v", component)
+		}
 	}
 }

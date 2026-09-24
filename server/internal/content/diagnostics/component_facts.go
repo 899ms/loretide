@@ -76,6 +76,7 @@ type componentConfigFact struct {
 }
 
 type livenessFact struct {
+	State    healthState
 	LastSeen time.Time
 	Version  string
 	Reason   string
@@ -241,11 +242,44 @@ func cloneSourceSnapshot(input sourceSnapshot) sourceSnapshot {
 	return result
 }
 
+// Fixed explanation codes for rows whose reducer produced no evidence reason.
+// Only these codes, a config fact's own safe reason, or an evidence reason can
+// appear, so a non-healthy row never reaches the page with an empty reason.
+const (
+	reasonConfigUnknown      = "config_unknown"
+	reasonLivenessUnverified = "liveness_unverified"
+	reasonConfigUnconfigured = "config_unconfigured"
+)
+
 func reduceComponentStatus(component configComponent, config *componentConfigFact, liveness *livenessFact, execution *executionFact, now time.Time) componentAssessment {
+	assessment := reduceComponentAssessment(component, config, liveness, execution, now)
+	if assessment.Reason != "" {
+		return assessment
+	}
+	switch assessment.Status {
+	case "unknown":
+		assessment.Reason = reasonConfigUnknown
+	case "unverified":
+		assessment.Reason = reasonLivenessUnverified
+	case "unconfigured":
+		assessment.Reason = reasonConfigUnconfigured
+		if config != nil && config.Component == component && config.Reason != "" {
+			assessment.Reason = config.Reason
+		}
+	}
+	return assessment
+}
+
+func reduceComponentAssessment(component configComponent, config *componentConfigFact, liveness *livenessFact, execution *executionFact, now time.Time) componentAssessment {
 	health, reason, lastSeen := reduceHealth(liveness, now)
 	assessment := componentAssessment{Config: configUnknown, Health: health, Execution: executionUnknown, Status: "unknown", Reason: reason, LastSeen: lastSeen}
 	if config != nil && config.Component == component {
 		assessment.Config = config.State
+	}
+	if liveness == nil && assessment.Config == configUnknown {
+		// A missing configuration fact is not a claim that the component is
+		// set up, so "not yet verified" would overstate it (spec §3).
+		assessment.Health = healthUnknown
 	}
 	if component == componentExecutor && execution != nil && execution.Component == component && execution.State == executionDisabled {
 		assessment.Execution = executionDisabled
@@ -284,6 +318,9 @@ func reduceHealth(liveness *livenessFact, now time.Time) (healthState, string, *
 		return healthUnknown, "heartbeat_missing_timestamp", nil
 	}
 	lastSeen := liveness.LastSeen.UTC()
+	if liveness.State == healthUnavailable {
+		return healthUnavailable, safeToken(liveness.Reason), &lastSeen
+	}
 	if lastSeen.After(now.Add(maximumClockSkew)) {
 		return healthUnknown, "clock_skew", &lastSeen
 	}

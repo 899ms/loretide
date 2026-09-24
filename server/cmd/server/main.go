@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -34,6 +35,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/scheduler"
 	"github.com/multica-ai/multica/server/internal/service"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/executionpolicy"
 	"github.com/multica-ai/multica/server/pkg/featureflag"
 	"github.com/multica-ai/multica/server/pkg/llm"
 	"github.com/redis/go-redis/v9"
@@ -664,6 +666,14 @@ func main() {
 		HeartbeatScheduler:  heartbeatScheduler,
 		LLMMaxRetries:       llmMaxRetries,
 	})
+	if err := h.ContentDiagnostics.RegisterServerBootFacts(time.Now().UTC()); err != nil {
+		panic(err)
+	}
+	if errors.Is(executionpolicy.Check(), executionpolicy.ErrDisabled) {
+		if err := h.ContentDiagnostics.RegisterExecutionPolicyDisabled(time.Now().UTC()); err != nil {
+			panic(err)
+		}
+	}
 	var replicaQueries *db.Queries
 	if replicaPool != nil {
 		replicaQueries = db.New(replicaPool)
