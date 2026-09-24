@@ -6,7 +6,7 @@ description: "Implementation plan for 034 feedback-learning — cost, lead, deal
 
 **Spec**: [spec.md](./spec.md) ｜ **Contract**: [contracts/roi-review.md](./contracts/roi-review.md) ｜ **Tasks**: [tasks.md](./tasks.md)
 
-**Status**: 草稿。主控已定 D1–D9 已写入；七条待裁决（spec 文末）按推荐值暂定。**九张表、十九个索引、二十八个迁移，拆五个 PR。**
+**Status**: 已裁决（主控 2026-09-25，PR #255 评论）。D1–D9 已写入；Q1～Q7 采纳推荐值；`modules` 依赖表不改，导入幂等在模块内自建。**十张表、二十个索引、三十个迁移，拆五个 PR。**
 
 ## 照抄什么，不发明什么
 
@@ -17,7 +17,7 @@ description: "Implementation plan for 034 feedback-learning — cost, lead, deal
 3. **不 import 别的模块，模块定义小接口、适配器回答** 照 `feedbackPublications`。本卡新增三个：`Accounts`（调 `ipprofile.Service.Get`）、`Works`（调 `workeditor.Store.GetWork`）、沿用 `Publications`。
 4. **受控集 Go 为准 + `CHECK` 兜底 + 「恰好 N 项」用例** 照 027 `contract.go`。
 5. **粘贴 CSV 在前端解析、服务端全有或全无、点名第几行** 照 027 `csv.ts` 与 `ImportContentMetrics`。
-6. **`Idempotency-Key` + `Claim` / `Complete`** 照 031 PR 1（#231）的 `content_import_idempotency.go`。
+6. **`Idempotency-Key` 占位、指纹、同键同输入重放、同键异输入 409** 照 031 PR 1（#231）的 `idempotency` 模块与 `content_import_idempotency.go`——**照它的形状在本模块里重写，不 import 它**（主控否决了改 `modules` 依赖表）。占位表 `content_roi_import_claim` 只插不改，与 031 的一处差别见 contract §1.9。
 
 两处**不照抄**：
 
@@ -28,7 +28,7 @@ description: "Implementation plan for 034 feedback-learning — cost, lead, deal
 
 **Language/Version**: Go 1.26（`server/`）、TypeScript 5 strict（`packages/core`、`packages/views`）
 
-**Storage**: PostgreSQL。九张新表（contract §1）+ 十九个 `CONCURRENTLY` 索引（§2），每个索引单独一个迁移文件、单条语句。金额 `bigint` 最小单位，汇率与比率在 Go 里用 `math/big.Rat`，JSON 里是字符串。
+**Storage**: PostgreSQL。十张新表（contract §1）+ 二十个 `CONCURRENTLY` 索引（§2），每个索引单独一个迁移文件、单条语句。金额 `bigint` 最小单位，汇率与比率在 Go 里用 `math/big.Rat`，JSON 里是字符串。
 
 **Testing**: `go test ./internal/content/feedback-learning/ ./internal/handler/ ./internal/migrations/ ./cmd/migrate/ ./cmd/server/`；带库的套件按 `docs/development/testing-database-suites.md` 用 `scripts/test-go-db.sh --suite handler` 与 `--suite cmd-server`；`packages/core/content/feedback-learning/*.test.ts`（node 环境）。**无 UI 单测。**
 
@@ -42,47 +42,31 @@ description: "Implementation plan for 034 feedback-learning — cost, lead, deal
 |---|---|---|
 | I. CLAUDE.md 为准 | 通过 | 迁移、状态、API 兼容规则按 CLAUDE.md 与 constitution 指向的文件 |
 | II. 不写 UI 单测 | 通过 | 计算、分摊、去重、CSV 解析、显示字符串选择进 Go / core node 测试；界面进 `manual-ui-todo.md` |
-| III. 模块边界 | **需主控决定** | Go 代码全在 `feedback-learning`；需要给它加 `idempotency` 依赖（见「主控决定」）。views 落 `packages/views/content/feedback-learning/roi/`，所需上游 import 已在 `upstreamImports` 里 |
+| III. 模块边界 | 通过 | Go 代码全在 `feedback-learning`，`modules` 依赖表**不改**：账号、作品、发布记录经适配器接口，导入幂等在模块内自建（不 import `idempotency`）。`adapters` 追加已获批准（见「主控决定」）。views 落 `packages/views/content/feedback-learning/roi/`，所需上游 import 已在 `upstreamImports` 里 |
 | IV. 服务端/客户端状态分离 | 通过 | 记录与报告走 TanStack Query，键含 `wsId`；表单草稿、报告参数草稿在组件状态；写后失效查询，**不做乐观更新**（金额类写入失败不罕见，回滚也不简单） |
-| V. 无外键、并发索引、单语句 | 通过 | 二十八个迁移逐条过 R1–R6；每张表有 `workspace_id` 打头的索引 |
+| V. 无外键、并发索引、单语句 | 通过 | 三十个迁移逐条过 R1–R6；每张表有 `workspace_id` 打头的索引 |
 | VI. zod + `parseWithFallback` | 通过 | 每个新端点一份 schema、一条畸形响应用例；金额与比率是字符串，schema 里就是 `z.string()`，前端不转数字 |
 | VII. 复用 Multica | 通过 | `SettingsSection` / `SettingsCard` / `SettingsRow`、`Button` / `Input` / `Textarea` / `Select`、既有表格样式；不设颜色，「不可计算」用次要文字色 token |
 | VIII. 范围纪律 | **需注意** | AI 解释与采纳明确不做（D1）；营销节点关联不做（Q4）；品牌级类别/阶段配置不做（Q5）。发现的既有问题记后续项 |
 | IX. 执行器禁用 | 通过 | 不调模型；AI 解释状态恒 `pending_data`；守卫用例 |
 | X. 打勾不是验收 | 通过 | 界面项一律「未执行」；D14-V15 只能部分覆盖，如实写 |
 
-## 主控决定
+## 主控决定（2026-09-25，PR #255 评论）
 
-本卡**不改** `scripts/content-boundaries.json`（D9）。实施各 PR 需要下列改动，**请主控确认后由实施 PR 落地**：
+本规格 PR **不改** `scripts/content-boundaries.json`（D9）。
 
-### 1. `modules` 依赖表：`feedback-learning` 加 `idempotency`（PR 3 需要）
+### 1. `modules` 依赖表：不改（否决）
 
-改前：
+原提议给 `feedback-learning` 加 `idempotency` 依赖，**已被否决**：用户禁止改 `modules` 依赖表。因此：
 
-```json
-"feedback-learning": [
-  "workspace-core",
-  "review-delivery",
-  "diagnostics"
-],
-```
+- PR 3 的导入幂等**完全在 `feedback-learning` 内**实现：自建占位表 `content_roi_import_claim`（contract §1.9）+ 一个唯一并发索引，指纹计算、占位、重放写在 `roi_import.go` 里，照 031 的形状重写。
+- 模块源码 MUST NOT import `server/internal/content/idempotency`；一条守卫用例扫 import（contract §8）。
+- 与 031 的差别只有一处：本模块所有表只插不改，所以占位行插入时就带上 `import_batch_id`，重放从导入批次行重建响应，不需要 031 那一步 `UPDATE ... SET completed=true`。
+- 代价：幂等机制在仓库里有两份（031 的通用模块、本模块的专用表）。以后若允许改依赖表，可以把本表换成通用模块，接口（`Idempotency-Key` 请求头、409 语义）不变。
 
-改后：
+### 2. `adapters` 追加：已批准
 
-```json
-"feedback-learning": [
-  "workspace-core",
-  "review-delivery",
-  "idempotency",
-  "diagnostics"
-],
-```
-
-理由：导入要在同一写事务里调 `idempotency.Claim` / `Complete`（FR-028）。`work-editor` 与 `review-delivery` 已经以同样方式依赖它（031）。`idempotency` 自身没有依赖，不会成环。
-
-被拒绝的替代：(a) handler 在调用模块之前自己 `Claim`——做不到同一事务，等于把 031 修过的「服务端成功、响应丢失后重试重复写入」再做一遍；(b) 在 `feedback-learning` 里自建一张幂等表——两份一样的机制。
-
-### 2. `adapters` 追加（各 PR 需要）
+每个实施 PR 在自己的改动里追加自己的那一条，**本规格 PR 不改该文件**：
 
 | PR | 条目 |
 |---|---|
@@ -92,16 +76,20 @@ description: "Implementation plan for 034 feedback-learning — cost, lead, deal
 | 4 | `server/internal/handler/content_roi_report.go` |
 | 5 | `apps/web/app/[workspaceSlug]/(dashboard)/roi-review/page.tsx` |
 
-### 3. 如果 Q7 裁 B（新建 `roi-review` 模块）
+### 3. 迁移编号：不预留
 
-`modules` 新增 `"roi-review": ["workspace-core", "feedback-learning", "idempotency", "diagnostics"]`，Go 代码移到 `server/internal/content/roi-review/`，`pnpm check:diagnostics-contract` 的落地模块数 +1；其余不变。本规格按 A 写。
+每个实施 PR 在合入前，把自己的迁移改号为紧接当时 `app-main` 最大号之后的连续号（文件名、`concurrentIndexCleanups` 的键一起改）。033 与 034 的实施谁先合入谁先占号。
+
+### 4. D14-V15：接受部分验收
+
+本卡覆盖「录入 → 复盘 → 查看来历」；AI 建议的采纳/拒绝作为后续卡。
 
 ## Project Structure（改动白名单）
 
 ```text
 server/
 ├── migrations/
-│   └── 540..567_content_roi_*.{up,down}.sql     # 28 个；号在实施时顺延（contract §1、§2）
+│   └── <N>_content_roi_*.{up,down}.sql          # 30 个；不预留编号，合入前接当时 app-main 最大号（contract §1、§2）
 ├── internal/content/feedback-learning/
 │   ├── roi_contract.go         # 受控集、币种表、FieldError 复用、实体结构（PR 1）
 │   ├── roi_money.go            # 金额字符串解析、舍入、汇率换算（PR 1；换算 PR 2 用）
@@ -110,14 +98,14 @@ server/
 │   ├── roi_allocate.go         # 最大余数法，分摊与多触点共用（PR 2）
 │   ├── roi_attribution.go      # 归因判断读写（PR 2）
 │   ├── roi_calc.go             # 纯函数计算器（PR 2）
-│   ├── roi_import.go           # 导入（PR 3）
+│   ├── roi_import.go           # 导入、模块内幂等占位与重放（PR 3）
 │   ├── roi_report.go           # 报告版本、ReportSummary（PR 4）
 │   └── roi_*_test.go           # 各自的测试与守卫
 ├── internal/handler/
 │   ├── content_roi_records.go / _preview.go / _import.go / _report.go
 │   ├── content_roi_*_test.go
-│   ├── workspace_delete_manifest_test.go        # 加九张表
-├── pkg/db/queries/workspace_delete.sql          # 加九条 DELETE；make sqlc 产物单独提交
+│   ├── workspace_delete_manifest_test.go        # 加十张表
+├── pkg/db/queries/workspace_delete.sql          # 加十条 DELETE；make sqlc 产物单独提交
 ├── cmd/migrate/main.go                          # upstream：19 条 concurrentIndexCleanups
 └── cmd/server/
     ├── router.go                                # upstream：/api/content-roi 块
@@ -140,7 +128,7 @@ packages/views/
 └── locales/{en,zh-Hans,ja,ko}/*.json            # 四语言（PR 5）
 
 apps/web/app/[workspaceSlug]/(dashboard)/roi-review/page.tsx   # PR 5
-scripts/content-boundaries.json                  # 仅按「主控决定」
+scripts/content-boundaries.json                  # 只追加 adapters（「主控决定」第 2 条）；modules 不动
 specs/034-roi-review/manual-ui-todo.md           # PR 5 回写状态
 ```
 
@@ -165,11 +153,13 @@ specs/034-roi-review/manual-ui-todo.md           # PR 5 回写状态
 
 ### PR 3 —— 导入
 
-一张表（导入批次）+ 两个索引 = 三个迁移。需要「主控决定」第 1 条先落地。
+两张表（导入批次、导入占位）+ 三个索引 = 五个迁移。不改 `modules` 依赖表，不 import `idempotency`。
 
-流程：前端解析粘贴文本 → `POST /imports`（`record_kind` + 行 + 每行可选的 `not_duplicate_of`）→ 事务内：栅栏 → `Claim` → 逐行校验（任一失败整体回滚，点名行列）→ 逐行算去重键并查重 → 写入未命中和已确认的行 → 写导入批次 → `Complete` → 审计 → 提交。
+流程：前端解析粘贴文本 → `POST /imports`（`record_kind` + 行 + 每行可选的 `not_duplicate_of`；请求头可带 `Idempotency-Key`）→ 事务内：栅栏 → 生成 `import_batch_id` → 有键时写占位（contract §1.9：`INSERT ... ON CONFLICT DO NOTHING`；已被占用且指纹相同 → 从那个批次行重建原响应并返回，不再写；指纹不同 → 409）→ 逐行校验（任一失败整体回滚，占位随之回滚，点名行列）→ 逐行算去重键并查重 → 写入未命中和已确认的行 → 写导入批次 → 审计 → 提交。
 
-预览是前端做的（它已有行）；「哪些行疑似重复」需要服务端判断，所以提供 `dry_run: true`：同一流程走到查重为止、不写、不 `Claim`，返回每行的判定。
+响应由一个「从导入批次行构造响应」的函数产生，首次返回与重放共用它，所以两次逐字节相同。
+
+预览是前端做的（它已有行）；「哪些行疑似重复」需要服务端判断，所以提供 `dry_run: true`：同一流程走到查重为止、不写、不占位，返回每行的判定。
 
 ### PR 4 —— 报告版本
 
@@ -179,7 +169,7 @@ specs/034-roi-review/manual-ui-todo.md           # PR 5 回写状态
 
 `/{workspaceSlug}/roi-review` 五个区块；导入的粘贴、预览、确认重复；报告的参数表单、指标卡、来历展开、版本列表、「输入已有更新」提示、AI 解释占位。三处上游路由登记。四语言。`manual-ui-todo.md` 回写。
 
-**依赖**：PR 2 依赖 PR 1；PR 3 依赖 PR 1 与「主控决定」第 1 条；PR 4 依赖 PR 2；PR 5 依赖 PR 1–4。PR 3 与 PR 2 可以并行。
+**依赖**：PR 2 依赖 PR 1；PR 3 依赖 PR 1；PR 4 依赖 PR 2；PR 5 依赖 PR 1–4。PR 3 与 PR 2 可以并行。
 
 ## 上游改动（每个 PR 单独一个 `upstream:` 提交，PR 正文单列一节）
 
@@ -207,9 +197,9 @@ specs/034-roi-review/manual-ui-todo.md           # PR 5 回写状态
 
 ## 已知边界
 
-1. **阶段是自由文本**（Q5=A），转化率只能按「是否曾处于某阶段」判断，没有阶段顺序。要有顺序，需要品牌级阶段配置（Q5=B）。
+1. **阶段是自由文本**（Q5=A，已裁定），转化率只能按「是否到达过某阶段」判断，没有阶段顺序。这条局限写进报告的「计算规则与局限」（FR-048a），不只写在这里。要有顺序，需要品牌级阶段配置（另卡）。
 2. **跨期成本靠人分摊到期间**（Q6=A）。忘了分摊的季度费用会整笔落在发生月。界面在成本表单上写明这一点。
 3. **汇率只在报告里**。同一笔 USD 成本在两份报告里可能按不同汇率换算——这是真实情况（不同时点的汇率），每份报告显示自己用的汇率。
 4. **去重键会漏也会误报**：两笔真实不同但类别、日期、金额都相同的成本会被标疑似重复（用户确认即可）；订单号抄错一位的重复成交不会被发现。重复识别是提示，不是保证。
-5. **D14-V15 只能部分验收**：采纳与拒绝建议依赖 AI 解释层，本卡不建。
+5. **D14-V15 只能部分验收**（主控已接受）：采纳与拒绝建议依赖 AI 解释层，本卡不建，作为后续卡。
 6. **`inputs` 存修订内容副本**会让报告版本行变大（每月几百条记录，约几百 KB 的 jsonb）。换来的是复算不依赖原表；若嫌大，可改成只存 `(kind, id, revision)` 并依赖原表只插不改，代价是删除工作区之外的任何数据清理都会破坏复算。

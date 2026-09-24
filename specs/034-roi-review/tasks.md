@@ -12,7 +12,9 @@ description: "Task list for 034 feedback-learning — cost, lead, deal and ROI r
 
 `[P]` 表示与相邻任务无依赖、可并行。「先写」表示该测试先写并确认失败。
 
-实施前先确认 spec 文末七条待裁决的结论；若有与推荐值不同的，按 spec 里每条标出的「影响」改对应 FR 与本文件的对应任务，不扩散。
+**已裁决**（主控 2026-09-25，PR #255 评论）：Q1～Q7 全部采纳推荐值；`modules` 依赖表不改，导入幂等在 `feedback-learning` 内自建（PR 3）；`adapters` 追加已批准，各 PR 追加自己的条目；迁移不预留编号；D14-V15 部分验收已接受。
+
+**迁移编号**：每个 PR 在合入前把自己的迁移改号为紧接当时 `app-main` 最大号之后的连续号（文件名与 `concurrentIndexCleanups` 的键一起改）；033 与 034 的实施谁先合入谁先占号。
 
 ---
 
@@ -24,8 +26,8 @@ description: "Task list for 034 feedback-learning — cost, lead, deal and ROI r
 
 ## Phase 1: 基线
 
-- [ ] T001 记下 `server/migrations/` 当前最大号（规格撰写时 539），本 PR 从下一个号起连续取 18 个；若 033 或别的卡先合入占号，rebase 时编号与文件名整体重排
-- [ ] T002 记下 `scripts/content-boundaries.json` 的当前内容；本 PR 对它只允许追加 `adapters` 一条（`server/internal/handler/content_roi_records.go`），且须主控在 PR 上确认（plan.md「主控决定」第 2 条）
+- [ ] T001 本 PR 共 18 个迁移。开发时从当时 `app-main` 最大号之后取号；**合入前**再 rebase 到最新 `app-main`，把 18 个迁移改号为紧接当时最大号之后的连续号（文件名与 `concurrentIndexCleanups` 一起改），033 若先合入就排在它后面
+- [ ] T002 记下 `scripts/content-boundaries.json` 的当前内容；本 PR 对它只追加 `adapters` 一条（`server/internal/handler/content_roi_records.go`，主控已批准，plan.md「主控决定」第 2 条）；`modules` 依赖表**一个字不改**
 - [ ] T003 读三处既有形状并在 PR 正文写一句结论：`feedback-learning/store.go` 的 `begin()`、`handler/content_metric.go` 的 `feedbackScope` 与 `feedbackPublications`、`handler/workspace_delete_manifest_test.go` 的清单形状
 
 ## Phase 2: 迁移（18 个，各单条语句）
@@ -117,7 +119,7 @@ description: "Task list for 034 feedback-learning — cost, lead, deal and ROI r
 
 ## Phase 12: 预览端点与收尾
 
-- [ ] T054 先写：`POST /preview` 返回与直接调计算器相同的结果；不写任何表（调用前后九张表行数不变）；越权同形拒绝
+- [ ] T054 先写：`POST /preview` 返回与直接调计算器相同的结果；不写任何表（调用前后所有 `content_roi_` 表行数不变）；越权同形拒绝
 - [ ] T055 新建 `handler/content_roi_preview.go`：窗口按 `loretide.timezone` 转成时间点，读窗口内有效记录组装 `ReportInput`；upstream 提交挂路由；路由存在性用例
 - [ ] T056 [P] core：计算结果 schema（指标值全是字符串，`status` 用 `z.enum` 并有 `default` 分支）与畸形响应用例
 - [ ] T057 变异验证：余数改成全给第一份 → T041；`business_roi` 分子去掉减投入 → T048；未换算时静默排除 → T049；品牌成交数改为按触点计 → T050
@@ -127,21 +129,22 @@ description: "Task list for 034 feedback-learning — cost, lead, deal and ROI r
 
 # PR 3 —— 导入（幂等、重复识别、审计）
 
-**分支**：`claude/034-pr3-roi-import`，依赖 PR 1 合入，以及 plan.md「主控决定」第 1 条（`feedback-learning` 加 `idempotency` 依赖）已获确认。
+**分支**：`claude/034-pr3-roi-import`，依赖 PR 1 合入。
 **覆盖**：FR-026～FR-029；SC-007；D14-V11（导入部分）。
+**约束**：`modules` 依赖表不改，**不 import `idempotency` 模块**；幂等用本模块的占位表 `content_roi_import_claim`（contract §1.9），形状照 031、只插不改。
 
-- [ ] T059 按主控确认，在 `scripts/content-boundaries.json` 的 `feedback-learning` 依赖里加 `idempotency`，`adapters` 加 `server/internal/handler/content_roi_import.go`；跑 `pnpm check:content-boundaries`
-- [ ] T060 迁移 3 个：`content_roi_import_batch` 建表 + 两个索引；`concurrentIndexCleanups`、删除清单与删除链、`make sqlc`；跑迁移规则四条
-- [ ] T061 先写：一批三行第二行币种 `RMB` → 一行都不写，拒绝点名第 2 行 `currency`；九张表行数不变
-- [ ] T062 先写：一批里两行与已有记录去重键相同 → 这两行不写，批次记录逐行 `duplicate` 带 `duplicate_of`；其余行写入且 `source_type=import`、`import_batch_id` 有值
+- [ ] T059 `scripts/content-boundaries.json` 只追加 `adapters` 一条 `server/internal/handler/content_roi_import.go`（已批准）；diff 确认 `modules` 一个字没动；跑 `pnpm check:content-boundaries`
+- [ ] T060 迁移 5 个：`content_roi_import_batch` 建表 + `_key_idx` + `_time_idx`；`content_roi_import_claim` 建表 + `content_roi_import_claim_key_idx`（唯一，`(workspace_id, record_kind, idempotency_key)`）；3 个索引进 `concurrentIndexCleanups`；两表进删除清单与删除链、`make sqlc`；跑迁移规则四条
+- [ ] T061 先写：一批三行第二行币种 `RMB` → 一行都不写，拒绝点名第 2 行 `currency`；所有 `content_roi_` 表（含占位表）行数不变
+- [ ] T062 先写：一批里两行与已有记录去重键相同 → 这两行不写，批次记录逐行 `duplicate` 带 `duplicate_of`；其余行写入且 `source_type=import`、`import_batch_id` 有值。批内自身重复（两行去重键相同）→ 第二行标 `duplicate`，`duplicate_of` 指向同批第一行生成的记录
 - [ ] T063 先写：同一行带 `not_duplicate_of` → 写入、结果 `confirmed_not_duplicate`、审计一条
-- [ ] T064 先写：同 `Idempotency-Key` 同输入重发 → 返回逐字节相同的原响应、行数不变；同键异输入 → 409 点名 `Idempotency-Key`；异键同行 → 全部识别为疑似重复（SC-007）
-- [ ] T065 先写：`dry_run: true` → 返回逐行判定，不写任何表、不占幂等键
-- [ ] T066 先写：批内自身重复（两行去重键相同）→ 第二行标 `duplicate`，`duplicate_of` 指向同批第一行生成的记录
-- [ ] T067 新建 `roi_import.go`：事务内 栅栏 → `Claim` → 全批校验 → 查重 → 写入 → 批次行 → `Complete` → `AuditTx`（`operation=roi_import`，`resource_scope=record_kind`）
-- [ ] T068 新建 `handler/content_roi_import.go`：`POST /imports`、`GET /imports`、`GET /imports/{batchId}`；第 12 步用例（`{batchId}`）；upstream 提交挂路由；路由存在性用例
+- [ ] T064 先写：同 `Idempotency-Key` 同输入重发 → 返回逐字节相同的原响应，业务表与批次表行数不变，占位表仍只有一行；同键异输入 → 409 点名 `Idempotency-Key`；同键不同 `record_kind` → 互不影响；异键同行 → 全部识别为疑似重复；键超 255 字节 → 400（SC-007）
+- [ ] T065 先写：`dry_run: true` → 返回逐行判定，不写任何表、不写占位
+- [ ] T066 先写（真实 DB）：**并发与回滚**——两个事务同键同输入同时导入，恰好一个写入，另一个等前者提交后拿到逐字节相同的重放响应；前一个事务校验失败回滚后，占位随之消失，同键再提交（输入已改正）正常写入
+- [ ] T067 先写守卫：模块源码不 import `server/internal/content/idempotency`；没有针对 `content_roi_import_claim` 的 `UPDATE` / `DELETE`（删除链除外），且有 `INSERT INTO`。然后新建 `roi_import.go`：请求指纹（规范化 JSON 的 SHA-256）；事务内 栅栏 → 生成 `import_batch_id` → 占位（`INSERT ... ON CONFLICT DO NOTHING RETURNING`；未返回则读出已有行：指纹同 → 从批次行重建响应返回，指纹异 → 409）→ 全批校验 → 查重 → 写入 → 批次行 → `AuditTx`；首次响应与重放共用「由批次行构造响应」的同一个函数
+- [ ] T068 新建 `handler/content_roi_import.go`：读 `Idempotency-Key` 请求头（常量用 `publicapiv1.HeaderIdempotencyKey`，handler 是适配器，可以引用它）传给模块；`POST /imports`、`GET /imports`、`GET /imports/{batchId}`；第 12 步用例（`{batchId}`）；upstream 提交挂路由；路由存在性用例
 - [ ] T069 [P] core：`roi/csv.ts` 三种记录的列定义与解析（金额保持字符串、点名第几行）+ node 测试；导入响应与批次 schema + 畸形响应用例
-- [ ] T070 变异验证：`Claim` 移到事务外 → T064；查重只比作废记录 → T062；校验失败时已写的行不回滚 → T061
+- [ ] T070 变异验证：占位移到事务外（独立提交）→ T066；重放改为重新执行导入 → T064；加一句 import `idempotency` → T067 守卫；查重只比作废记录 → T062；校验失败时已写的行不回滚 → T061
 - [ ] T071 本地验证同 T035；**远程验收**：`~/loretide-ci/lt-verify.sh claude/034-pr3-roi-import all`
 
 ---
@@ -188,5 +191,5 @@ description: "Task list for 034 feedback-learning — cost, lead, deal and ROI r
 
 # 收尾
 
-- [ ] T096 每个 PR 合入后，主控在文档仓库回写 BO-06 的进度与 D14-V11～V16 的覆盖情况；D14-V15 记「部分：采纳段未执行（宪法 IX，后续卡）」
+- [ ] T096 每个 PR 合入后，主控在文档仓库回写 BO-06 的进度与 D14-V11～V16 的覆盖情况；D14-V15 记「部分：采纳段未执行（宪法 IX，后续卡；主控 2026-09-25 已接受部分验收）」
 - [ ] T097 登记后续卡：AI 解释与建议、采纳进选题/预算待办/经营记忆（D1）；营销节点关联（Q4）；品牌级类别/阶段配置（Q5，若裁 A）

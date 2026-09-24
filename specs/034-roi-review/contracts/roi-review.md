@@ -1,14 +1,14 @@
 # 合同：成本、线索、成交与 ROI 复盘（034）
 
-**状态**：草稿，随 spec 的七条待裁决一起审。每个列名、受控集都要能指回 `spec.md` 开头的 R-061 原文或「主控已定」D1–D9；指不回去的在 `spec.md`「本规格补的设计」里单列。
+**状态**：已裁决（主控 2026-09-25，PR #255 评论）：Q1～Q7 采纳推荐值；导入幂等在模块内自建（§1.9），不 import `idempotency`。每个列名、受控集都要能指回 `spec.md` 开头的 R-061 原文或「主控已定」D1–D9；指不回去的在 `spec.md`「本规格补的设计」里单列。
 
 模块：`feedback-learning`。所有 Go 代码在 `server/internal/content/feedback-learning/` 下以 `roi_` 为文件名前缀。
 
 ---
 
-## 1. 九张表
+## 1. 十张表
 
-迁移号**在实施时按当时最大值顺延**（本规格写成时最大号 539）。每张表：
+**迁移编号不预留**（主控 2026-09-25）：每个实施 PR 在合入前把自己的迁移改号为紧接当时 `app-main` 最大号之后的连续号，文件名一起改；033 与 034 的实施谁先合入谁先占号。规格撰写时最大号 539，仅供参考。每张表：
 
 - 建表迁移不含 `PRIMARY KEY` / `UNIQUE` / `REFERENCES` / `CASCADE`（R1、R2、R5）；
 - 受控集用 `CHECK (... IN (...))` 兜底，Go 枚举为准；
@@ -133,10 +133,32 @@
 | `record_kind` CHECK `cost`/`lead`/`deal` | |
 | `row_count`, `written_count`, `skipped_count` integer | |
 | `rows` jsonb NOT NULL | 每行 `{row, outcome: written|duplicate|confirmed_not_duplicate, record_id, duplicate_of[]}` |
-| `idempotency_key` text NOT NULL DEFAULT '' | 便于排查，不是唯一性来源（唯一性在 `content_import_idempotency`） |
+| `idempotency_key` text NOT NULL DEFAULT '' | 便于排查，不是唯一性来源（唯一性在 §1.9 的占位表） |
 | `recorded_by`, `created_at` | |
 
-### 1.9 `content_roi_report_version` —— 报告输入版本（PR 4，只插）
+### 1.9 `content_roi_import_claim` —— 导入占位（PR 3，只插）
+
+导入的 `Idempotency-Key` 幂等，**完全在本模块内**，不 import `idempotency` 模块（主控否决了改 `modules` 依赖表）。形状照 031 的 `content_import_idempotency`（迁移 538 / 539），差别只有一处：031 先插占位、再 `UPDATE` 写入 `completed` 与 `response_body`；本表只插不改，占位行插入时就带上本次的 `import_batch_id`，重放时从导入批次行重建响应。
+
+| 列 | 说明 |
+|---|---|
+| `workspace_id` text NOT NULL | |
+| `record_kind` text CHECK `cost`/`lead`/`deal` | 相当于 031 的 `resource_scope`；同一个键可用于不同记录类型 |
+| `idempotency_key` text NOT NULL | 请求头 `Idempotency-Key`，≤255 字节，空则不走幂等 |
+| `request_fingerprint` text NOT NULL | 请求体（`record_kind` + 行 + 每行 `not_duplicate_of`）规范化 JSON 的 SHA-256 十六进制；在 `roi_import.go` 里计算 |
+| `import_batch_id` text NOT NULL | 本次导入写出的批次；在占位前生成 |
+| `created_at` timestamptz NOT NULL DEFAULT now() | |
+
+**流程**（全部在导入的同一写事务里，栅栏之后）：
+
+1. `INSERT ... ON CONFLICT (workspace_id, record_kind, idempotency_key) DO NOTHING RETURNING import_batch_id`。有返回 → 本请求是第一个，继续导入。
+2. 没有返回 → 这个键已被一个**已提交**的请求占用：若另一个事务正持有同一个键，PostgreSQL 会让第 1 步等它结束——它回滚，第 1 步照常插入成功；它提交，第 1 步不返回行。此时 `SELECT` 读出那一行。
+3. 读到的 `request_fingerprint` 与本请求不同 → 409，点名 `Idempotency-Key`。
+4. 相同 → 读 `import_batch_id` 对应的导入批次行，重建响应返回；**不再写任何行**。重建函数与首次返回用同一个函数，所以两次响应逐字节相同（有用例）。
+
+`dry_run: true` 不占位。
+
+### 1.10 `content_roi_report_version` —— 报告输入版本（PR 4，只插）
 
 | 列 | 说明 |
 |---|---|
@@ -173,10 +195,11 @@
 | attribution_revision | `content_roi_attribution_revision_key_idx` | `(workspace_id, deal_id, revision)` | 是 | |
 | import_batch | `content_roi_import_batch_key_idx` | `(workspace_id, import_batch_id)` | 是 | |
 | | `content_roi_import_batch_time_idx` | `(workspace_id, created_at DESC)` | | 列表 |
+| import_claim | `content_roi_import_claim_key_idx` | `(workspace_id, record_kind, idempotency_key)` | 是 | 同键只占一次；`ON CONFLICT` 的目标；删除链 |
 | report_version | `content_roi_report_version_key_idx` | `(workspace_id, report_id, version_no)` | 是 | |
 | | `content_roi_report_version_time_idx` | `(workspace_id, created_at DESC)` | | 列表 |
 
-**九张表、十九个索引、二十八个迁移。** 每张表的第一个索引以 `workspace_id` 打头，删除链不会扫全表。唯一索引承担并发写同一修订号时的最后一道防线：第二个写入者得到唯一冲突，映射为 409 `base_revision`。
+**十张表、二十个索引、三十个迁移。** 每张表的第一个索引以 `workspace_id` 打头，删除链不会扫全表。唯一索引承担并发写同一修订号时的最后一道防线：第二个写入者得到唯一冲突，映射为 409 `base_revision`。
 
 ---
 
@@ -282,7 +305,7 @@
 | `cost_per_qualified_lead` | `spend_total / qualified_leads` |
 | `cost_per_deal` | `spend_total / deals` |
 
-「到达某阶段」首版按「任一修订的 `stage` 等于该值」判断（阶段是自由文本，没有顺序可比较，Q5=A 的代价）。
+「到达某阶段」首版按「任一修订的 `stage` 等于该值」判断（阶段是自由文本，没有顺序可比较，Q5=A 的代价）。这条代价 MUST 作为一条固定文字进 `result.rules`（FR-048a）：「阶段是自由文本，没有先后顺序；转化率只按线索是否到达过某阶段计算，不反映阶段之间的先后。」
 
 ### 5.4 固定样例（必须逐字出现在用例里）
 
@@ -323,7 +346,7 @@
 | 1 | POST | `/deals/{dealId}/adjustments/{adjustmentId}/revisions` | 调整新修订 |
 | 2 | POST | `/deals/{dealId}/attribution` | 归因判断新修订（带 `base_revision`，首次为 0） |
 | 2 | POST | `/preview` | 用给定参数算一次，**不保存**；返回 §5.2 |
-| 3 | POST | `/imports` | 导入，`source_type=import`；支持 `Idempotency-Key` |
+| 3 | POST | `/imports` | 导入，`source_type=import`；支持 `Idempotency-Key`（本模块占位表，§1.9） |
 | 3 | GET | `/imports` | 批次列表 |
 | 3 | GET | `/imports/{batchId}` | 批次详情（逐行结果） |
 | 4 | POST | `/reports` | 新报告 + 版本 1 |
@@ -369,9 +392,10 @@ func (s *Store) ReportSummary(ctx context.Context, workspaceID, reportID string,
 
 ## 8. 不做的自证（守卫用例，每条配一次可编译变异确认会红）
 
-- **只插不改**：模块里没有针对九张表的 `UPDATE`，没有删除链之外的 `DELETE`；**且**存在 `INSERT INTO`。
+- **只插不改**：模块里没有针对十张表的 `UPDATE`，没有删除链之外的 `DELETE`；**且**存在 `INSERT INTO`。
 - **不用浮点**：`roi_calc.go`、`roi_money.go`、`roi_allocate.go` 不含 `float32` / `float64`。
 - **不外发、不调模型**：模块里没有 HTTP 客户端调用、没有模型调用。
+- **不 import `idempotency`**：模块源码里没有对 `server/internal/content/idempotency` 的 import（`pnpm check:content-boundaries` 也会挡，但守卫用例让它在 `go test` 里就红）。
 - **不自动补来源**：模块里没有在触点或归因判断上写 `work_id` / `evidence_type` / `judgement` 的路径，除了处理请求体的那一处（按函数名白名单扫）。
 - **不收集个人信息**：迁移与 Go 结构里没有 `name` / `phone` / `mobile` / `wechat` / `email` / `id_card` / `address` 类的客户字段。
 - **没有 AI 解释表、没有采纳路径**：迁移里没有这样的表；模块里没有写选题、待办、经营记忆的路径。
