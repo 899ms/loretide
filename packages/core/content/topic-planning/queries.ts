@@ -9,11 +9,13 @@ import {
   parseTopicCards,
   setContentTopicSourcesInputToWire,
   topicActionInputToWire,
+  topicBodyPatchInputToWire,
   topicCardInputToWire,
   type BriefRevision,
   type BriefRevisionInput,
   type SetContentTopicSourcesInput,
   type TopicActionInput,
+  type TopicBodyPatchInput,
   type TopicCard,
   type TopicCardInput,
 } from "./contract";
@@ -211,6 +213,35 @@ export function useSetContentTopicSources(workspaceId: string) {
         await api.setContentTopicSources(
           input.topicCardId,
           setContentTopicSourcesInputToWire(input.sources),
+        ),
+      ),
+    onSuccess: () =>
+      client.invalidateQueries({
+        queryKey: topicPlanningKeys.all(workspaceId),
+      }),
+  });
+}
+
+// Not optimistic, and the response is never written into the cache: the PATCH
+// returns the whole card, and if an installed client met a response shape it
+// did not understand, writing the parsed fallback would blank the four answers
+// the operator did not edit. Invalidation re-reads the card instead.
+//
+// onSuccess RETURNS the invalidation promise, so the mutation stays pending
+// until the refetch lands. The page clears its draft in its own onSuccess,
+// which runs after that - so the fields go from the draft straight to the
+// fresh card, without flashing the old answer in between.
+export function usePatchContentTopicBody(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      topicCardId: string;
+      body: TopicBodyPatchInput;
+    }) =>
+      parseTopicCard(
+        await api.patchContentTopicBody(
+          input.topicCardId,
+          topicBodyPatchInputToWire(input.body),
         ),
       ),
     onSuccess: () =>

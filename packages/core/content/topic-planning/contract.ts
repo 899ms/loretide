@@ -132,6 +132,16 @@ export interface SetContentTopicSourcesInput {
   evidenceSourceIds?: string[];
 }
 
+// Omission preserves the stored answer. An empty string is deliberate: it
+// clears one answer without changing the other four.
+export interface TopicBodyPatchInput {
+  audienceProblemJudgment?: string;
+  ipFit?: string;
+  timing?: string;
+  existingContentRelation?: string;
+  evidenceGapsAndInvestment?: string;
+}
+
 export interface BriefRevisionInput {
   audience: string;
   coreProblem: string;
@@ -184,6 +194,28 @@ export function setContentTopicSourcesInputToWire(
   }
   if (input.evidenceSourceIds !== undefined) {
     wire.evidence_source_ids = input.evidenceSourceIds;
+  }
+  return wire;
+}
+
+export function topicBodyPatchInputToWire(
+  input: TopicBodyPatchInput,
+): Record<string, unknown> {
+  const wire: Record<string, unknown> = {};
+  if (input.audienceProblemJudgment !== undefined) {
+    wire.audience_problem_judgment = input.audienceProblemJudgment;
+  }
+  if (input.ipFit !== undefined) {
+    wire.ip_fit = input.ipFit;
+  }
+  if (input.timing !== undefined) {
+    wire.timing = input.timing;
+  }
+  if (input.existingContentRelation !== undefined) {
+    wire.existing_content_relation = input.existingContentRelation;
+  }
+  if (input.evidenceGapsAndInvestment !== undefined) {
+    wire.evidence_gaps_and_investment = input.evidenceGapsAndInvestment;
   }
   return wire;
 }

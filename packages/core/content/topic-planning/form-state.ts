@@ -11,6 +11,7 @@ import {
   type BriefRevision,
   type BriefRevisionInput,
   type TopicActionInput,
+  type TopicBodyPatchInput,
   type TopicCard,
   type TopicCardInput,
   type SetContentTopicSourcesInput,
@@ -416,4 +417,65 @@ export function topicStatusKey(status: string): string {
     default:
       return "unknown";
   }
+}
+
+/** The five answers the body PATCH may change, in the order the card shows
+ *  them. Nothing else on a card is editable through this path: account,
+ *  sources, channels, recommended action, status and the frozen brief each
+ *  have their own flow or none. */
+export const TOPIC_BODY_KEYS = [
+  "audienceProblemJudgment",
+  "ipFit",
+  "timing",
+  "existingContentRelation",
+  "evidenceGapsAndInvestment",
+] as const satisfies readonly (keyof TopicBodyPatchInput)[];
+
+export type TopicBodyKey = (typeof TOPIC_BODY_KEYS)[number];
+
+/**
+ * One keystroke applied to a body draft.
+ *
+ * The draft holds ONLY the answers that differ from the card, because that is
+ * exactly what the PATCH sends: an omitted key keeps the stored value, so a
+ * field the operator never touched cannot overwrite a newer value someone else
+ * saved in the meantime. Typing a field back to what the card says removes it
+ * from the draft - there is nothing to send. An empty string that differs from
+ * the card stays: it means "clear this answer".
+ *
+ * Returns the same object when nothing changed, so a component can hand it to
+ * setState without causing a render.
+ */
+export function editTopicBodyDraft(
+  draft: TopicBodyPatchInput,
+  card: Pick<TopicCard, TopicBodyKey>,
+  key: TopicBodyKey,
+  value: string,
+): TopicBodyPatchInput {
+  if (value === card[key]) {
+    if (!(key in draft)) return draft;
+    const next = { ...draft };
+    delete next[key];
+    return next;
+  }
+  if (draft[key] === value) return draft;
+  return { ...draft, [key]: value };
+}
+
+/** Whether a draft would send anything. The server answers an empty body with
+ *  400, so an empty draft must never reach it. */
+export function topicBodyDraftChanged(draft: TopicBodyPatchInput): boolean {
+  return TOPIC_BODY_KEYS.some((key) => draft[key] !== undefined);
+}
+
+/** What a field shows: the operator's unsaved text if there is any, otherwise
+ *  the card's stored answer. `""` in the draft is a real value (a pending
+ *  clear) and must not fall through to the card. */
+export function topicBodyFieldValue(
+  draft: TopicBodyPatchInput,
+  card: Pick<TopicCard, TopicBodyKey>,
+  key: TopicBodyKey,
+): string {
+  const pending = draft[key];
+  return pending !== undefined ? pending : card[key];
 }

@@ -728,6 +728,13 @@ export class ApiClient {
     });
   }
 
+  async patchContentTopicBody(topicCardId: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}/body`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
   async getContentTopic(topicCardId: string): Promise<unknown> {
     return this.fetch<unknown>(`/api/content-topics/${encodeURIComponent(topicCardId)}`);
   }

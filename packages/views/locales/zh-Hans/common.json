@@ -412,6 +412,11 @@
     "createDescription": "docs/01 §5.2 的七项。写「没有」就是完整回答，留空不是。",
     "create": "创建选题卡",
     "detailTitle": "选题卡",
+    "bodyEdit": {
+      "title": "编辑选题正文",
+      "description": "只保存这里改动的回答，其他回答保持不变。",
+      "save": "保存修改"
+    },
     "statusLabel": "状态",
     "blank": "未填写",
     "channelsHint": "多个渠道用逗号分隔。",

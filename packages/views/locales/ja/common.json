@@ -412,6 +412,11 @@
     "createDescription": "docs/01 §5.2 の 7 項目。「なし」と書くのも完全な回答です。空欄は違います。",
     "create": "テーマカードを作成",
     "detailTitle": "テーマカード",
+    "bodyEdit": {
+      "title": "テーマ本文を編集",
+      "description": "ここで変更した回答だけを保存します。ほかの回答は変更しません。",
+      "save": "変更を保存"
+    },
     "statusLabel": "状態",
     "blank": "未記入",
     "channelsHint": "複数のチャネルはカンマで区切ってください。",

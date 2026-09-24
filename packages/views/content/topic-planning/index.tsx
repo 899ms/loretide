@@ -40,11 +40,17 @@ import {
   useContentTopic,
   useContentTopics,
   useCreateContentTopic,
+  editTopicBodyDraft,
+  topicBodyDraftChanged,
+  topicBodyFieldValue,
+  usePatchContentTopicBody,
   useSetContentTopicAccount,
   useSetContentTopicSources,
   type BriefDraft,
   type BriefRevision,
   type TopicAction,
+  type TopicBodyKey,
+  type TopicBodyPatchInput,
   type TopicCard,
   type TopicCardDraft,
   type TopicSourceDraft,
@@ -657,6 +663,11 @@ function TopicCardPanel({
   return (
     <>
       <TopicCardDetail card={current} accountOptions={accountOptions} />
+      <TopicBodyEditSection
+        key={current.topicCardId}
+        wsId={wsId}
+        card={current}
+      />
       <TopicSourceReferenceSection
         key={`${current.topicCardId}:${current.updatedAt}`}
         wsId={wsId}
@@ -774,6 +785,113 @@ function TopicCardDetail({
             </SettingsRow>
           </>
         ) : null}
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
+const TOPIC_BODY_FIELDS: {
+  key: TopicBodyKey;
+  label: (t: Translate) => string;
+  placeholder: (t: Translate) => string;
+}[] = [
+  {
+    key: "audienceProblemJudgment",
+    label: (t) => t(($) => $.contentTopics.fields.audienceProblemJudgment),
+    placeholder: (t) => t(($) => $.contentTopics.placeholders.audienceProblemJudgment),
+  },
+  {
+    key: "ipFit",
+    label: (t) => t(($) => $.contentTopics.fields.ipFit),
+    placeholder: (t) => t(($) => $.contentTopics.placeholders.ipFit),
+  },
+  {
+    key: "timing",
+    label: (t) => t(($) => $.contentTopics.fields.timing),
+    placeholder: (t) => t(($) => $.contentTopics.placeholders.timing),
+  },
+  {
+    key: "existingContentRelation",
+    label: (t) => t(($) => $.contentTopics.fields.existingContentRelation),
+    placeholder: (t) => t(($) => $.contentTopics.placeholders.existingContentRelation),
+  },
+  {
+    key: "evidenceGapsAndInvestment",
+    label: (t) => t(($) => $.contentTopics.fields.evidenceGapsAndInvestment),
+    placeholder: (t) => t(($) => $.contentTopics.placeholders.evidenceGapsAndInvestment),
+  },
+];
+
+// The five body answers, editable in place (#244).
+//
+// Mounted with key={topicCardId}, so each card gets its own draft and its own
+// mutation: switching cards starts from an empty draft rather than carrying
+// one card's unsaved text onto another. The draft/diff rules themselves live
+// in core (editTopicBodyDraft and friends, form-state.test.ts).
+function TopicBodyEditSection({
+  wsId,
+  card,
+}: {
+  wsId: string;
+  card: TopicCard;
+}) {
+  const { t } = useT("common");
+  const patchBody = usePatchContentTopicBody(wsId);
+  const [draft, setDraft] = useState<TopicBodyPatchInput>({});
+  const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
+  const changed = topicBodyDraftChanged(draft);
+
+  const edit = (key: TopicBodyKey, value: string) => {
+    setDraft((current) => editTopicBodyDraft(current, card, key, value));
+  };
+
+  const save = () => {
+    // The server answers an empty body with 400; the button is disabled in
+    // that state, and this keeps a stray call from reaching it anyway.
+    if (!changed || patchBody.isPending) return;
+    setOutcome(null);
+    patchBody.mutate(
+      { topicCardId: card.topicCardId, body: draft },
+      {
+        onSuccess: () => {
+          setOutcome(SAVED);
+          setDraft({});
+        },
+        onError: (error) => setOutcome(saveOutcome(error)),
+      },
+    );
+  };
+
+  return (
+    <SettingsSection
+      title={t(($) => $.contentTopics.bodyEdit.title)}
+      description={t(($) => $.contentTopics.bodyEdit.description)}
+    >
+      <SettingsCard>
+        {TOPIC_BODY_FIELDS.map((field) => (
+          <SettingsRow
+            key={field.key}
+            label={field.label(t)}
+            size="text"
+            align="start"
+          >
+            <Textarea
+              value={topicBodyFieldValue(draft, card, field.key)}
+              onChange={(event) => edit(field.key, event.target.value)}
+              placeholder={field.placeholder(t)}
+              rows={2}
+              disabled={patchBody.isPending}
+            />
+          </SettingsRow>
+        ))}
+        <SettingsRow label={t(($) => $.contentTopics.bodyEdit.save)}>
+          <div className="flex items-center gap-3">
+            <SaveFeedback outcome={outcome} pending={patchBody.isPending} />
+            <Button disabled={!changed || patchBody.isPending} onClick={save}>
+              {t(($) => $.contentTopics.bodyEdit.save)}
+            </Button>
+          </div>
+        </SettingsRow>
       </SettingsCard>
     </SettingsSection>
   );
