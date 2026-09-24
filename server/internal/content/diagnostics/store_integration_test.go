@@ -161,15 +161,33 @@ func TestPostgresFullScenariosExportAndHealth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// This service has no registered configuration facts, so after specs/032
+	// every row's presentation status is "unknown" and the liveness verdict
+	// lives in HealthState/Reason instead (spec §3: unknown configuration keeps
+	// its health evidence). The assertions below check that evidence rather
+	// than the projected status, which is the part these three cases are about.
+	seen := map[string]bool{}
 	for _, c := range o.Components {
-		if c.Name == "daemon" && c.Status != "unavailable" {
-			t.Fatal("stale heartbeat healthy")
+		seen[c.Name] = true
+		switch c.Name {
+		case "daemon":
+			if c.HealthState != "unavailable" || c.Reason != "heartbeat_expired" || c.Status == "healthy" {
+				t.Fatalf("stale heartbeat healthy: %+v", c)
+			}
+		case "files":
+			if c.HealthState != "unknown" || c.Reason != "clock_skew" {
+				t.Fatalf("clock skew ignored: %+v", c)
+			}
+		case "executor":
+			if c.Status == "healthy" {
+				t.Fatalf("simulation claimed real health: %+v", c)
+			}
 		}
-		if c.Name == "files" && c.Status != "unknown" {
-			t.Fatal("clock skew ignored")
-		}
-		if c.Name == "executor" && c.Status != "unverified" {
-			t.Fatal("simulation claimed real health")
+	}
+	// A missing row would let every check above pass without running.
+	for _, name := range []string{"daemon", "files", "executor"} {
+		if !seen[name] {
+			t.Fatalf("overview has no %s row: %+v", name, o.Components)
 		}
 	}
 	service.Enabled = false
