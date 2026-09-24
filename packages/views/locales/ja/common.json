@@ -248,7 +248,20 @@
     "text115": "関連トレースなし",
     "text116": "オブジェクトとバージョン",
     "text117": "バージョン未記録",
-    "text118": "このページに表示された分のみ集計"
+    "text118": "このページに表示された分のみ集計",
+    "reasonHealthy": "接続は利用可能です",
+    "reasons": {
+      "config_unknown": "このコンポーネントの設定元がなく、状態は不明です",
+      "liveness_unverified": "設定済みですが、稼働の確認がまだ取れていません",
+      "config_unconfigured": "このコンポーネントは未設定です",
+      "storage_not_configured": "ファイルストレージが未設定です",
+      "heartbeat_without_configuration": "ハートビートを受信しましたが、このコンポーネントは未設定です",
+      "heartbeat_expired": "ハートビートがタイムアウトしました。停止している可能性があります",
+      "clock_skew": "ハートビートの時刻がサーバー時刻より進んでいます。時計がずれている可能性があります",
+      "execution_disabled": "実行はポリシーで無効になっています",
+      "database_connectivity_unavailable": "データベースに接続できません",
+      "heartbeat_missing_timestamp": "ハートビートに時刻がなく、状態を判断できません"
+    }
   },
   "contentAccounts": {
     "title": "アカウント",

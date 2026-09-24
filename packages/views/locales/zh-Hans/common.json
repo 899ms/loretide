@@ -248,7 +248,20 @@
     "text115": "无关联追踪",
     "text116": "对象与版本",
     "text117": "未记录版本",
-    "text118": "仅统计本页出现过的版本"
+    "text118": "仅统计本页出现过的版本",
+    "reasonHealthy": "当前连接可用",
+    "reasons": {
+      "config_unknown": "没有该组件的配置来源，状态未知",
+      "liveness_unverified": "已配置，但还没有收到运行证据",
+      "config_unconfigured": "该组件未配置",
+      "storage_not_configured": "未配置文件存储",
+      "heartbeat_without_configuration": "收到了心跳，但该组件未配置",
+      "heartbeat_expired": "心跳已超时，组件可能已停止",
+      "clock_skew": "心跳时间晚于服务器时间，时钟可能不一致",
+      "execution_disabled": "执行已被策略关闭",
+      "database_connectivity_unavailable": "无法连接数据库",
+      "heartbeat_missing_timestamp": "心跳缺少时间，无法判断状态"
+    }
   },
   "contentAccounts": {
     "title": "账号",

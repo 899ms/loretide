@@ -248,7 +248,20 @@
     "text115": "No linked trace",
     "text116": "Object and versions",
     "text117": "No version recorded",
-    "text118": "Versions seen on this page only"
+    "text118": "Versions seen on this page only",
+    "reasonHealthy": "Connection is available",
+    "reasons": {
+      "config_unknown": "No configuration source for this component; status unknown",
+      "liveness_unverified": "Configured, but no runtime evidence received yet",
+      "config_unconfigured": "This component is not configured",
+      "storage_not_configured": "File storage is not configured",
+      "heartbeat_without_configuration": "Heartbeat received, but this component is not configured",
+      "heartbeat_expired": "Heartbeat timed out; the component may have stopped",
+      "clock_skew": "Heartbeat time is ahead of server time; clocks may differ",
+      "execution_disabled": "Execution is turned off by policy",
+      "database_connectivity_unavailable": "Cannot connect to the database",
+      "heartbeat_missing_timestamp": "Heartbeat has no timestamp; status cannot be determined"
+    }
   },
   "contentAccounts": {
     "title": "Accounts",
