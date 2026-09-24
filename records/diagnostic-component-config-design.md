@@ -104,7 +104,7 @@ search 或 executor configuration 发明来源。
 | 案例 | 断言 |
 |---|---|
 | 宿主来源 | pool 成功建立后的 boot 事实不含连接值；S3/local 成功或两者都无的装配结果分别生成 files 的 configured/unconfigured；现有 policy 只产生 disabled。 |
-| 不作伪 | listener 尚未有 ready 回调时 api health 仍为 unknown；`Store.Check` 成功/失败仅改变 database health，不改变 database config。 |
+| 不作伪 | listener 尚未有 ready 回调时 api 已配置但无活性证据，health 为 unverified（以 spec §3 为准）；`Store.Check` 成功/失败仅改变 database health，不改变 database config。 |
 | 无来源组件 | web/daemon/search 和 executor configuration 在本卡仍为 unknown；现有 browser/daemon heartbeat 不能改变其配置。 |
 | 响应兼容 | 若可选 wire 字段落地，旧客户端忽略字段；新 parser 面对旧后端缺字段回落 unknown/not_applicable，既有 `status`/metrics/scenarios 完整。 |
 | 回归边界 | `ContentDiagnosticClient → Heartbeat("web", ...)` 未变为 registrar；`executionpolicy.Check` 没有 enable 分支；simulation 不写事实。 |
