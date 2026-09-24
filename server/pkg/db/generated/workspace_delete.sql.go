@@ -390,6 +390,12 @@ deleted_content_roi_cost_allocations AS (
 deleted_content_roi_attribution_revisions AS (
     DELETE FROM content_roi_attribution_revision WHERE workspace_id = $1::text
 ),
+deleted_content_roi_import_batches AS (
+    DELETE FROM content_roi_import_batch WHERE workspace_id = $1::text
+),
+deleted_content_roi_import_claims AS (
+    DELETE FROM content_roi_import_claim WHERE workspace_id = $1::text
+),
 deleted_content_accounts AS (
     DELETE FROM content_account WHERE workspace_id = $1::text
 ),
@@ -634,6 +640,9 @@ WHERE channel_media_pending_object.workspace_id = $1
 // a drifting manifest.
 // Cost allocations and attribution judgements (specs/034 PR 2): append-only
 // like the five above, removed here and nowhere else, and registered in the
+// deletion manifest test alongside this.
+// Import batches and Idempotency-Key claims (specs/034 PR 3): append-only
+// like the tables above, removed here and nowhere else, and registered in the
 // deletion manifest test alongside this.
 // Brand content accounts go with the workspace. Registered in the deletion
 // manifest test alongside this, because only doing one of the two leaves
