@@ -1,6 +1,6 @@
 # Contract: 营销节点联动选题（033）
 
-**依据**：`spec.md`（R-056、D14-V01/02/03/08、主控前置决定 1–8）。Q1/Q2/Q3 按推荐值 A 写成；主控裁决不同时，受影响的段落在各节末尾标出。
+**依据**：`spec.md`（R-056、D14-V01/02/03/08、主控前置决定 1–8）。Q1/Q2/Q3 均为 A（主控已裁定 2026-09-25）；D1–D4 同日裁定。
 
 **模块**：`topic-planning`。本合同里的所有 Go 类型都在 `server/internal/content/topic-planning/`，所有 TS 类型都在 `packages/core/content/topic-planning/`。
 
@@ -66,21 +66,33 @@
 
 准备时间、撞期、资料缺口、重复风险、关联理由**不存**，每次读取时算（§5）。存下来就会过期：「今天」每天都在变。
 
-### 1.2 迁移清单（从 540 起；实施时若被占用则整体顺延）
+### 1.2 迁移清单（不预占编号）
+
+**编号规则**（主控 2026-09-25）：不预留 540–548。下表用 `N` 表示「合并前 `app-main` 最大迁移号 + 1」；每个实施 PR 在合并前把自己的迁移改号为紧接当时最大号的连续编号，033 与 034 谁先合并谁先取号。改号时同步改 `concurrentIndexCleanups` 的键。
 
 | 号 | 文件 | 内容 |
 |---|---|---|
-| 540 | `540_content_marketing_node` | 建表 |
-| 541 | `541_content_marketing_node_id_unique_idx` | `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS ... ON content_marketing_node (node_id)` |
-| 542 | `542_content_marketing_node_workspace_idx` | `(workspace_id, created_at DESC)` |
-| 543 | `543_content_marketing_node_revision` | 建表 |
-| 544 | `544_content_marketing_node_revision_id_unique_idx` | `UNIQUE (revision_id)` |
-| 545 | `545_content_marketing_node_revision_node_revision_idx` | `UNIQUE (node_id, revision)`——并发修改的第二道防线（§3.4） |
-| 546 | `546_content_marketing_node_candidate` | 建表 |
-| 547 | `547_content_marketing_node_candidate_id_unique_idx` | `UNIQUE (candidate_id)` |
-| 548 | `548_content_marketing_node_candidate_key_idx` | `UNIQUE (workspace_id, node_id, account_id)`——**候选的幂等键**（FR-019） |
+| N | `N_content_marketing_node` | 建表 |
+| N+1 | `N+1_content_marketing_node_id_unique_idx` | `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS ... ON content_marketing_node (node_id)` |
+| N+2 | `N+2_content_marketing_node_workspace_idx` | `(workspace_id, created_at DESC)` |
+| N+3 | `N+3_content_marketing_node_revision` | 建表 |
+| N+4 | `N+4_content_marketing_node_revision_id_unique_idx` | `CREATE UNIQUE INDEX CONCURRENTLY ... (revision_id)` |
+| N+5 | `N+5_content_marketing_node_revision_node_revision_idx` | `CREATE UNIQUE INDEX CONCURRENTLY ... (node_id, revision)`——并发修改的第二道防线（§3.4） |
+| N+6 | `N+6_content_marketing_node_candidate` | 建表 |
+| N+7 | `N+7_content_marketing_node_candidate_id_unique_idx` | `CREATE UNIQUE INDEX CONCURRENTLY ... (candidate_id)` |
+| N+8 | `N+8_content_marketing_node_candidate_key_idx` | `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS content_marketing_node_candidate_key_idx ON content_marketing_node_candidate (workspace_id, node_id, account_id)`——**候选的幂等键**（FR-019），**单独一个并发索引迁移，一条语句** |
 
-每个文件都有 `.down.sql`。541、542、544、545、547、548 六个登记进 `server/cmd/migrate/main.go` 的 `concurrentIndexCleanups`。
+每个文件都有 `.down.sql`；索引迁移的 down 是一条 `DROP INDEX CONCURRENTLY IF EXISTS ...`（先例 `539_*.down.sql`），建表迁移的 down 是 `DROP TABLE IF EXISTS ...`。N+1、N+2、N+4、N+5、N+7、N+8 六个登记进 `server/cmd/migrate/main.go` 的 `concurrentIndexCleanups`。
+
+**三个建表迁移（N、N+3、N+6）在注释以外不出现 `UNIQUE`、`PRIMARY KEY`、`REFERENCES`、`FOREIGN KEY`、`CASCADE` 任何一个词。** 与仓库检查逐条核对（`server/internal/migrations/content_constraints_test.go`，2026-09-25）：
+
+- 检查先用 `stripSQLTrivia` 把行注释、块注释与**单引号、双引号字符串**替换成空格再匹配，所以注释里写「无外键」不会误报，`CHECK (status IN ('open','adopted'))` 里的字符串也不参与匹配。
+- R5（编号 ≥ 483 的内容迁移）数的是去掉注释后 `UNIQUE` 出现次数减去 `CREATE UNIQUE INDEX` 次数，再加 `PRIMARY KEY` 次数，必须为 0。所以建表文件里连列名都不能叫 `unique...`；本合同的列名都不含这个词。
+- R4 要求含并发索引的文件恰好一条语句（按分号切分），所以每个索引文件只写一条 `CREATE [UNIQUE] INDEX CONCURRENTLY IF NOT EXISTS`，不带 `SET`、不带第二条索引。
+- 文件名都含 `content_`，编号都 ≥ 468，因此都落在检查范围内（`isContentMigration`）。
+- `ON CONFLICT (workspace_id, node_id, account_id)`（§4.1）靠 N+8 这个唯一索引做冲突判定，不需要表上的 `UNIQUE` 约束；先例是 `content/idempotency/request.go:53` 的 `ON CONFLICT` 依靠 539 的并发唯一索引。若该并发索引构建中断成为 INVALID，R6 登记的清理钩子会在重试前把它删掉。
+
+核对结论：原设计与 R1–R6 **没有冲突**，未改动表结构，只把「唯一性全部来自单独的并发索引迁移」写成明文。
 
 ### 1.3 R1–R6 逐条
 
@@ -90,7 +102,7 @@
 | R2 无 `CASCADE` | 适用 |
 | R3 索引必须 `CONCURRENTLY` | 适用，六个 |
 | R4 含并发索引的文件只一条语句 | 适用，六个文件各一条 |
-| R5 建表不内联 `PRIMARY KEY` / `UNIQUE` | 适用，三张表都没有；唯一性全部来自 541/544/545/547/548 |
+| R5 建表不内联 `PRIMARY KEY` / `UNIQUE` | 适用，三张表都没有；唯一性全部来自 N+1、N+4、N+5、N+7、N+8 五个单独的并发唯一索引迁移 |
 | R6 登记 `concurrentIndexCleanups` | 适用，六个 |
 | 工作区删除链 | 三张表加进 `workspace_delete.sql`（删除顺序：候选 → 版本 → 节点，放在 `content_topic_card` 一段附近）与 `workspace_delete_manifest_test.go`（`workspaceDelete`）；重新生成 sqlc |
 
@@ -213,7 +225,7 @@ VALUES ($1, $2, $3, $4)
 ON CONFLICT (workspace_id, node_id, account_id) DO NOTHING
 ```
 
-`ON CONFLICT` 依赖 548 的唯一索引。**不更新任何已有行**：人写的角度、状态、采用记录都不碰（FR-020）。不删除任何行：账号被移出适用范围后，它的候选在读取时标 `in_scope: false`（FR-021）。
+`ON CONFLICT` 依赖 N+8 的并发唯一索引（单独一个迁移）。**不更新任何已有行**：人写的角度、状态、采用记录都不碰（FR-020）。不删除任何行：账号被移出适用范围后，它的候选在读取时标 `in_scope: false`（FR-021）。
 
 注意：节点在「有适用账号」与「没有适用账号」之间切换后，品牌级候选与账号候选可能同时存在，都保留，读取时各自标 `in_scope`。
 
@@ -240,7 +252,7 @@ ON CONFLICT (workspace_id, node_id, account_id) DO NOTHING
 | 其余正文、`channels`、`recommended_action`、`evidence_source_ids` | 空 |
 | `status` | `draft` |
 
-`timing` 模板语言是一个待主控确认的小点（plan.md「主控决定」第 4 条）：服务端只存一种写法，推荐中文，因为本产品的使用者与节点名本身都是中文。
+`timing` 模板语言（plan.md「主控决定」D4，主控已裁定 2026-09-25）：服务端只存一种写法，用中文，因为本产品的使用者与节点名本身都是中文。
 
 ### 4.4 影响清单
 

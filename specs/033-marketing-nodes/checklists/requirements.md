@@ -11,11 +11,11 @@
 - [x] Written for non-technical stakeholders
 - [x] All mandatory sections completed
 
-**说明**：本仓规格按 `docs/development/spec-kit-workflow.md` 第 1 步要求「Current State 以代码为准，给出文件与行号」。Current State、主控前置决定与待裁决项里的文件名、行号、迁移编号是**核实记录**，回答「今天是什么样」；实现方案在 `plan.md` 与 `contracts/marketing-nodes.md`。User Scenarios、Requirements、Success Criteria 按行为写。
+**说明**：本仓规格按 `docs/development/spec-kit-workflow.md` 第 1 步要求「Current State 以代码为准，给出文件与行号」。Current State、主控前置决定与裁决记录里的文件名、行号、迁移编号是**核实记录**，回答「今天是什么样」；实现方案在 `plan.md` 与 `contracts/marketing-nodes.md`。User Scenarios、Requirements、Success Criteria 按行为写。
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [ ] Success criteria are technology-agnostic (no implementation details)
@@ -24,7 +24,7 @@
 - [x] Scope is clearly bounded
 - [x] Dependencies and assumptions identified
 
-**第一项未勾**：Q1（排期缺位）、Q2（日期粒度）、Q3（导入范围）三条待主控裁决。每条带推荐值，推荐值已作为暂定值写进对应 FR（FR-008～FR-017、FR-025、FR-038）。裁决与推荐不同时，改动范围限于那几条 FR 与 tasks.md 顶部注明的任务。另有 plan.md「主控决定」D1–D4 四条，不属于规格的不确定项，属于登记表与小的设计选择。
+**第一项**：Q1（排期缺位）、Q2（日期粒度）、Q3（导入范围）三条均由主控于 2026-09-25 裁定为 A（PR #256 评论），已回写进 spec 的「裁决记录」与对应 FR（FR-008～FR-017、FR-025、FR-038）；plan.md「主控决定」D1–D4 同日裁定。
 
 **第四项未勾**：SC-011、SC-012、SC-013 点了具体的文件与检查名（`content_constraints_test.go`、`router.go`、`check:content-boundaries`）。这是故意的：这三条的验收对象就是「既有的机器检查仍然绿」，脱离名字无法验证。其余 SC 为行为口径。
 
@@ -50,7 +50,7 @@
 
 1. **「日历领域」不存在**（Current State 第 3 节）。BO-01 原文把它列为依赖。文档 12 把「日历关联」划给未落地的 `project-collab`；仓库里唯一的计划时间是作品级交付待办的 `scheduled_at`。本卡没有悄悄新建日历，列为 Q1。
 2. **「账号专属材料」今天不存在**（Current State 第 6 节）。素材没有账号列，授权记录没有存下来。D14-V01 后半句在本版无对象可测，改为一条负例守住将来（FR-045、T033）。
-3. **`Create` 的账号校验在栅栏外**（Current State 第 2 节，`store.go:167`），与 `SetAccount` 注释的规则不一致。本卡不修，记 Out of Scope 10。
+3. **`Create` 的账号校验在栅栏外**（Current State 第 2 节，`store.go:167`），与 `SetAccount` 注释的规则不一致。**后续项**，主控 2026-09-25 确认不在本卡范围，记 Out of Scope 10。
 4. **包级测试没有时区库**：`time/tzdata` 只在 `server/cmd/server/main.go:19` import，节点文件要自己 import 一次（plan 风险表）。
 5. **「简报」在本仓的含义**：简报版本只在「开始」时冻结，而「开始」就是启动创作。所以 R-056 的「采用后创建或关联简报」在本仓只能落为「创建或关联选题卡」（Assumptions）。
 

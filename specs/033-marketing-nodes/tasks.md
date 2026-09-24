@@ -8,7 +8,9 @@ description: "Task list for 033 marketing nodes — BO-01 / R-056"
 
 **改动文件必须在 plan.md → Project Structure 清单内。**
 
-**本文件按 Q1/Q2/Q3 = A 与 D3 = 不加快照字段写成。** 主控裁决不同时：Q3 = B 删 T012、T017、T028、T052 中与导入相关的部分；Q1 = B 在 PR 2 卡片末尾追加一张子卡（新端口 + 适配器 + 撞期规则），不改前面的任务；D3 = 加字段则在 PR 2 追加一条快照任务。
+**裁决**：Q1/Q2/Q3 = A，D1–D4 均批准（主控已裁定 2026-09-25，PR #256 评论）。D1 的两行 `adapters` 由 PR 1、PR 3 各自加上，本规格 PR 不改 `scripts/content-boundaries.json`。
+
+**迁移号**：不预占。下文用 `N`…`N+8` 表示相对顺序；每个实施 PR 合并前把迁移改号为紧接当时 `app-main` 最大号之后的连续编号，033 与 034 谁先合并谁先取号。
 
 **三个 PR 按顺序做，前一个合并后下一个才从 `app-main` 新起分支**（工作流第 7 步）。每个 PR 各自是一个可审查的整体。
 
@@ -45,7 +47,7 @@ ssh ... ~/loretide-ci/lt-verify.sh <branch> all
 
 ## Phase 1: Setup（三个 PR 共用，PR 1 开始时做）
 
-- [ ] T001 读 plan.md「主控决定」D1–D4 的裁决结果，与 spec 的 Q1/Q2/Q3 裁决一起回写进 spec、plan、contract 与本文件；spec 内不再有「暂定」字样
+- [x] T001 裁决已回写进 spec、plan、contract 与本文件（Q1/Q2/Q3 = A，D1–D4 批准，主控 2026-09-25）；spec 内不再有「暂定」字样
 - [ ] T002 记录基线：上面「共用：验证命令」在 `app-main` 上各跑一次，把已知失败（若有）写进 PR 正文，与本卡无关的不修
 - [ ] T003 对着读既有形状：`topic-planning/store.go:83`（`begin`）、`:275-356`（`checkSources` / `SetAccount` 的注释）、`sources.go`（只用字符串的端口）、`contract.go:95-150`（`PatchString` / `DisallowUnknownFields`）、`store_integration_test.go:483`（A6 守卫的写法）、`handler/workspace.go:224-249`（时区校验）、`server/cmd/server/content_topic_routes_test.go`（第 12 步用例）
 
@@ -56,7 +58,7 @@ ssh ... ~/loretide-ci/lt-verify.sh <branch> all
 | 项 | 内容 |
 |---|---|
 | **分支** | `claude/033-pr1-marketing-node-storage`，从 `app-main` 新起 |
-| **文件** | plan.md「PR 1」清单；`adapters` 第一行按 D1 裁决处理 |
+| **文件** | plan.md「PR 1」清单；`adapters` 加 D1 第一行 `server/internal/handler/content_marketing_node.go` |
 | **测试** | 日期纯函数、校验与变更类型判定、store 真实库用例、handler 真实库用例、`cmd/server` 真实路由用例、core zod 畸形用例、CSV 纯函数用例、迁移规则文本检查 |
 | **验收** | D14-V01（节点：两品牌同名互不可见、同形 404、导入判重不跨品牌）；D14-V02（时区换日、跨年、夏令时、提前量未设 ≠ 0）；D14-V03（版本只插、并发修改 409） |
 | **不含** | 候选、采用、影响、页面 |
@@ -64,13 +66,13 @@ ssh ... ~/loretide-ci/lt-verify.sh <branch> all
 
 ### 迁移（PR 1）
 
-- [ ] T004 写 `server/migrations/540_content_marketing_node.{up,down}.sql`，列照 contract §1.1；文件头注释写明「无外键、无级联、无内联主键 / 唯一（R1/R2/R5），唯一性来自 541」— **FR-003、FR-004、FR-046**
-- [ ] T005 [P] 写 541 / 542 两个并发索引迁移，各一条语句 — **FR-046**
-- [ ] T006 写 `543_content_marketing_node_revision.{up,down}.sql`；`lead_days integer` **可空**，注释写明 NULL = 未设置、0 = 不需要准备 — **FR-001、FR-005、FR-013**
-- [ ] T007 [P] 写 544 / 545 两个并发唯一索引迁移；545 的注释写明它是并发修改的第二道防线 — **FR-005、FR-007**
-- [ ] T008 写 `546_content_marketing_node_candidate.{up,down}.sql`；`account_id text NOT NULL DEFAULT ''`，注释写明为什么不用 NULL — **FR-019**
-- [ ] T009 [P] 写 547 / 548；548 是候选幂等键 `(workspace_id, node_id, account_id)` — **FR-019**
-- [ ] T010 `server/cmd/migrate/main.go` 的 `concurrentIndexCleanups` 加六行（541/542/544/545/547/548）；跑 `go test ./internal/migrations/ ./cmd/migrate/`，确认 R1–R6 全绿 — **FR-046、SC-011**
+- [ ] T004 写 `server/migrations/<N>_content_marketing_node.{up,down}.sql`，列照 contract §1.1；注释以外不出现 `UNIQUE` / `PRIMARY KEY` / `REFERENCES` / `FOREIGN KEY` / `CASCADE`；文件头注释写明「唯一性来自 N+1 的并发索引」— **FR-003、FR-004、FR-046**
+- [ ] T005 [P] 写 N+1 / N+2 两个并发索引迁移，各一条语句 — **FR-046**
+- [ ] T006 写 `<N+3>_content_marketing_node_revision.{up,down}.sql`（建表，同 T004 的五个词禁用）；`lead_days integer` **可空**，注释写明 NULL = 未设置、0 = 不需要准备 — **FR-001、FR-005、FR-013**
+- [ ] T007 [P] 写 N+4 / N+5 两个并发唯一索引迁移；N+5 的注释写明它是并发修改的第二道防线 — **FR-005、FR-007**
+- [ ] T008 写 `<N+6>_content_marketing_node_candidate.{up,down}.sql`（建表，同 T004 的五个词禁用，**不在表上写唯一约束**）；`account_id text NOT NULL DEFAULT ''`，注释写明为什么不用 NULL — **FR-019**
+- [ ] T009 [P] 写 N+7 / N+8；N+8 是候选幂等键 `(workspace_id, node_id, account_id)`，**单独一个文件、一条 `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS` 语句** — **FR-019**
+- [ ] T010 `server/cmd/migrate/main.go` 的 `concurrentIndexCleanups` 加六行（N+1/N+2/N+4/N+5/N+7/N+8）；跑 `go test ./internal/migrations/ ./cmd/migrate/`，确认 R1–R6 全绿 — **FR-046、SC-011**
 - [ ] T011 删除链：`workspace_delete.sql` 加三段（候选 → 版本 → 节点），重新生成 sqlc；`workspace_delete_manifest_test.go` 加三行 `workspaceDelete` — **FR-047**
 
 ### 领域：类型、校验、日期（PR 1，先写测试）
@@ -99,7 +101,7 @@ ssh ... ~/loretide-ci/lt-verify.sh <branch> all
 - [ ] T027 **先写** `content_marketing_node_test.go` 的 handler 真实库用例：400 指名字段、404 同形、409 — **FR-042、FR-043**
 - [ ] T028 core：`packages/core/api/client.ts` 八个方法；`marketing-nodes.ts` 的节点、版本、导入结果三种 zod；`lead_days` 缺失 / `null` → `{set:false}`；未知 `phase` / `change_kind` 读成 `{kind:"unknown", raw}`；`marketing-nodes.test.ts` 三种形状各三类畸形；`marketing-node-import.ts` + 用例（引号内逗号、空行、BOM、列数不对、`lead_days` 空与 0）；`queries.ts` hooks（key 含 `wsId`） — **FR-051、SC-002、SC-015**
 - [ ] T029 PR 1 变异 M1、M2、M3（Go 与 core 各一次）、M7、M8、M10，每条先红后还原，PR 正文逐条列出变红的用例名 — **SC-001～SC-003、SC-009**
-- [ ] T030 PR 1 验证：「共用：验证命令」全部 + 远程验收；PR 正文列 R1–R6 逐条复核表（contract §1.3）与迁移 up / down 实测结果 — **SC-011、SC-013**
+- [ ] T030 PR 1 验证：合并前把 9 个迁移改号为紧接当时 `app-main` 最大号的连续编号（033 与 034 谁先合并谁先取号），同步 `concurrentIndexCleanups` 的键，改号后重跑迁移规则检查；然后「共用：验证命令」全部 + 远程验收；PR 正文列 R1–R6 逐条复核表（contract §1.3）与迁移 up / down 实测结果 — **SC-011、SC-013**
 
 ---
 
@@ -111,7 +113,7 @@ ssh ... ~/loretide-ci/lt-verify.sh <branch> all
 | **文件** | plan.md「PR 2」清单 |
 | **测试** | 读时计算纯函数（撞期、缺口、重复风险、关联理由）、候选 store 真实库用例（幂等、并发、采用、挂卡、影响）、下游表守卫、handler 与真实路由用例、core 畸形用例 |
 | **验收** | D14-V01（候选与采用：用对方卡挂 404、候选不部分写入）；D14-V02（候选显示关联理由、缺口与来源；采用前不启动创作——6 张下游表行数零变化）；D14-V03（重复整理不重复、重复采用不重复建卡、改期 / 取消列出受影响卡、历史快照与已发布记录逐字节不变） |
-| **不含** | 页面；交付待办参与撞期（Q1=A）；开始快照扩展字段（D3 推荐不加） |
+| **不含** | 页面；交付待办参与撞期（Q1=A）；开始快照扩展字段（D3 已定不加）；`store.go:167` 栅栏外账号校验的修正（后续项） |
 | **验证** | 「共用：验证命令」全部 + 远程验收 `lt-verify.sh <branch> all` |
 
 ### 读时计算（PR 2，先写测试）
@@ -152,7 +154,7 @@ ssh ... ~/loretide-ci/lt-verify.sh <branch> all
 | 项 | 内容 |
 |---|---|
 | **分支** | `claude/033-pr3-marketing-node-page`，PR 2 合并后从 `app-main` 新起 |
-| **文件** | plan.md「PR 3」清单；`adapters` 第二行按 D1 裁决处理 |
+| **文件** | plan.md「PR 3」清单；`adapters` 加 D1 第二行 `apps/web/app/[workspaceSlug]/(dashboard)/marketing-nodes/page.tsx` |
 | **测试** | **零 UI 单测**（宪法 II）。只有 core 的表单状态纯函数用例、`route-icons.test.ts`（既有覆盖用例，不改）、`locales/parity.test.ts`（既有） |
 | **验收** | `manual-ui-todo.md` 全部条目，由用户在浏览器逐条验收；D14-V08 **前半段**（节点 → 候选 → 选题卡 → 既有作品与手工反馈流程）；D14-V08「→ 诊断」一段**未执行（依赖 BO-02）**；「模拟与联网分别标识」**本卡无此对象** |
 | **验证** | `pnpm typecheck --force`、`pnpm check:content-boundaries`、core vitest、`locales/parity.test.ts` + 远程验收 `lt-verify.sh <branch> all`。**不用 computer use，不写 UI 单测** |
@@ -171,8 +173,8 @@ ssh ... ~/loretide-ci/lt-verify.sh <branch> all
 
 ## Phase Final: 收尾（每个 PR 各自做）
 
-- [ ] T059 核对「明确不动」清单（plan.md）：`git diff --stat app-main...HEAD` 里不出现 `content-boundaries.json`（除 D1 裁决允许的行）、`snapshot.go`、`review-delivery/`、`work-editor/`、`feedback-learning/`、`source-inbox/`、`today/page.tsx` — **FR-052、SC-013**
-- [ ] T060 PR 正文按工作流第 10 节写全七节（改动与用途、命令与退出码、变异验证、未验证项、UI 影响、手动 UI Todo、回滚）；回滚写明 540–548 的 `.down.sql` 需逆序另跑，并说明是否实测过可逆 — **SC-011**
+- [ ] T059 核对「明确不动」清单（plan.md）：`git diff --stat app-main...HEAD` 里不出现 `content-boundaries.json`（除 D1 批准、由本 PR 负责的那一行）、`snapshot.go`、`review-delivery/`、`work-editor/`、`feedback-learning/`、`source-inbox/`、`today/page.tsx` — **FR-052、SC-013**
+- [ ] T060 PR 正文按工作流第 10 节写全七节（改动与用途、命令与退出码、变异验证、未验证项、UI 影响、手动 UI Todo、回滚）；回滚写明本 PR 最终迁移号的 `.down.sql` 需逆序另跑，并说明是否实测过可逆 — **SC-011**
 
 ---
 
