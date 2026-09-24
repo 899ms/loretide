@@ -98,7 +98,7 @@ description: "Implementation plan for 033 marketing nodes — BO-01 / R-056"
 | V 无外键无级联、并发索引 | 通过 | contract §1.3 逐条；6 个索引各一个文件并登记 R6 |
 | VI 响应必解析 | 通过 | 五种响应形状各有 zod 与畸形用例；未知枚举读成「未知」保留原值 |
 | VII UI 复用 Multica | 通过 | 设置页布局与既有组件；先读 `docs/development/design/README.md` |
-| VIII 范围 | 通过 | 日历、项目、AI 候选、联网、今日工作台、卡上反向显示、`Create` 栅栏外校验，全部记 Out of Scope |
+| VIII 范围 | 通过 | 日历、项目、AI 候选、联网、今日工作台、卡上反向显示、`Create` 栅栏外校验（已由 #261 修复，2026-09-25），全部记 Out of Scope |
 | IX 执行器禁用 | 通过 | 候选全由确定规则与人工输入产生；守卫断言不 import 执行器 |
 | X 勾选不等于验收 | 通过 | `tasks.md` 回勾只表示交付 |
 
@@ -205,7 +205,7 @@ specs/033-marketing-nodes/manual-ui-todo.md
 - `content_brief_revision`、`content_start_snapshot` 的任何语句；`snapshot.go`（D3 已定不加）
 - `review-delivery`、`work-editor`、`feedback-learning`、`source-inbox` 的任何文件
 - `normalizeStrings`、`NormalizeSourceIDs`（只调用，不改）
-- `Create` 的对外行为（PR 2 只把 INSERT 抽出，账号校验位置不在本卡修，记 Out of Scope 10）
+- `Create` 的对外行为（PR 2 只把 INSERT 抽出，账号校验位置不在本卡修，记 Out of Scope 10；已由 #261 修复，2026-09-25）
 - 今日工作台 `today/page.tsx`
 
 ---
@@ -227,7 +227,7 @@ specs/033-marketing-nodes/manual-ui-todo.md
 | 风险 | 为什么真实 | 对策 |
 |---|---|---|
 | **迁移号与并行分支撞号** | 033 与 034 同时在做，都要新迁移 | 不预占编号；每个实施 PR 合并前按当时 `app-main` 最大号改号，谁先合并谁先取号；改号后重跑迁移规则检查与 `cmd/migrate` 登记用例 |
-| **抽出 `Create` 的 INSERT 时改了 `Create` 的行为** | 抽函数最容易顺手把栅栏外的账号校验也挪进来——那是「顺手修」（宪法 VIII） | PR 2 只移动 INSERT 与素材校验到一个接收 `pgx.Tx` 的函数；`Create` 的既有用例全部一行不改且绿；账号校验位置（`store.go:167`，在栅栏外）是**后续项**，主控已确认不在本卡范围（spec Out of Scope 10） |
+| **抽出 `Create` 的 INSERT 时改了 `Create` 的行为** | 抽函数最容易顺手把栅栏外的账号校验也挪进来——那是「顺手修」（宪法 VIII） | PR 2 只移动 INSERT 与素材校验到一个接收 `pgx.Tx` 的函数；`Create` 的既有用例全部一行不改且绿；账号校验位置（`store.go:167`，在栅栏外）是**后续项**，主控已确认不在本卡范围（spec Out of Scope 10；已由 #261 修复，2026-09-25） |
 | **按 24 小时算天数** | 最自然的写法 `start.Add(-time.Duration(n)*24*time.Hour)` 在夏令时切换日差一小时，跨午夜时会差一天 | contract §3.2 规定日期三元组；SC-003 的纽约用例专门抓这个；变异 M2 |
 | **「今天」用服务器时区或 UTC** | 服务器在 UTC，上海 00:30 时 UTC 还是前一天 | FR-014 + SC-003 上海 / 洛杉矶同一时刻两个用例；变异 M1 |
 | **包级测试读不到时区库** | `time/tzdata` 只在 `main` 包 import，Windows 上没有系统时区库 | 节点文件自己 `import _ "time/tzdata"`（标准库，边界检查允许） |
