@@ -128,6 +128,7 @@
     "server/internal/handler/content_roi_preview.go",
     "apps/web/app/[workspaceSlug]/(dashboard)/marketing-nodes/page.tsx",
     "server/internal/handler/content_roi_import.go",
-    "server/internal/handler/content_roi_report.go"
+    "server/internal/handler/content_roi_report.go",
+    "apps/web/app/[workspaceSlug]/(dashboard)/roi-review/page.tsx"
   ]
 }

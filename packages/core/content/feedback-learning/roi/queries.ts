@@ -9,6 +9,9 @@ import {
   parseRoiDeal,
   parseRoiDealDetail,
   parseRoiDealList,
+  parseRoiImportBatch,
+  parseRoiImportList,
+  parseRoiImportResult,
   parseRoiLead,
   parseRoiLeadDetail,
   parseRoiLeadList,
@@ -24,6 +27,8 @@ import {
   type RoiCostHistory,
   type RoiDeal,
   type RoiDealDetail,
+  type RoiImportBatch,
+  type RoiImportResult,
   type RoiLead,
   type RoiLeadDetail,
   type RoiReportVersion,
@@ -79,6 +84,8 @@ export const roiKeys = {
     ["contentRoi", workspaceId, "reportVersions", reportId] as const,
   reportVersion: (workspaceId: string, reportId: string, versionNo: number) =>
     ["contentRoi", workspaceId, "reportVersion", reportId, versionNo] as const,
+  imports: (workspaceId: string) => ["contentRoi", workspaceId, "imports"] as const,
+  importBatch: (workspaceId: string, batchId: string) => ["contentRoi", workspaceId, "importBatch", batchId] as const,
 };
 
 export function useRoiCosts(workspaceId: string, params: RoiListParams = {}) {
@@ -227,4 +234,41 @@ export function useRoiReportVersion(workspaceId: string, reportId: string, versi
  */
 export function useGenerateRoiReport(workspaceId: string) {
   return useRoiWrite<RoiReportVersion | null>(workspaceId, parseRoiReportVersion);
+}
+
+// ---------------------------------------------------------------- imports (PR 3, page in PR 5)
+
+/** GET imports: the batch list, newest first. */
+export function useRoiImports(workspaceId: string) {
+  return useQuery<RoiImportBatch[]>({
+    queryKey: roiKeys.imports(workspaceId),
+    queryFn: async () => parseRoiImportList(await api.contentROIGet("imports")),
+  });
+}
+
+/** GET imports/{batchId}: one batch with every row's outcome. */
+export function useRoiImport(workspaceId: string, batchId: string) {
+  return useQuery<RoiImportBatch | null>({
+    queryKey: roiKeys.importBatch(workspaceId, batchId),
+    queryFn: async () => parseRoiImportBatch(await api.contentROIGet(roiPath("imports", batchId))),
+    enabled: batchId !== "",
+  });
+}
+
+/**
+ * POST imports. `body` is toRoiImportBody's output. A dry run sends no key
+ * and changes nothing, so it invalidates nothing. A real import sends the
+ * caller's Idempotency-Key: the caller keeps one key per import action
+ * (roiImportAttempt), so pressing import again with the same rows - after a
+ * timeout, say - replays the first answer instead of writing twice.
+ */
+export function useImportRoiRows(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation<RoiImportResult | null, Error, { body: Record<string, unknown>; idempotencyKey?: string }>({
+    mutationFn: async ({ body, idempotencyKey }) =>
+      parseRoiImportResult(await api.contentROIImport(body, body.dry_run === true ? undefined : idempotencyKey)),
+    onSuccess: (result) => {
+      if (result && !result.dryRun) void client.invalidateQueries({ queryKey: roiKeys.all(workspaceId) });
+    },
+  });
 }
