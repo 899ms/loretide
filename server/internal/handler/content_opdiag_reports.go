@@ -93,6 +93,23 @@ func (a opdiagAccounts) CurrentProfile(ctx context.Context, workspaceID, account
 	}, nil
 }
 
+// opdiagReadError maps what an owning module's read says about a workspace
+// that is not there - deleted, or never this caller's - to the module's
+// ErrNotFound, and anything else to ErrStorage. The operating rules are read
+// from the workspace row itself, so once a workspace deletion has committed
+// that read is the first to find nothing; answering it as a storage failure
+// would make a fenced generation a 503 instead of the same 404 every other
+// fenced write gives.
+func opdiagReadError(err error) error {
+	switch {
+	case errors.Is(err, workspacecore.ErrNotFound), errors.Is(err, reviewdelivery.ErrNotFound),
+		errors.Is(err, feedbacklearning.ErrNotFound):
+		return feedbacklearning.ErrNotFound
+	default:
+		return feedbacklearning.ErrStorage
+	}
+}
+
 // opdiagRules answers the brand's operating rules through workspace-core's
 // store, and its timezone the way the ROI records read it.
 type opdiagRules struct {
@@ -106,7 +123,7 @@ func (r opdiagRules) OperatingRules(ctx context.Context, workspaceID string) (fe
 	}
 	rules, err := r.store.ReadRules(ctx, workspaceID)
 	if err != nil {
-		return feedbacklearning.DiagOperatingRules{}, feedbacklearning.ErrStorage
+		return feedbacklearning.DiagOperatingRules{}, opdiagReadError(err)
 	}
 	return feedbacklearning.DiagOperatingRules{Cadence: rules.Cadence, Observation: rules.Observation}, nil
 }
@@ -172,7 +189,7 @@ func (d opdiagDelivery) Publications(ctx context.Context, workspaceID, actor str
 	}
 	records, err := d.store.ListPublications(ctx, workspaceID, actor, "")
 	if err != nil {
-		return nil, feedbacklearning.ErrStorage
+		return nil, opdiagReadError(err)
 	}
 	out := make([]feedbacklearning.DiagPublication, 0, len(records))
 	for _, record := range records {
@@ -190,7 +207,7 @@ func (d opdiagDelivery) Reviews(ctx context.Context, workspaceID, actor string) 
 	}
 	reviews, err := d.store.ListReviews(ctx, workspaceID, actor, "", "")
 	if err != nil {
-		return nil, feedbacklearning.ErrStorage
+		return nil, opdiagReadError(err)
 	}
 	out := make([]feedbacklearning.DiagReview, 0, len(reviews))
 	for _, review := range reviews {
@@ -208,7 +225,7 @@ func (d opdiagDelivery) Tasks(ctx context.Context, workspaceID, actor string) ([
 	}
 	tasks, err := d.store.ListTasks(ctx, workspaceID, actor, "", "")
 	if err != nil {
-		return nil, feedbacklearning.ErrStorage
+		return nil, opdiagReadError(err)
 	}
 	out := make([]feedbacklearning.DiagDeliveryTask, 0, len(tasks))
 	for _, task := range tasks {

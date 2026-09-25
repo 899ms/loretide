@@ -14,6 +14,8 @@ import (
 	"time"
 
 	feedbacklearning "github.com/multica-ai/multica/server/internal/content/feedback-learning"
+	reviewdelivery "github.com/multica-ai/multica/server/internal/content/review-delivery"
+	workspacecore "github.com/multica-ai/multica/server/internal/content/workspace-core"
 	"github.com/multica-ai/multica/server/internal/testutil"
 )
 
@@ -615,5 +617,19 @@ func TestContentOpDiagRefusalsAnswerLikeMissingRecords(t *testing.T) {
 	}
 	if rows := opdiagRows(t, "content_opdiag_report_version", fx.wsID); rows != 1 {
 		t.Fatalf("%d report rows after refusals, want 1", rows)
+	}
+}
+
+// A read that finds the workspace gone answers ErrNotFound, so a generation
+// after a committed deletion is the same 404 as every other fenced write;
+// only a real failure is ErrStorage. No database.
+func TestOpdiagReadErrorsMapAMissingWorkspaceToNotFound(t *testing.T) {
+	for _, err := range []error{workspacecore.ErrNotFound, reviewdelivery.ErrNotFound, feedbacklearning.ErrNotFound} {
+		if got := opdiagReadError(fmt.Errorf("read: %w", err)); !errors.Is(got, feedbacklearning.ErrNotFound) {
+			t.Errorf("%v -> %v, want ErrNotFound", err, got)
+		}
+	}
+	if got := opdiagReadError(errors.New("connection reset")); !errors.Is(got, feedbacklearning.ErrStorage) {
+		t.Errorf("a database failure -> %v, want ErrStorage", got)
 	}
 }

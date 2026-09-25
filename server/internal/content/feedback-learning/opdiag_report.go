@@ -405,6 +405,10 @@ func (s *DiagnosisStore) GetDiagnosisReportVersion(ctx context.Context, workspac
 	}
 	params.GeneratedAt = now.UTC().Format(time.RFC3339)
 	_, current, err := s.gatherDiagnosisInputs(ctx, workspaceID, actor, params, true)
+	if errors.Is(err, ErrNotFound) {
+		// The workspace itself is gone: answered like any missing record.
+		return DiagnosisReportVersion{}, ErrNotFound
+	}
 	if err != nil {
 		return DiagnosisReportVersion{}, ErrStorage
 	}
