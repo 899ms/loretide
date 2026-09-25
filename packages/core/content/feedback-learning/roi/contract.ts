@@ -781,7 +781,10 @@ function toMetric(wire: z.infer<typeof metricSchema>): RoiMetric {
 /** A computed report (POST preview). null when the response is malformed. */
 export function parseRoiResult(data: unknown): RoiResult | null {
   const parsed = parseWithFallback<z.infer<typeof resultSchema> | null>(data, resultSchema, null, { endpoint: "content-roi/result" });
-  if (!parsed) return null;
+  return parsed ? toResult(parsed) : null;
+}
+
+function toResult(parsed: z.infer<typeof resultSchema>): RoiResult {
   const metrics: Partial<Record<string, RoiMetric>> = {};
   for (const [id, metric] of Object.entries(parsed.metrics)) {
     metrics[id] = toMetric(metric);
@@ -948,4 +951,127 @@ export function parseRoiImportBatch(data: unknown): RoiImportBatch | null {
 export function parseRoiImportList(data: unknown): RoiImportBatch[] {
   const parsed = parseWithFallback<z.infer<typeof importListSchema>>(data, importListSchema, { imports: [] }, { endpoint: "content-roi/imports" });
   return (parsed.imports ?? []).map(toImportBatch);
+}
+
+// ---------------------------------------------------------------- report versions (PR 4)
+//
+// A stored report version, contract §1.10 and §6. The result is the stored
+// one, shown as stored: a version is never recomputed on the page. Whether
+// the records have moved on since is the server's derivation
+// (inputs_changed), and the AI explanation is always "pending_data" - a
+// response that says anything else is read as pending_data, never as a
+// generated explanation.
+
+export interface RoiReportVersionHeader {
+  reportId: string;
+  versionNo: number;
+  title: string;
+  calcVersion: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+/** One record that differs between what a version read and what generating
+ *  now would read. reportRevision null: new since; currentRevision null: no
+ *  longer read (voided, or out of the window). */
+export interface RoiChangedInput {
+  kind: string;
+  id: string;
+  reportRevision: number | null;
+  currentRevision: number | null;
+}
+
+export interface RoiReportRecordKey {
+  kind: string;
+  id: string;
+  revision: number;
+}
+
+export interface RoiReportVersion extends RoiReportVersionHeader {
+  /** The params as used (contract §5.1), passed through untouched. */
+  params: Record<string, unknown>;
+  /** Which record revisions the version read. */
+  inputRecords: RoiReportRecordKey[];
+  result: RoiResult;
+  inputsChanged: boolean;
+  changedInputs: RoiChangedInput[];
+  aiExplanation: "pending_data";
+}
+
+const reportHeaderSchema = z.object({
+  report_id: z.string(),
+  version_no: z.number().int(),
+  title: text,
+  calc_version: z.string(),
+  created_by: text,
+  created_at: text,
+});
+
+const changedInputSchema = z.object({
+  kind: z.string(),
+  id: z.string(),
+  report_revision: z.number().int().nullable().optional(),
+  current_revision: z.number().int().nullable().optional(),
+});
+
+const reportVersionSchema = reportHeaderSchema.extend({
+  params: z.record(z.string(), z.unknown()),
+  inputs: z.object({
+    records: z.array(z.object({ kind: z.string(), id: z.string(), revision: z.number().int() })).nullable().optional(),
+  }),
+  result: resultSchema,
+  inputs_changed: z.boolean(),
+  changed_inputs: z.array(changedInputSchema).nullable().optional(),
+  ai_explanation: z.literal("pending_data").catch("pending_data"),
+});
+
+const reportListSchema = z.object({ reports: z.array(reportHeaderSchema).nullable().optional() });
+
+const reportVersionListSchema = z.object({
+  report_id: z.string(),
+  versions: z.array(reportHeaderSchema).nullable().optional(),
+});
+
+function toReportHeader(wire: z.infer<typeof reportHeaderSchema>): RoiReportVersionHeader {
+  return {
+    reportId: wire.report_id,
+    versionNo: wire.version_no,
+    title: wire.title ?? "",
+    calcVersion: wire.calc_version,
+    createdBy: wire.created_by ?? "",
+    createdAt: wire.created_at ?? "",
+  };
+}
+
+/** One stored version (GET or either POST). null when malformed. */
+export function parseRoiReportVersion(data: unknown): RoiReportVersion | null {
+  const parsed = parseWithFallback<z.infer<typeof reportVersionSchema> | null>(data, reportVersionSchema, null, { endpoint: "content-roi/report-version" });
+  if (!parsed) return null;
+  return {
+    ...toReportHeader(parsed),
+    params: parsed.params,
+    inputRecords: (parsed.inputs.records ?? []).map((record) => ({ kind: record.kind, id: record.id, revision: record.revision })),
+    result: toResult(parsed.result),
+    inputsChanged: parsed.inputs_changed,
+    changedInputs: (parsed.changed_inputs ?? []).map((change) => ({
+      kind: change.kind,
+      id: change.id,
+      reportRevision: change.report_revision ?? null,
+      currentRevision: change.current_revision ?? null,
+    })),
+    aiExplanation: "pending_data",
+  };
+}
+
+/** GET reports: the latest version of each report. [] when malformed. */
+export function parseRoiReportList(data: unknown): RoiReportVersionHeader[] {
+  const parsed = parseWithFallback<z.infer<typeof reportListSchema>>(data, reportListSchema, { reports: [] }, { endpoint: "content-roi/reports" });
+  return (parsed.reports ?? []).map(toReportHeader);
+}
+
+/** GET reports/{reportId}/versions. null when malformed. */
+export function parseRoiReportVersionList(data: unknown): { reportId: string; versions: RoiReportVersionHeader[] } | null {
+  const parsed = parseWithFallback<z.infer<typeof reportVersionListSchema> | null>(data, reportVersionListSchema, null, { endpoint: "content-roi/report-versions" });
+  if (!parsed) return null;
+  return { reportId: parsed.report_id, versions: (parsed.versions ?? []).map(toReportHeader) };
 }

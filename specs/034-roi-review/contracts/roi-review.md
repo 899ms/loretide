@@ -165,12 +165,22 @@
 | `report_id`, `version_no` integer | 稳定键对 |
 | `title` | ≤200 rune |
 | `params` jsonb NOT NULL | §5.1 |
-| `inputs` jsonb NOT NULL | 参与记录 `[{kind, id, revision}]`，以及计算时读到的各修订内容的完整副本（复算不依赖原表是否还在） |
+| `inputs` jsonb NOT NULL | `records`：参与记录 `[{kind, id, revision}]`，即下文的「计入集」；另存计算时读到的各修订内容的完整副本（复算不依赖原表是否还在） |
 | `calc_version` text NOT NULL | 如 `roi-calc/1` |
 | `result` jsonb NOT NULL | §5.2 |
 | `created_by`, `created_at` | |
 
 **没有 AI 解释表**（FR-061）。
+
+**计入集**（主控已裁定 2026-09-25，PR #266）：计算器实际用到的记录的 `(kind, id, 最新修订号)`，按计算器自己的窗口、范围与合并规则取：
+
+- 成本：有份额（或整笔）落在窗口与范围内的；
+- 成交：窗口内成交的（成交是品牌层面的数，范围不收窄），连同它截至 `generated_at` 的退款/调整、它最新的归因判断、判断采信的全部触点（范围外的触点也决定分配比例，所以都算）；
+- 线索：窗口内首次登记、在品牌层面计数的线索，以及合并进它的线索，各取最新修订（阶段来自全部修订，任何新修订都会改变它）。
+
+**「输入已有更新」**（FR-055）读时派生、不存储：用该版本保存的 `params` 重新读一次记录，算出现在的计入集，与保存的 `records` 逐 id 比修订号。只有计入集里的记录有了新修订、离开了计入集（作废、被合并、移出窗口或范围），或有记录新进入计入集（新登记、移入窗口或范围）时才为真，并在 `changed_inputs` 里逐条列出（`report_revision` 为 null = 新进入，`current_revision` 为 null = 不再计入）。窗口外、范围外、生成时间之后的记录的修订不改变计入集，不会触发。
+
+**读快照后再写**（主控已裁定 2026-09-25，PR #266）：生成版本时先在一个 REPEATABLE READ 只读快照里读记录并计算，再开写事务；写事务的第一句仍是工作区删除栅栏，然后在按报告加的锁下取下一个版本号并插入一行。读与写之间落下的记录不会丢：它不在这一版的计入集里，之后读这一版时会经「输入已有更新」显示出来。
 
 ---
 
@@ -361,7 +371,7 @@
 | 4 | POST | `/reports` | 新报告 + 版本 1 |
 | 4 | GET | `/reports` | 每份报告的最新版本 |
 | 4 | GET | `/reports/{reportId}/versions` | 版本列表 |
-| 4 | GET | `/reports/{reportId}/versions/{versionNo}` | 一版，含派生的 `inputs_changed` |
+| 4 | GET | `/reports/{reportId}/versions/{versionNo}` | 一版，含派生的 `inputs_changed` 与 `changed_inputs`（按 §1.10 的计入集比较）；`versionNo` 不是正整数时与不存在同形 |
 | 4 | POST | `/reports/{reportId}/versions` | 生成新版本 |
 
 成本的分摊（PR 2）是 `POST /costs` 与 `/costs/{costId}/revisions` 请求体里的可选 `allocations` 字段；PR 1 的这两个端点收到非空 `allocations` 时返回 400 点名 `allocations`（PR 2 放开）。

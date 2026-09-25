@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_roi_report_version_key_idx;

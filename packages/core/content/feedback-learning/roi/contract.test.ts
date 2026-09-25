@@ -34,6 +34,9 @@ import {
   parseRoiLead,
   parseRoiLeadDetail,
   parseRoiLeadList,
+  parseRoiReportList,
+  parseRoiReportVersion,
+  parseRoiReportVersionList,
   parseRoiResult,
   parseRoiTouch,
   roiPath,
@@ -429,5 +432,67 @@ describe("import responses", () => {
   it("degrades a malformed list to empty", () => {
     expect(parseRoiImportList({ imports: [{ ...importBatchWire, rows: "x" }] })).toEqual([]);
     expect(parseRoiImportList("nope")).toEqual([]);
+  });
+});
+
+// specs/034 PR 4: stored report versions.
+const headerWire = {
+  report_id: "r1", version_no: 1, title: "九月复盘", calc_version: "roi-calc/1",
+  created_by: "u1", created_at: "2026-10-01T00:00:00Z",
+};
+
+const versionWire = {
+  ...headerWire,
+  params: { window: { start: "2026-09-01", end: "2026-09-30", timezone: "Asia/Shanghai" }, report_currency: "CNY" },
+  inputs: { records: [{ kind: "cost", id: "c-1", revision: 1 }], costs: [] },
+  result: resultWire,
+  inputs_changed: true,
+  changed_inputs: [
+    { kind: "cost", id: "c-1", report_revision: 1, current_revision: 2 },
+    { kind: "deal", id: "d-9", report_revision: null, current_revision: 1 },
+  ],
+  ai_explanation: "pending_data",
+};
+
+describe("a stored report version", () => {
+  it("reads the stored result, the derived change list and the input keys", () => {
+    const version = parseRoiReportVersion(versionWire);
+    expect(version?.versionNo).toBe(1);
+    expect(version?.result.metrics.business_roi?.display).toBe("200.00%");
+    expect(version?.result.rules).toContain("阶段是自由文本，没有先后顺序；转化率只按线索是否到达过某阶段计算，不反映阶段之间的先后。");
+    expect(version?.inputsChanged).toBe(true);
+    expect(version?.changedInputs).toEqual([
+      { kind: "cost", id: "c-1", reportRevision: 1, currentRevision: 2 },
+      { kind: "deal", id: "d-9", reportRevision: null, currentRevision: 1 },
+    ]);
+    expect(version?.inputRecords).toEqual([{ kind: "cost", id: "c-1", revision: 1 }]);
+    expect(version?.params.report_currency).toBe("CNY");
+  });
+
+  it("never reads an AI explanation other than pending_data", () => {
+    expect(parseRoiReportVersion({ ...versionWire, ai_explanation: "generated" })?.aiExplanation).toBe("pending_data");
+    expect(parseRoiReportVersion({ ...versionWire, ai_explanation: undefined })?.aiExplanation).toBe("pending_data");
+  });
+
+  it("degrades malformed versions and lists", () => {
+    expect(parseRoiReportVersion({ ...versionWire, version_no: "1" })).toBeNull();
+    expect(parseRoiReportVersion({ ...versionWire, inputs_changed: "yes" })).toBeNull();
+    expect(parseRoiReportVersion({
+      ...versionWire,
+      result: { ...resultWire, metrics: { business_roi: { ...resultWire.metrics.business_roi, value: 2 } } },
+    })).toBeNull();
+    expect(parseRoiReportVersion({ ...versionWire, result: undefined })).toBeNull();
+    expect(parseRoiReportVersion(null)).toBeNull();
+
+    expect(parseRoiReportList({ reports: [headerWire] })).toEqual([{
+      reportId: "r1", versionNo: 1, title: "九月复盘", calcVersion: "roi-calc/1",
+      createdBy: "u1", createdAt: "2026-10-01T00:00:00Z",
+    }]);
+    expect(parseRoiReportList({ reports: [{ ...headerWire, version_no: 1.5 }] })).toEqual([]);
+    expect(parseRoiReportList("x")).toEqual([]);
+
+    expect(parseRoiReportVersionList({ report_id: "r1", versions: [headerWire, { ...headerWire, version_no: 2 }] })?.versions
+      .map((v) => v.versionNo)).toEqual([1, 2]);
+    expect(parseRoiReportVersionList({ versions: [headerWire] })).toBeNull();
   });
 });

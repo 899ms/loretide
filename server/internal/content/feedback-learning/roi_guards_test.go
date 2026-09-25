@@ -29,6 +29,8 @@ var roiTables = []string{
 	// PR 3.
 	"content_roi_import_batch",
 	"content_roi_import_claim",
+	// PR 4.
+	"content_roi_report_version",
 }
 
 // roiSourceFiles returns the non-test roi_*.go files by name and content.
@@ -50,7 +52,7 @@ func roiSourceFiles(t *testing.T) map[string]string {
 		files[filepath.Base(path)] = string(body)
 	}
 	for _, required := range []string{"roi_contract.go", "roi_money.go", "roi_dedupe.go", "roi_records.go",
-		"roi_allocate.go", "roi_attribution.go", "roi_calc.go", "roi_import.go"} {
+		"roi_allocate.go", "roi_attribution.go", "roi_calc.go", "roi_import.go", "roi_report.go"} {
 		if _, ok := files[required]; !ok {
 			t.Fatalf("%s is missing; every guard below would pass vacuously", required)
 		}
@@ -74,6 +76,11 @@ func TestROITablesHaveAnInsertAndNoUpdateOrDelete(t *testing.T) {
 		if !strings.Contains(upper, "INSERT INTO "+name) {
 			t.Errorf("no INSERT INTO %s; this guard would pass vacuously", table)
 		}
+	}
+	// An upsert rewrites a row as surely as an UPDATE does; a report version
+	// "regenerated" onto its own key would be one (specs/034 PR 4).
+	if strings.Contains(upper, "DO UPDATE") {
+		t.Error("an INSERT ... ON CONFLICT DO UPDATE rewrites an append-only row")
 	}
 }
 
