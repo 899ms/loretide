@@ -225,6 +225,7 @@ vi.mock("@multica/core/paths", async (importOriginal) => ({
     sources: () => "/ws-test/sources",
     topics: () => "/ws-test/topics",
     marketingNodes: () => "/ws-test/marketing-nodes",
+    roiReview: () => "/ws-test/roi-review",
     historicalImport: () => "/ws-test/historical-import",
     accounts: () => "/ws-test/accounts",
     contentDiagnostics: () => "/ws-test/diagnostics",

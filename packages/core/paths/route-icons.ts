@@ -41,6 +41,7 @@ export type RouteIconName =
   | "FileStack"
   | "Lightbulb"
   | "CalendarRange"
+  | "Receipt"
   | "AtSign"
   | "Activity"
   | "File"
@@ -70,6 +71,7 @@ export type NavLabelKey =
   | "sources"
   | "topics"
   | "marketing_nodes"
+  | "roi_review"
   | "accounts"
   | "historical_import"
   | "content_diagnostics";
@@ -92,6 +94,7 @@ export type WorkspacePageKey =
   | "sources"
   | "topics"
   | "marketingNodes"
+  | "roiReview"
   | "accounts"
   | "historicalImport"
   | "contentDiagnostics";
@@ -130,6 +133,7 @@ export const WORKSPACE_PAGES: Record<WorkspacePageKey, WorkspacePage> = {
   sources: { segment: "sources", icon: "FileStack", navKey: "sources" },
   topics: { segment: "topics", icon: "Lightbulb", navKey: "topics" },
   marketingNodes: { segment: "marketing-nodes", icon: "CalendarRange", navKey: "marketing_nodes" },
+  roiReview: { segment: "roi-review", icon: "Receipt", navKey: "roi_review" },
   accounts: { segment: "accounts", icon: "AtSign", navKey: "accounts" },
   historicalImport: { segment: "historical-import", icon: "FileArchive", navKey: "historical_import" },
   contentDiagnostics: {

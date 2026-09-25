@@ -1075,6 +1075,14 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-roi/${path}`, {method: "POST", body: JSON.stringify(body)});
   }
 
+  // Importing pasted costs, leads or deals (specs/034). A method of its own
+  // because it carries Idempotency-Key: the caller keeps one key per import
+  // action, so a retry of the same rows replays the first answer instead of
+  // writing them twice. A dry run sends no key; nothing is stored.
+  async contentROIImport(body: Record<string, unknown>, idempotencyKey?: string): Promise<unknown> {
+    return this.fetch<unknown>("/api/content-roi/imports", {method: "POST", body: JSON.stringify(body), headers: idempotencyKey ? {"Idempotency-Key": idempotencyKey} : undefined});
+  }
+
   // The brand's operating rules (specs/029). Brand-scoped: which brand is
   // decided by the workspace header, so neither path carries an id.
   async contentOperatingRules(): Promise<unknown> {
