@@ -176,3 +176,22 @@ func TestSearchThemeFailedReferenceReadsAreStorage(t *testing.T) {
 	_, err := store.CreateSearchTheme(t.Context(), "ws-a", "actor", content)
 	wantSearchField(t, err, "source_ids")
 }
+
+// FR-011: a theme on an account on the same platform passes the reference
+// check. Held here without a database because the first real-database run
+// refused every account-bound theme: the fixture's account reader dropped
+// the platform the production reader returns. The recording transaction
+// fails the first statement after the checks, so getting past them shows as
+// ErrStorage, never as a FieldError.
+func TestSearchThemeOnTheAccountsOwnPlatformPassesTheCheck(t *testing.T) {
+	for _, platform := range []string{"xiaohongshu", "douyin"} {
+		store, _, accounts, _ := themeStore(allowGuard{})
+		accounts.accounts["ws-a/acct-"+platform] = ipprofile.Account{AccountID: "acct-" + platform, WorkspaceID: "ws-a", Platform: platform}
+		content := validTheme()
+		content.AccountID, content.Platform = "acct-"+platform, platform
+		_, err := store.CreateSearchTheme(t.Context(), "ws-a", "actor", content)
+		if _, refused := errors.AsType[FieldError](err); refused || accounts.reads != 1 {
+			t.Fatalf("%s theme on a %s account: %v (account reads %d)", platform, platform, err, accounts.reads)
+		}
+	}
+}
