@@ -2108,6 +2108,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Get("/reports/{reportId}/versions/{versionNo}", h.GetContentOpDiagReportVersion)
 			r.Get("/work-marks", h.ListContentOpDiagWorkMarks)
 			r.Post("/work-marks", h.RecordContentOpDiagWorkMark)
+			r.Post("/preview", h.PreviewContentOpDiagReport)
 		})
 
 		// --- Workspace-scoped routes (all require workspace membership) ---
