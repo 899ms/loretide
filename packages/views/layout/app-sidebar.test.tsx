@@ -142,6 +142,7 @@ vi.mock("@multica/core/paths", async (importOriginal) => ({
     sources: () => "/acme/sources",
     topics: () => "/acme/topics",
     marketingNodes: () => "/acme/marketing-nodes",
+    roiReview: () => "/acme/roi-review",
     accounts: () => "/acme/accounts",
     contentDiagnostics: () => "/acme/diagnostics",
     issueDetail: (id: string) => `/acme/issues/${id}`,

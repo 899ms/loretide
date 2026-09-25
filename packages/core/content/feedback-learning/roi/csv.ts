@@ -160,3 +160,26 @@ export function toRoiImportBody(
     }),
   };
 }
+
+/** One import action: the rows it sends, and the Idempotency-Key it keeps. */
+export interface RoiImportAttempt {
+  fingerprint: string;
+  key: string;
+}
+
+/**
+ * The key for pressing "import". The same body as the last attempt keeps the
+ * last key, so a second press (a double click, a retry after a timeout)
+ * replays the first import instead of writing the rows again. A different
+ * body - rows edited, another row confirmed - is a new action with a new key;
+ * reusing the old key there would be refused by the server with 409.
+ */
+export function roiImportAttempt(
+  previous: RoiImportAttempt | null,
+  body: Record<string, unknown>,
+  makeKey: () => string,
+): RoiImportAttempt {
+  const fingerprint = JSON.stringify({ ...body, dry_run: false });
+  if (previous && previous.fingerprint === fingerprint) return previous;
+  return { fingerprint, key: makeKey() };
+}

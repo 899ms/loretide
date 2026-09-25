@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { parsePastedRoiRows, ROI_IMPORT_COLUMNS, toRoiImportBody } from "./csv";
+import { parsePastedRoiRows, ROI_IMPORT_COLUMNS, roiImportAttempt, toRoiImportBody } from "./csv";
 
 // specs/034 PR 3 (T069): pasted costs, leads and deals.
 
@@ -94,5 +94,28 @@ describe("toRoiImportBody", () => {
 
   it("is a real import unless asked for a dry run", () => {
     expect(toRoiImportBody("cost", [])).toEqual({ record_kind: "cost", dry_run: false, rows: [] });
+  });
+});
+
+describe("roiImportAttempt", () => {
+  const body = toRoiImportBody("cost", [{ category: "拍摄", pricing: "amount", amount: "3000.00", currency: "CNY", incurred_at: "2026-09-10T02:00:00Z" }]);
+  let issued = 0;
+  const makeKey = () => `key-${++issued}`;
+
+  it("keeps the key when the same rows are sent again", () => {
+    const first = roiImportAttempt(null, body, makeKey);
+    const again = roiImportAttempt(first, { ...body }, makeKey);
+    expect(again.key).toBe(first.key);
+  });
+
+  it("does not let a dry run and the real import differ in key", () => {
+    const first = roiImportAttempt(null, { ...body, dry_run: true }, makeKey);
+    expect(roiImportAttempt(first, body, makeKey).key).toBe(first.key);
+  });
+
+  it("issues a new key when the rows or confirmations change", () => {
+    const first = roiImportAttempt(null, body, makeKey);
+    const confirmed = toRoiImportBody("cost", [{ category: "拍摄", pricing: "amount", amount: "3000.00", currency: "CNY", incurred_at: "2026-09-10T02:00:00Z" }], { confirmations: { 1: ["c1"] } });
+    expect(roiImportAttempt(first, confirmed, makeKey).key).not.toBe(first.key);
   });
 });

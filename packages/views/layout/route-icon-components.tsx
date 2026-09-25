@@ -24,6 +24,7 @@ import {
   FileStack,
   Lightbulb,
   CalendarRange,
+  Receipt,
   AtSign,
   Activity,
   type LucideIcon,
@@ -63,6 +64,7 @@ export const ROUTE_ICON_COMPONENTS: Record<RouteIconName, LucideIcon> = {
   FileStack,
   Lightbulb,
   CalendarRange,
+  Receipt,
   AtSign,
   Activity,
 };

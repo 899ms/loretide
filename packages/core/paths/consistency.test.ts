@@ -35,6 +35,7 @@ describe("paths.workspace() shape", () => {
       ["sources", "sources"],
       ["topics", "topics"],
       ["marketingNodes", "marketing-nodes"],
+      ["roiReview", "roi-review"],
       ["accounts", "accounts"],
       ["contentDiagnostics", "diagnostics"],
     ];
