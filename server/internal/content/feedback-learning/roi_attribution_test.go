@@ -104,9 +104,14 @@ var filledFields = []string{"WorkID", "EvidenceType", "Judgement"}
 // Validate* functions copy a request body; the scan* functions read a stored
 // row back; writeTouch and RecordAttribution are the two write paths, each
 // behind an endpoint a person calls.
+//
+// specs/035 adds two that set a WorkID of their own types, not a deal's:
+// RecordWorkMark copies the work id of a person's mark from the request, and
+// gatherDiagnosisInputs copies a publication record's work id, as
+// review-delivery answers it, into a diagnosis input. Neither infers one.
 var fillers = []string{
-	"RecordAttribution", "ValidateAttribution", "ValidateCost", "ValidateTouch",
-	"scanAttribution", "scanTouch", "writeTouch",
+	"RecordAttribution", "RecordWorkMark", "ValidateAttribution", "ValidateCost", "ValidateTouch",
+	"gatherDiagnosisInputs", "scanAttribution", "scanTouch", "writeTouch",
 }
 
 // T046 / FR-021: nothing in this module fills in a work, an evidence type or
