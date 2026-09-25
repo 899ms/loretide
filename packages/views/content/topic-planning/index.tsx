@@ -1555,3 +1555,12 @@ function AppendBriefSection({
     </SettingsSection>
   );
 }
+
+// Marketing nodes (specs/033 PR 3): a page of its own, exported from the
+// module it belongs to.
+export {
+  MarketingNodesPage,
+  type MarketingNodeAccountOption,
+  type MarketingNodeSourceOption,
+  type MarketingNodesPageProps,
+} from "./marketing-nodes";

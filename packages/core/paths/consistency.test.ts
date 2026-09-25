@@ -34,6 +34,7 @@ describe("paths.workspace() shape", () => {
       ["today", "today"],
       ["sources", "sources"],
       ["topics", "topics"],
+      ["marketingNodes", "marketing-nodes"],
       ["accounts", "accounts"],
       ["contentDiagnostics", "diagnostics"],
     ];

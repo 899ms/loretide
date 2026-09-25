@@ -23,6 +23,7 @@ import {
   CalendarCheck,
   FileStack,
   Lightbulb,
+  CalendarRange,
   AtSign,
   Activity,
   type LucideIcon,
@@ -61,6 +62,7 @@ export const ROUTE_ICON_COMPONENTS: Record<RouteIconName, LucideIcon> = {
   CalendarCheck,
   FileStack,
   Lightbulb,
+  CalendarRange,
   AtSign,
   Activity,
 };

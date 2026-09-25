@@ -87,6 +87,7 @@ const WORKSPACE_ROUTES: readonly RoutePattern[] = [
   ["today"],
   ["sources"],
   ["topics"],
+  ["marketing-nodes"],
   ["accounts"],
   ["historical-import"],
   ["diagnostics"],

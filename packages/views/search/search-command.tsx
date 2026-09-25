@@ -108,6 +108,7 @@ const PAGE_KEYWORDS: Record<WorkspacePageKey, string[]> = {
   today: ["today", "workbench", "dashboard", "今日", "工作台"],
   sources: ["sources", "materials", "inbox", "clippings", "素材", "收件箱"],
   topics: ["topics", "ideas", "选题", "题目"],
+  marketingNodes: ["marketing", "nodes", "holidays", "campaigns", "calendar", "营销节点", "节日", "节点"],
   accounts: ["accounts", "brand", "persona", "账号", "品牌"],
   contentDiagnostics: ["diagnostics", "content", "traces", "诊断", "内容"],
 };

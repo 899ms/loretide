@@ -35,6 +35,7 @@ describe("paths.workspace(slug)", () => {
     expect(ws.squadDetail("sq_1")).toBe("/acme/squads/sq_1");
     expect(ws.settings()).toBe("/acme/settings");
     expect(ws.historicalImport()).toBe("/acme/historical-import");
+    expect(ws.marketingNodes()).toBe("/acme/marketing-nodes");
     expect(ws.attachmentPreview("att_42")).toBe("/acme/attachments/att_42/preview");
   });
 

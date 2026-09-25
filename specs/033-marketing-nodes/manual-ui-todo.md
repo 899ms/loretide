@@ -2,11 +2,15 @@
 
 **状态：全部未执行。** 这是一份给用户在浏览器里逐条核对的清单，不是任何一条已经通过的证据。本卡不写 UI 单测，也不用 computer use 做验收（宪法 II）。PR 3 交付时按实际实现更新入口与组件说明，条目状态保持「未执行」。
 
-**入口**：`/{workspaceSlug}/marketing-nodes`，侧栏内容区「选题」之后一项（D1 已批准，以 PR 3 实际为准）。
+**入口**（PR 3 实际）：`/{workspaceSlug}/marketing-nodes`，侧栏「内容」分组里「选题」之后一项「营销节点」，图标 `CalendarRange`；命令面板搜「营销节点」「节日」「marketing」也能找到。页面组件 `packages/views/content/topic-planning/marketing-nodes.tsx`，适配器 `apps/web/app/[workspaceSlug]/(dashboard)/marketing-nodes/page.tsx`（账号、素材、品牌时区、选题页链接由它传入）。
+
+**页面结构**（从上到下）：节点列表 → 新建节点 → 导入节点 → 选中一个节点后依次出现：节点详情、确认与取消、修改节点、版本历史、候选（每条候选一张卡）、影响清单（每条一张卡）。
 
 **准备数据**：品牌 A 有两个账号（其中一个的账号配置里「受众」没填）、三条收件箱素材（其中一条之后要归档）；另建一个品牌 B。品牌时区保持默认 Asia/Shanghai。
 
-**复用的既有组件**：设置页布局（`SettingsContent` / `SettingsTab` / `SettingsSection` / `SettingsCard` / `SettingsRow`）、`Button`、`Input`、`Textarea`、既有下拉与复选组件。PR 3 实施后在这里补上实际用到的清单。
+**复用的既有组件**（PR 3 实际用到的全部）：设置页布局 `SettingsContent` / `SettingsTab` / `SettingsSection` / `SettingsCard` / `SettingsRow` / `SettingsSaveState`、`PageHeader`、`Button`（默认与 `outline` 两种）、`Input`（日期用 `type="date"`）、`Textarea`、`Select`（类型、时区、日期是否确定、挂卡）、`Checkbox`（适用账号、引用素材）。没有新控件，没有设颜色或字号；时区列表用品牌设置页同一个 `supportedTimezones()`。
+
+**与清单写法的差异**：时区是下拉选择，不能「清空」，所以 U-08 里「时区清空」一项在页面上做不到，只需核对结束日早于开始日、提前量 −1 / 1.5 两项。
 
 ## 本清单最要紧的四条
 

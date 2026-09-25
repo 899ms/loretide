@@ -37,6 +37,7 @@ const WORKSPACE_ROUTE_SEGMENTS = new Set([
   "today",
   "sources",
   "topics",
+  "marketing-nodes",
   "accounts",
   "diagnostics",
 ]);

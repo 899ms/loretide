@@ -40,6 +40,7 @@ export type RouteIconName =
   | "CalendarCheck"
   | "FileStack"
   | "Lightbulb"
+  | "CalendarRange"
   | "AtSign"
   | "Activity"
   | "File"
@@ -68,6 +69,7 @@ export type NavLabelKey =
   | "today"
   | "sources"
   | "topics"
+  | "marketing_nodes"
   | "accounts"
   | "historical_import"
   | "content_diagnostics";
@@ -89,6 +91,7 @@ export type WorkspacePageKey =
   | "today"
   | "sources"
   | "topics"
+  | "marketingNodes"
   | "accounts"
   | "historicalImport"
   | "contentDiagnostics";
@@ -126,6 +129,7 @@ export const WORKSPACE_PAGES: Record<WorkspacePageKey, WorkspacePage> = {
   today: { segment: "today", icon: "CalendarCheck", navKey: "today" },
   sources: { segment: "sources", icon: "FileStack", navKey: "sources" },
   topics: { segment: "topics", icon: "Lightbulb", navKey: "topics" },
+  marketingNodes: { segment: "marketing-nodes", icon: "CalendarRange", navKey: "marketing_nodes" },
   accounts: { segment: "accounts", icon: "AtSign", navKey: "accounts" },
   historicalImport: { segment: "historical-import", icon: "FileArchive", navKey: "historical_import" },
   contentDiagnostics: {
