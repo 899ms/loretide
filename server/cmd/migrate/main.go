@@ -417,6 +417,11 @@ var concurrentIndexCleanups = map[string]string{
 	"572_content_roi_import_batch_key_idx":  "content_roi_import_batch_key_idx",
 	"573_content_roi_import_batch_time_idx": "content_roi_import_batch_time_idx",
 	"575_content_roi_import_claim_key_idx":  "content_roi_import_claim_key_idx",
+
+	// specs/034 ROI report versions (PR 4). Its own block, as above. The
+	// table migration (576) builds no index and is absent.
+	"577_content_roi_report_version_key_idx":  "content_roi_report_version_key_idx",
+	"578_content_roi_report_version_time_idx": "content_roi_report_version_time_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction

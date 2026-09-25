@@ -47,9 +47,15 @@ var contentROIRoutes = []struct {
 	{http.MethodPost, "/api/content-roi/imports", "/api/content-roi/imports"},
 	{http.MethodGet, "/api/content-roi/imports", "/api/content-roi/imports"},
 	{http.MethodGet, "/api/content-roi/imports/{batchId}", "/api/content-roi/imports/batch-1"},
+	// PR 4.
+	{http.MethodPost, "/api/content-roi/reports", "/api/content-roi/reports"},
+	{http.MethodGet, "/api/content-roi/reports", "/api/content-roi/reports"},
+	{http.MethodGet, "/api/content-roi/reports/{reportId}/versions", "/api/content-roi/reports/report-1/versions"},
+	{http.MethodPost, "/api/content-roi/reports/{reportId}/versions", "/api/content-roi/reports/report-1/versions"},
+	{http.MethodGet, "/api/content-roi/reports/{reportId}/versions/{versionNo}", "/api/content-roi/reports/report-1/versions/1"},
 }
 
-// T032 / FR-074: every PR 1 and PR 2 endpoint is mounted, and - every record being
+// T032 / FR-074: every PR 1, PR 2 and PR 4 endpoint is mounted, and - every record being
 // append-only - no route can rewrite or remove one.
 func TestContentROIEndpointsAreMounted(t *testing.T) {
 	router := NewRouter(nil, realtime.NewHub(), events.New(), analytics.NoopClient{}, nil)
@@ -242,6 +248,55 @@ func TestContentROIPathIDsSurviveTheRealMiddleware(t *testing.T) {
 		t.Fatalf("foreign = %d, missing = %d, want 404 and 404", foreign.StatusCode, missing.StatusCode)
 	}
 	if !refusalsMatchApartFromTrace(t, foreign, missing) {
+		t.Error("the two refusals differ; the response can be used to probe")
+	}
+}
+
+// T080 workflow step 12 for PR 4: the report endpoints with {reportId} and
+// {versionNo}, through the real router and middleware, with a server-chosen
+// report id that is not the workspace id. Every answer has to be about the
+// report and version in the path. A version number that is not a number,
+// and a report that does not exist, answer exactly alike.
+func TestContentROIReportPathIDsSurviveTheRealMiddleware(t *testing.T) {
+	if testPool == nil || testServer == nil {
+		t.Skip("database not available")
+	}
+	fx := testutil.New(testPool, testWorkspaceID, testUserID)
+	fx.Cleanup(t, `DELETE FROM content_roi_report_version WHERE workspace_id=$1`, testWorkspaceID)
+	fx.Cleanup(t, `DELETE FROM content_operation_audit WHERE workspace_id=$1`, testWorkspaceID)
+
+	params := `{"window":{"start":"2026-09-01","end":"2026-09-30"},"report_currency":"CNY","rates":[],
+		"attribution_method":"even_split","conversion":{"from_stage":"咨询","to_stage":"预约"},
+		"booking_stage":"预约","scope":{"account_ids":[],"work_ids":[],"campaign_labels":[]}}`
+	reportID := roiString(t, roiAPI(t, http.MethodPost, "/api/content-roi/reports",
+		`{"title":"step 12","params":`+params+`}`, http.StatusCreated), "report_id")
+	if reportID == testWorkspaceID {
+		t.Fatal("the report id equals the workspace id; the two cannot be told apart")
+	}
+
+	second := roiAPI(t, http.MethodPost, "/api/content-roi/reports/"+reportID+"/versions", `{}`, http.StatusCreated)
+	if second["report_id"] != reportID || second["version_no"] != float64(2) {
+		t.Fatalf("generate-report-version answered %v %v", second["report_id"], second["version_no"])
+	}
+	versions := roiAPI(t, http.MethodGet, "/api/content-roi/reports/"+reportID+"/versions", "", http.StatusOK)
+	if listed, _ := versions["versions"].([]any); versions["report_id"] != reportID || len(listed) != 2 {
+		t.Fatalf("list-report-versions answered %v", versions)
+	}
+	for _, versionNo := range []string{"1", "2"} {
+		version := roiAPI(t, http.MethodGet, "/api/content-roi/reports/"+reportID+"/versions/"+versionNo, "", http.StatusOK)
+		if version["report_id"] != reportID || fmt.Sprint(version["version_no"]) != versionNo {
+			t.Fatalf("get-report-version %s answered %v %v", versionNo, version["report_id"], version["version_no"])
+		}
+	}
+
+	notANumber := accountAPIRequest(t, http.MethodGet, "/api/content-roi/reports/"+reportID+"/versions/abc", "")
+	defer notANumber.Body.Close()
+	missing := accountAPIRequest(t, http.MethodGet, "/api/content-roi/reports/no-such-report/versions/1", "")
+	defer missing.Body.Close()
+	if notANumber.StatusCode != http.StatusNotFound || missing.StatusCode != http.StatusNotFound {
+		t.Fatalf("not a number = %d, missing = %d, want 404 and 404", notANumber.StatusCode, missing.StatusCode)
+	}
+	if !refusalsMatchApartFromTrace(t, notANumber, missing) {
 		t.Error("the two refusals differ; the response can be used to probe")
 	}
 }

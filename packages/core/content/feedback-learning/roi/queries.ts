@@ -12,6 +12,9 @@ import {
   parseRoiLead,
   parseRoiLeadDetail,
   parseRoiLeadList,
+  parseRoiReportList,
+  parseRoiReportVersion,
+  parseRoiReportVersionList,
   parseRoiResult,
   parseRoiTouch,
   roiPath,
@@ -23,6 +26,8 @@ import {
   type RoiDealDetail,
   type RoiLead,
   type RoiLeadDetail,
+  type RoiReportVersion,
+  type RoiReportVersionHeader,
   type RoiResult,
   type RoiTouch,
 } from "./contract";
@@ -69,6 +74,11 @@ export const roiKeys = {
   deals: (workspaceId: string, params: RoiListParams = {}) =>
     ["contentRoi", workspaceId, "deals", params] as const,
   deal: (workspaceId: string, dealId: string) => ["contentRoi", workspaceId, "deal", dealId] as const,
+  reports: (workspaceId: string) => ["contentRoi", workspaceId, "reports"] as const,
+  reportVersions: (workspaceId: string, reportId: string) =>
+    ["contentRoi", workspaceId, "reportVersions", reportId] as const,
+  reportVersion: (workspaceId: string, reportId: string, versionNo: number) =>
+    ["contentRoi", workspaceId, "reportVersion", reportId, versionNo] as const,
 };
 
 export function useRoiCosts(workspaceId: string, params: RoiListParams = {}) {
@@ -176,4 +186,45 @@ export function useRoiPreview() {
   return useMutation<RoiResult | null, Error, Record<string, unknown>>({
     mutationFn: async (params) => parseRoiResult(await api.contentROIPost("preview", params)),
   });
+}
+
+// ---------------------------------------------------------------- report versions (PR 4)
+
+/** GET reports: the latest version of each report. */
+export function useRoiReports(workspaceId: string) {
+  return useQuery<RoiReportVersionHeader[]>({
+    queryKey: roiKeys.reports(workspaceId),
+    queryFn: async () => parseRoiReportList(await api.contentROIGet("reports")),
+  });
+}
+
+/** GET reports/{reportId}/versions. */
+export function useRoiReportVersions(workspaceId: string, reportId: string) {
+  return useQuery<{ reportId: string; versions: RoiReportVersionHeader[] } | null>({
+    queryKey: roiKeys.reportVersions(workspaceId, reportId),
+    queryFn: async () => parseRoiReportVersionList(await api.contentROIGet(roiPath("reports", reportId, "versions"))),
+    enabled: reportId !== "",
+  });
+}
+
+/** GET reports/{reportId}/versions/{versionNo}. The stored result is fixed;
+ *  inputs_changed is derived by the server each time this is read, and every
+ *  record write invalidates it through roiKeys.all. */
+export function useRoiReportVersion(workspaceId: string, reportId: string, versionNo: number) {
+  return useQuery<RoiReportVersion | null>({
+    queryKey: roiKeys.reportVersion(workspaceId, reportId, versionNo),
+    queryFn: async () => parseRoiReportVersion(
+      await api.contentROIGet(roiPath("reports", reportId, "versions", String(versionNo))),
+    ),
+    enabled: reportId !== "" && versionNo > 0,
+  });
+}
+
+/**
+ * POST reports (a new report: {title, params}) or reports/{reportId}/versions
+ * (the next version; an absent title or params reuse the previous
+ * version's). Each generation adds a version and changes none.
+ */
+export function useGenerateRoiReport(workspaceId: string) {
+  return useRoiWrite<RoiReportVersion | null>(workspaceId, parseRoiReportVersion);
 }

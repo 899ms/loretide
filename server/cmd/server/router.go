@@ -2085,6 +2085,14 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/imports", h.ImportContentROI)
 			r.Get("/imports", h.ListContentROIImports)
 			r.Get("/imports/{batchId}", h.GetContentROIImport)
+
+			// specs/034 PR 4: report versions. Generating is the only write
+			// and it adds a version; no route changes or removes one.
+			r.Post("/reports", h.CreateContentROIReport)
+			r.Get("/reports", h.ListContentROIReports)
+			r.Get("/reports/{reportId}/versions", h.ListContentROIReportVersions)
+			r.Post("/reports/{reportId}/versions", h.GenerateContentROIReportVersion)
+			r.Get("/reports/{reportId}/versions/{versionNo}", h.GetContentROIReportVersion)
 		})
 
 		// --- Workspace-scoped routes (all require workspace membership) ---

@@ -34,6 +34,8 @@ var roiTableNames = []string{
 	// PR 3.
 	"content_roi_import_batch",
 	"content_roi_import_claim",
+	// PR 4.
+	"content_roi_report_version",
 }
 
 // roiWorkspace makes a brand the test user owns, with one content account and
@@ -655,6 +657,8 @@ func TestDeleteWorkspaceRemovesROIRecords(t *testing.T) {
 			refundBody("1.00", "CNY", ""), "dealId", dealID), "adjustment_id")
 		roiCreated(t, roiCall(t, h.RecordContentROIAttribution, wsID, "POST", "/attribution",
 			`{"judgement":"unknown","touch_ids":[],"base_revision":0}`, "dealId", dealID), "deal_id")
+		roiCreated(t, roiCall(t, h.CreateContentROIReport, wsID, "POST", "/api/content-roi/reports",
+			roiReportRequest("delete", roiReportParams(""))), "report_id")
 	}
 
 	request := newRequest(http.MethodDelete, "/api/workspaces/"+target, nil)
@@ -769,6 +773,12 @@ func TestEveryContentROIEndpointRefusesANonMemberLikeAMissingRecord(t *testing.T
 		{"import", h.ImportContentROI, "POST", nil},
 		{"list-imports", h.ListContentROIImports, "GET", nil},
 		{"get-import", h.GetContentROIImport, "GET", []string{"batchId", "b"}},
+		// PR 4.
+		{"create-report", h.CreateContentROIReport, "POST", nil},
+		{"list-reports", h.ListContentROIReports, "GET", nil},
+		{"list-report-versions", h.ListContentROIReportVersions, "GET", []string{"reportId", "r"}},
+		{"get-report-version", h.GetContentROIReportVersion, "GET", []string{"reportId", "r", "versionNo", "1"}},
+		{"generate-report-version", h.GenerateContentROIReportVersion, "POST", []string{"reportId", "r"}},
 	} {
 		t.Run(endpoint.name, func(t *testing.T) {
 			response := roiCall(t, endpoint.handler, outsider, endpoint.method, "/", "{}", endpoint.params...)

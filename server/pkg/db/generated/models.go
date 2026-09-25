@@ -983,6 +983,19 @@ type ContentRoiLeadRevision struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentRoiReportVersion struct {
+	WorkspaceID string             `json:"workspace_id"`
+	ReportID    string             `json:"report_id"`
+	VersionNo   int32              `json:"version_no"`
+	Title       string             `json:"title"`
+	Params      []byte             `json:"params"`
+	Inputs      []byte             `json:"inputs"`
+	CalcVersion string             `json:"calc_version"`
+	Result      []byte             `json:"result"`
+	CreatedBy   string             `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContentRoiTouchRevision struct {
 	WorkspaceID         string             `json:"workspace_id"`
 	TouchID             string             `json:"touch_id"`

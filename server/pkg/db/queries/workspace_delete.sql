@@ -467,6 +467,12 @@ deleted_content_roi_import_batches AS (
 deleted_content_roi_import_claims AS (
     DELETE FROM content_roi_import_claim WHERE workspace_id = $1::text
 ),
+-- ROI report versions (specs/034 PR 4): append-only like the tables above,
+-- removed here and nowhere else, and registered in the deletion manifest test
+-- alongside this.
+deleted_content_roi_report_versions AS (
+    DELETE FROM content_roi_report_version WHERE workspace_id = $1::text
+),
 -- Brand content accounts go with the workspace. Registered in the deletion
 -- manifest test alongside this, because only doing one of the two leaves
 -- either orphaned rows (manifest only) or a drifting manifest (delete only).
