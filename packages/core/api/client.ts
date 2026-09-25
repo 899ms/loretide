@@ -1083,6 +1083,19 @@ export class ApiClient {
     return this.fetch<unknown>("/api/content-roi/imports", {method: "POST", body: JSON.stringify(body), headers: idempotencyKey ? {"Idempotency-Key": idempotencyKey} : undefined});
   }
 
+  // Brand/account operating diagnosis (specs/035). Two methods, as for ROI:
+  // every path lives under /api/content-operating-diagnosis, every write is a
+  // POST that adds a row, and the caller builds the path with each id segment
+  // already encoded (opdiagPath in content/feedback-learning/opdiag).
+  async contentOpDiagGet(path: string, query: Record<string, string> = {}): Promise<unknown> {
+    const search = new URLSearchParams(query).toString();
+    return this.fetch<unknown>(`/api/content-operating-diagnosis/${path}${search ? `?${search}` : ""}`);
+  }
+
+  async contentOpDiagPost(path: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-operating-diagnosis/${path}`, {method: "POST", body: JSON.stringify(body)});
+  }
+
   // The brand's operating rules (specs/029). Brand-scoped: which brand is
   // decided by the workspace header, so neither path carries an id.
   async contentOperatingRules(): Promise<unknown> {

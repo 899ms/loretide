@@ -321,6 +321,17 @@ func TestThereIsNoSixthControlledSet(t *testing.T) {
 		}
 		delete(found, name)
 	}
+	// specs/035 PR 1's sets, contract §3: R-057's six dimensions (FR-003),
+	// its two scopes (account report, brand summary), the two mark kinds and
+	// five verdicts of ruling Q2=A, and the one data origin of FR-073.
+	for _, name := range []string{
+		"DiagnosisDimensions", "DiagnosisScopes", "MarkKinds", "MarkVerdicts", "DataOrigins",
+	} {
+		if !found[name] {
+			t.Errorf("035 PR 1 controlled set %s is gone", name)
+		}
+		delete(found, name)
+	}
 	for extra := range found {
 		t.Errorf("a controlled set %q was added; SOP 10.1 names those fields but gives no values, and inventing some puts words in the SOP's mouth that every stored row then has to be valid against", extra)
 	}

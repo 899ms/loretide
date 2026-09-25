@@ -473,6 +473,15 @@ deleted_content_roi_import_claims AS (
 deleted_content_roi_report_versions AS (
     DELETE FROM content_roi_report_version WHERE workspace_id = $1::text
 ),
+-- Operating diagnosis report versions and work marks (specs/035 PR 1):
+-- append-only like the tables above, removed here and nowhere else, and
+-- registered in the deletion manifest test alongside this.
+deleted_content_opdiag_report_versions AS (
+    DELETE FROM content_opdiag_report_version WHERE workspace_id = $1::text
+),
+deleted_content_opdiag_work_marks AS (
+    DELETE FROM content_opdiag_work_mark WHERE workspace_id = $1::text
+),
 -- Brand content accounts go with the workspace. Registered in the deletion
 -- manifest test alongside this, because only doing one of the two leaves
 -- either orphaned rows (manifest only) or a drifting manifest (delete only).
