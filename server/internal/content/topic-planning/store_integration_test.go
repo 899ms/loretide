@@ -41,9 +41,12 @@ type testAccountReader struct{ pool *pgxpool.Pool }
 func (r testAccountReader) Get(ctx context.Context, workspaceID, accountID string) (ipprofile.Account, error) {
 	var account ipprofile.Account
 	var settings []byte
-	err := r.pool.QueryRow(ctx, `SELECT account_id, workspace_id, settings FROM content_account
+	// Platform is read as the product reads it (GetContentAccount selects
+	// it): a search theme on an account must be on that account's platform
+	// (specs/036 FR-011), and a reader that left it "" would refuse them all.
+	err := r.pool.QueryRow(ctx, `SELECT account_id, workspace_id, platform, settings FROM content_account
 		WHERE workspace_id=$1 AND account_id=$2`, workspaceID, accountID).
-		Scan(&account.AccountID, &account.WorkspaceID, &settings)
+		Scan(&account.AccountID, &account.WorkspaceID, &account.Platform, &settings)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ipprofile.Account{}, ipprofile.ErrNotFound
 	}
