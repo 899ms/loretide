@@ -1045,6 +1045,28 @@ type ContentRoiTouchRevision struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentSearchThemeRevision struct {
+	WorkspaceID      string             `json:"workspace_id"`
+	ThemeID          string             `json:"theme_id"`
+	Revision         int32              `json:"revision"`
+	Voided           bool               `json:"voided"`
+	Name             string             `json:"name"`
+	Platform         string             `json:"platform"`
+	AccountID        string             `json:"account_id"`
+	BusinessGoal     string             `json:"business_goal"`
+	Questions        []byte             `json:"questions"`
+	Keywords         []byte             `json:"keywords"`
+	Intent           string             `json:"intent"`
+	Origin           string             `json:"origin"`
+	OriginNote       string             `json:"origin_note"`
+	SourceIds        []byte             `json:"source_ids"`
+	TopicCardIds     []byte             `json:"topic_card_ids"`
+	BriefRevisionIds []byte             `json:"brief_revision_ids"`
+	Note             string             `json:"note"`
+	RecordedBy       string             `json:"recorded_by"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContentSource struct {
 	SourceID          string             `json:"source_id"`
 	WorkspaceID       string             `json:"workspace_id"`
