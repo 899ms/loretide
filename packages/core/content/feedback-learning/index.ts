@@ -11,3 +11,5 @@ export * from "./roi/form";
 export * from "./roi/queries";
 export * from "./opdiag/contract";
 export * from "./opdiag/queries";
+export * from "./search/contract";
+export * from "./search/queries";
