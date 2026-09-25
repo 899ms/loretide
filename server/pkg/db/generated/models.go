@@ -790,6 +790,35 @@ type ContentMarketingNodeRevision struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentOpdiagReportVersion struct {
+	WorkspaceID string             `json:"workspace_id"`
+	ReportID    string             `json:"report_id"`
+	VersionNo   int32              `json:"version_no"`
+	ScopeKind   string             `json:"scope_kind"`
+	AccountIds  []string           `json:"account_ids"`
+	Title       string             `json:"title"`
+	Params      []byte             `json:"params"`
+	Inputs      []byte             `json:"inputs"`
+	CalcVersion string             `json:"calc_version"`
+	Result      []byte             `json:"result"`
+	CreatedBy   string             `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentOpdiagWorkMark struct {
+	WorkspaceID       string             `json:"workspace_id"`
+	MarkID            string             `json:"mark_id"`
+	WorkID            string             `json:"work_id"`
+	Kind              string             `json:"kind"`
+	Item              string             `json:"item"`
+	Verdict           string             `json:"verdict"`
+	AccountID         string             `json:"account_id"`
+	ProfileRevisionID string             `json:"profile_revision_id"`
+	Note              string             `json:"note"`
+	RecordedBy        string             `json:"recorded_by"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContentOperationAudit struct {
 	Sequence    pgtype.Int8        `json:"sequence"`
 	EventID     string             `json:"event_id"`
