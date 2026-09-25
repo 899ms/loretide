@@ -2137,6 +2137,16 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Get("/themes/{themeId}", h.GetContentSearchTheme)
 			r.Get("/themes/{themeId}/revisions", h.ListContentSearchThemeRevisions)
 			r.Post("/themes/{themeId}/revisions", h.ReviseContentSearchTheme)
+
+			// Search metrics and ranking observations (specs/036 PR 4), kept
+			// in feedback-learning. Each metric and each observation is its
+			// own row; a correction or a void is a new revision, never an
+			// edit.
+			r.Get("/metrics", h.ListContentSearchMetrics)
+			r.Post("/metrics", h.RecordContentSearchMetric)
+			r.Get("/rank-observations", h.ListContentSearchRankObservations)
+			r.Post("/rank-observations", h.RecordContentSearchRankObservation)
+			r.Post("/rank-observations/{observationId}/revisions", h.ReviseContentSearchRankObservation)
 		})
 
 		// --- Workspace-scoped routes (all require workspace membership) ---
