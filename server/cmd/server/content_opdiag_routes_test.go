@@ -14,8 +14,8 @@ import (
 	"github.com/multica-ai/multica/server/internal/testutil"
 )
 
-// Brand/account operating diagnosis (specs/035 PR 1): report versions and
-// work marks under /api/content-operating-diagnosis.
+// Brand/account operating diagnosis (specs/035 PR 1 and PR 2): report versions,
+// work marks and the preview under /api/content-operating-diagnosis.
 
 var contentOpDiagRoutes = []struct {
 	method  string
@@ -29,6 +29,8 @@ var contentOpDiagRoutes = []struct {
 	{http.MethodGet, "/api/content-operating-diagnosis/reports/{reportId}/versions/{versionNo}", "/api/content-operating-diagnosis/reports/report-1/versions/1"},
 	{http.MethodGet, "/api/content-operating-diagnosis/work-marks", "/api/content-operating-diagnosis/work-marks"},
 	{http.MethodPost, "/api/content-operating-diagnosis/work-marks", "/api/content-operating-diagnosis/work-marks"},
+	// PR 2 (T052): compute without saving.
+	{http.MethodPost, "/api/content-operating-diagnosis/preview", "/api/content-operating-diagnosis/preview"},
 }
 
 // T031 / FR-088: every PR 1 endpoint is mounted, and - both tables being

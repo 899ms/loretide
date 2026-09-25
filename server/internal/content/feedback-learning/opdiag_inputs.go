@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -133,6 +134,14 @@ type DiagDelivery interface {
 	Tasks(ctx context.Context, workspaceID, actor string) ([]DiagDeliveryTask, error)
 }
 
+// diagnosisROISummaries answers a 034 ROI report version's public summary.
+// It is this module's own read (Store.ReportSummary): the ROI reports live
+// in feedback-learning, so no handler adapter sits in between. nil on a
+// DiagnosisStore means that read; a test replaces it.
+type diagnosisROISummaries interface {
+	ReportSummary(ctx context.Context, workspaceID, reportID string, versionNo int) (ReportSummary, error)
+}
+
 // diagnosisOwnRecords reads this module's own tables for the diagnosis:
 // the metrics and excerpts of the publications in scope and the marks on
 // their works. nil on a DiagnosisStore means its database.
@@ -166,7 +175,13 @@ const (
 	inputReview         = "review"
 	inputDeliveryTask   = "delivery_task"
 	inputWorkMark       = "work_mark"
+	inputROISummary     = "roi_summary"
 )
+
+// roiInputID is the id of the ROI summary input: the version it copies.
+func roiInputID(ref DiagnosisROIRef) string {
+	return ref.ReportID + "/" + strconv.Itoa(ref.VersionNo)
+}
 
 // operatingRulesInputID is the id of the one operating rules input: the
 // rules have no version of their own, so the copy is the version.
@@ -332,6 +347,9 @@ var (
 	openReviewStatuses   = []string{"pending", "changes_requested"}
 	rejectedReviewStatus = "rejected"
 	closedTaskStatuses   = []string{"handed_off", "cancelled"}
+	// currentProblemStatuses are the publication statuses the execution
+	// flow lists as they are now: failed, unknown, removed.
+	currentProblemStatuses = []string{"failed", "unknown", "removed"}
 )
 
 // diagnosisAccountIDs are the params' account ids as given, without blanks
@@ -349,7 +367,8 @@ func diagnosisAccountIDs(params DiagnosisParams) []string {
 }
 
 // checkDiagnosisDimensions refuses a dimension this build has no calculator
-// for. PR 1 has none.
+// for. PR 2 registers all six, so only a stored version from a build that
+// knew a dimension this one does not would be refused.
 func checkDiagnosisDimensions(params DiagnosisParams) error {
 	for _, dimension := range params.Dimensions {
 		if _, ok := dimensionCalculators[dimension.Key]; !ok {
@@ -357,6 +376,13 @@ func checkDiagnosisDimensions(params DiagnosisParams) error {
 		}
 	}
 	return nil
+}
+
+func (s *DiagnosisStore) roiReports() diagnosisROISummaries {
+	if s.roiSummaries != nil {
+		return s.roiSummaries
+	}
+	return s.Store
 }
 
 func (s *DiagnosisStore) ownRecords() diagnosisOwnRecords {
@@ -371,7 +397,8 @@ func (s *DiagnosisStore) ownRecords() diagnosisOwnRecords {
 //
 //  1. (the handler has authorized the caller)
 //  2. every account in the params exists here - and nothing else about any
-//     account has been read yet;
+//     account has been read yet - and so does the ROI report version the
+//     params name, if they name one;
 //  3. to 5. the params' controlled sets, required fields and combinations,
 //     and whether this build computes the selected dimensions;
 //  6. accounts and profiles, operating rules, publication records (all of
@@ -398,6 +425,20 @@ func (s *DiagnosisStore) gatherDiagnosisInputs(ctx context.Context, workspaceID,
 		switch {
 		case err == nil:
 			present = append(present, id)
+		case lenient && errors.Is(err, ErrNotFound):
+		default:
+			return preparedDiagnosis{}, nil, err
+		}
+	}
+	// Decision step 2 for the ROI reference (Q6): the version exists here.
+	// Its summary is read now, kept, and copied in last; a missing one is
+	// refused like a missing account.
+	var roiSummary *ReportSummary
+	if ref := params.ROIReportRef; ref != nil {
+		summary, readErr := s.roiReports().ReportSummary(ctx, workspaceID, ref.ReportID, ref.VersionNo)
+		switch err := adapterError(readErr); {
+		case err == nil:
+			roiSummary = &summary
 		case lenient && errors.Is(err, ErrNotFound):
 		default:
 			return preparedDiagnosis{}, nil, err
@@ -458,7 +499,13 @@ func (s *DiagnosisStore) gatherDiagnosisInputs(ctx context.Context, workspaceID,
 		return preparedDiagnosis{}, nil, err
 	}
 
-	// Publication records: published, and published inside a window.
+	// Publication records: published inside the report window - and, only
+	// when a selected dimension needs them, published inside the comparison
+	// window (performance), published with no published_at (cadence, which
+	// lists them as gaps) and at a failed, unknown or removed status now
+	// (execution flow). A version with no dimension reads what PR 1 read.
+	// Metrics and excerpts are read for the two windows' records only, so
+	// what one dimension needs never changes another's result.
 	publications, err := s.Delivery.Publications(ctx, workspaceID, actor)
 	if err != nil {
 		return preparedDiagnosis{}, nil, adapterError(err)
@@ -467,10 +514,21 @@ func (s *DiagnosisStore) gatherDiagnosisInputs(ctx context.Context, workspaceID,
 		return cmp.Compare(left.PublicationRecordID, right.PublicationRecordID)
 	})
 	candidates := []DiagPublication{}
+	inReportWindow, withRecords := map[string]bool{}, map[string]bool{}
 	for _, publication := range publications {
-		if slices.Contains(PublishedStatuses, publication.Status) && prepared.inWindow(publication.PublishedAt) {
-			candidates = append(candidates, publication)
+		published := slices.Contains(PublishedStatuses, publication.Status)
+		switch {
+		case published && prepared.inWindow(publication.PublishedAt):
+			inReportWindow[publication.PublicationRecordID] = true
+			withRecords[publication.PublicationRecordID] = true
+		case published && prepared.selected(DimensionPerformance) && prepared.inComparison(publication.PublishedAt):
+			withRecords[publication.PublicationRecordID] = true
+		case published && prepared.selected(DimensionCadence) && publication.PublishedAt == nil:
+		case !published && prepared.selected(DimensionExecutionFlow) && slices.Contains(currentProblemStatuses, publication.Status):
+		default:
+			continue
 		}
+		candidates = append(candidates, publication)
 	}
 
 	// Their works, and the works' topic cards: the only way a publication
@@ -519,11 +577,19 @@ func (s *DiagnosisStore) gatherDiagnosisInputs(ctx context.Context, workspaceID,
 		return ""
 	}
 	keptPublications, keptWorks, keptCards := []string{}, []string{}, []string{}
+	recordPublications, markWorks := []string{}, []string{}
 	for _, publication := range candidates {
 		if !inScope[accountOf(publication)] {
 			continue
 		}
 		keptPublications = append(keptPublications, publication.PublicationRecordID)
+		if withRecords[publication.PublicationRecordID] {
+			recordPublications = append(recordPublications, publication.PublicationRecordID)
+		}
+		if inReportWindow[publication.PublicationRecordID] && publication.WorkID != "" &&
+			!slices.Contains(markWorks, publication.WorkID) {
+			markWorks = append(markWorks, publication.WorkID)
+		}
 		if err = add(inputPublication, publication.PublicationRecordID, diagPublicationFields{
 			WorkID: publication.WorkID, Channel: publication.Channel, Status: publication.Status,
 			PublishedAt: diagTimePtr(publication.PublishedAt),
@@ -598,8 +664,10 @@ func (s *DiagnosisStore) gatherDiagnosisInputs(ctx context.Context, workspaceID,
 		}
 	}
 
-	// This module's own records for those publications and works.
-	metrics, excerpts, marks, err := s.ownRecords().ownDiagnosisRecords(ctx, workspaceID, keptPublications, keptWorks)
+	// This module's own records: the metrics and excerpts of the two
+	// windows' records, and the marks on the report window's works. A work
+	// published in the window and also earlier keeps all its marks.
+	metrics, excerpts, marks, err := s.ownRecords().ownDiagnosisRecords(ctx, workspaceID, recordPublications, markWorks)
 	if err != nil {
 		return preparedDiagnosis{}, nil, err
 	}
@@ -613,6 +681,11 @@ func (s *DiagnosisStore) gatherDiagnosisInputs(ctx context.Context, workspaceID,
 		}
 	}
 	for _, excerpt := range excerpts {
+		if !inReportWindow[excerpt.PublicationRecordID] {
+			// The comparison window is performance's; its records' feedback
+			// is not this report's audience feedback.
+			continue
+		}
 		if err = add(inputExcerpt, excerpt.FeedbackExcerptID, diagExcerptFields{
 			PublicationRecordID: excerpt.PublicationRecordID, SourceType: string(excerpt.SourceType),
 			Tags: nonNil(excerpt.Tags), OccurredAt: diagTime(excerpt.OccurredAt),
@@ -625,6 +698,11 @@ func (s *DiagnosisStore) gatherDiagnosisInputs(ctx context.Context, workspaceID,
 			WorkID: mark.WorkID, Kind: string(mark.Kind), Item: mark.Item, Verdict: string(mark.Verdict),
 			AccountID: mark.AccountID, ProfileRevisionID: mark.ProfileRevisionID, CreatedAt: diagTime(mark.CreatedAt),
 		}); err != nil {
+			return preparedDiagnosis{}, nil, err
+		}
+	}
+	if roiSummary != nil {
+		if err = add(inputROISummary, roiInputID(*params.ROIReportRef), roiSummary); err != nil {
 			return preparedDiagnosis{}, nil, err
 		}
 	}

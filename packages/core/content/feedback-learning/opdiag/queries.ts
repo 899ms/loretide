@@ -2,12 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@multica/core/api";
 import {
   opdiagPath,
+  parseOpDiagPreview,
   parseOpDiagReportList,
   parseOpDiagReportVersion,
   parseOpDiagReportVersionList,
   parseOpDiagWorkMark,
   parseOpDiagWorkMarkList,
   type OpDiagReportHeader,
+  type OpDiagResult,
   type OpDiagReportVersion,
   type OpDiagWorkMark,
 } from "./contract";
@@ -112,4 +114,12 @@ export function useGenerateOpDiagReport(workspaceId: string) {
  *  current one. */
 export function useRecordOpDiagWorkMark(workspaceId: string) {
   return useOpDiagWrite<OpDiagWorkMark | null>(workspaceId, parseOpDiagWorkMark);
+}
+
+/** POST preview ({params}): the result the server would store, computed
+ *  now and stored nowhere. Nothing to invalidate. */
+export function usePreviewOpDiag() {
+  return useMutation<OpDiagResult | null, Error, { params: Record<string, unknown> }>({
+    mutationFn: async (body) => parseOpDiagPreview(await api.contentOpDiagPost("preview", body)),
+  });
 }

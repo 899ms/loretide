@@ -17,12 +17,11 @@ import (
 // is the development diagnostics panel and module (document 13), and the two
 // are modelled and shown apart (R-057's last sentence, FR-090 to FR-092).
 //
-// PR 1 stores report versions and work marks. It computes the scope of a
-// report and its report-level gaps, and no dimension: a request that selects
-// any dimension is refused naming "dimensions" until PR 2 registers the
-// calculators. A version generated now recomputes to the same bytes after
-// that, because adding a dimension changes neither the scope nor any other
-// dimension (FR-011).
+// PR 1 stored report versions and work marks and computed the scope and the
+// report-level gaps. PR 2 registers the six dimension calculators, the gaps
+// they find and the ROI reference; a version PR 1 generated still recomputes
+// to the same bytes, because adding a dimension changes neither the scope
+// nor any other dimension (FR-011).
 //
 // Contract: specs/035-brand-diagnosis/contracts/brand-diagnosis.md §3, §4, §5
 
@@ -133,26 +132,100 @@ var profileTextKeys = profileFieldKeys[:8]
 // else, including an item with no revision at all, is not confirmed.
 const ProfileFieldConfirmed = "confirmed"
 
-// GapKind is what a gap is missing (contract §3). PR 1 produces only the
-// report-level configuration gap; the set is registered with the dimensions
-// in PR 2.
+// GapKind is what a gap is missing (contract §3, R-057's 补录待办). The
+// report-level configuration gap is PR 1's; the rest are found by the
+// dimensions.
 type GapKind string
 
-const GapProfileFieldPending GapKind = "profile_field_pending"
+const (
+	GapProfileFieldPending      GapKind = "profile_field_pending"
+	GapWorkUnchecked            GapKind = "work_unchecked"
+	GapWorkUntagged             GapKind = "work_untagged"
+	GapCadenceUnset             GapKind = "cadence_unset"
+	GapObservationUnset         GapKind = "observation_unset"
+	GapPublishedAtMissing       GapKind = "published_at_missing"
+	GapMetricMissing            GapKind = "metric_missing"
+	GapAccountUnresolved        GapKind = "account_unresolved"
+	GapWorkMissing              GapKind = "work_missing"
+	GapPublicationStatusUnknown GapKind = "publication_status_unknown"
+	GapExcerptUntagged          GapKind = "excerpt_untagged"
+)
+
+var GapKinds = []GapKind{
+	GapProfileFieldPending, GapWorkUnchecked, GapWorkUntagged, GapCadenceUnset, GapObservationUnset,
+	GapPublishedAtMissing, GapMetricMissing, GapAccountUnresolved, GapWorkMissing,
+	GapPublicationStatusUnknown, GapExcerptUntagged,
+}
+
+// DimensionReason is why a dimension, or one fact of it, cannot be computed
+// (FR-012). Ordered as contract §3 lists them.
+type DimensionReason string
+
+const (
+	DimensionNoData                   DimensionReason = "no_data"
+	DimensionMissingConfig            DimensionReason = "missing_config"
+	DimensionMissingComparisonWindow  DimensionReason = "missing_comparison_window"
+	DimensionMissingObservationWindow DimensionReason = "missing_observation_window"
+	DimensionNoDeliveryChannel        DimensionReason = "no_delivery_channel"
+)
+
+var DimensionReasons = []DimensionReason{
+	DimensionNoData, DimensionMissingConfig, DimensionMissingComparisonWindow,
+	DimensionMissingObservationWindow, DimensionNoDeliveryChannel,
+}
+
+// Dimension statuses (FR-012): ok with facts, or not computable with a
+// reason. Never a zero standing in for the second.
+const (
+	dimensionOK            = "ok"
+	dimensionNotComputable = "not_computable"
+)
 
 // Where the page sends a person to fill a gap. A route id, not a URL
 // (FR-031).
-const fixRouteAccountSettings = "account_settings"
+const (
+	fixRouteAccountSettings = "account_settings"
+	fixRouteWorkMarks       = "work_marks"
+	fixRouteOperatingRules  = "operating_rules"
+	fixRoutePublications    = "publications"
+	fixRouteFeedback        = "feedback"
+	fixRouteWorks           = "works"
+)
 
-// Rule ids the calculator lists in result.rules (contract §5.9). The server
-// only ever names a rule; the page translates it (FR-015).
+// DiagnosisRuleID is a rule the result names (contract §5.9). The server
+// only ever names a rule; the page translates it (FR-015). None of them, and
+// no other string literal in this code, states a cause or a trend (FR-028):
+// a guard scans the literals.
+type DiagnosisRuleID = string
+
 const (
 	ruleUnknownIsNotZero            = "common.unknown_is_not_zero"
 	ruleNoCrossPlatformRanking      = "common.no_cross_platform_ranking"
 	ruleNoScore                     = "common.no_score"
 	ruleWindowInBrandTimezone       = "common.window_in_brand_timezone"
+	ruleMarksOnOlderProfile         = "consistency.marks_on_older_profile"
+	ruleMultiPillarNotAdditive      = "coverage.multi_pillar_not_additive"
+	ruleTargetIsBrandChannelLevel   = "cadence.target_is_brand_channel_level"
+	ruleIncompleteWeekNotCompared   = "cadence.incomplete_week_not_compared"
+	ruleDifferenceIsNotCause        = "performance.difference_is_not_cause"
+	ruleSamplesAtDifferentAges      = "performance.samples_taken_at_different_ages"
+	ruleStatWindowMixed             = "performance.stat_window_mixed"
+	ruleTagsNotAdditive             = "audience_feedback.tags_not_additive"
+	ruleNoThreshold                 = "execution_flow.no_threshold"
+	ruleROIShownAsIs                = "roi_reference.shown_as_is"
 	ruleHistoricalImportUnknownAcct = "scope.historical_import_account_unknown"
 )
+
+var DiagnosisRuleIDs = []DiagnosisRuleID{
+	ruleUnknownIsNotZero, ruleNoCrossPlatformRanking, ruleNoScore, ruleWindowInBrandTimezone,
+	ruleMarksOnOlderProfile, ruleMultiPillarNotAdditive, ruleTargetIsBrandChannelLevel,
+	ruleIncompleteWeekNotCompared, ruleDifferenceIsNotCause, ruleSamplesAtDifferentAges,
+	ruleStatWindowMixed, ruleTagsNotAdditive, ruleNoThreshold, ruleROIShownAsIs,
+	ruleHistoricalImportUnknownAcct,
+}
+
+// MaxPillars bounds a coverage dimension's pillar list (contract §4).
+const MaxPillars = 50
 
 // Section names (contract §5.2).
 const (
@@ -221,6 +294,32 @@ type preparedDiagnosis struct {
 	location   *time.Location
 	from, to   time.Time // [from, to) of the report window
 	accountIDs []string  // sorted, unique
+	// hasComparison says whether a comparison window was given;
+	// [cmpFrom, cmpTo) is it.
+	hasComparison  bool
+	cmpFrom, cmpTo time.Time
+	// dimensions are the selected dimensions' own params, by key; pillars
+	// are the coverage pillars normalized, in the order given.
+	dimensions map[DiagnosisDimension]DiagnosisDimensionParam
+	pillars    []string
+	// generatedAt is params.generated_at; the zero time when it is absent.
+	generatedAt time.Time
+}
+
+// selected answers whether a dimension is in the params.
+func (p preparedDiagnosis) selected(key DiagnosisDimension) bool {
+	_, ok := p.dimensions[key]
+	return ok
+}
+
+// inComparison answers whether a time falls in the comparison window. With
+// no comparison window, nothing does.
+func (p preparedDiagnosis) inComparison(at *time.Time) bool {
+	if at == nil || !p.hasComparison {
+		return false
+	}
+	local := at.In(p.location)
+	return !local.Before(p.cmpFrom) && local.Before(p.cmpTo)
 }
 
 // inWindow answers whether a time falls in [start 00:00, end+1 00:00) in the
@@ -299,22 +398,104 @@ func prepareDiagnosisParams(params DiagnosisParams) (preparedDiagnosis, error) {
 		return p, err
 	}
 	if params.ComparisonWindow != nil {
-		if _, _, err = diagnosisRange("comparison_window", params.ComparisonWindow.Start,
+		if p.cmpFrom, p.cmpTo, err = diagnosisRange("comparison_window", params.ComparisonWindow.Start,
 			params.ComparisonWindow.End, location); err != nil {
 			return p, err
 		}
+		p.hasComparison = true
 	}
-	keys := map[DiagnosisDimension]bool{}
+	p.dimensions = map[DiagnosisDimension]DiagnosisDimensionParam{}
 	for _, dimension := range params.Dimensions {
-		if keys[dimension.Key] {
+		if p.selected(dimension.Key) {
 			return p, FieldError{Field: "dimensions", Reason: "a dimension is listed twice"}
 		}
-		keys[dimension.Key] = true
+		p.dimensions[dimension.Key] = dimension
+		if err = checkDimensionParam(dimension); err != nil {
+			return p, err
+		}
 	}
-	if params.ROIReportRef != nil {
-		return p, FieldError{Field: "roi_report_ref", Reason: "not available in this version"}
+	for _, pillar := range p.dimensions[DimensionCoverage].Pillars {
+		p.pillars = append(p.pillars, normalizePillar(pillar))
 	}
+	if params.GeneratedAt != "" {
+		if p.generatedAt, err = time.Parse(time.RFC3339, params.GeneratedAt); err != nil {
+			return p, FieldError{Field: "generated_at", Reason: "not a time"}
+		}
+	}
+	// roi_report_ref (Q6) is checked for existence with the accounts, before
+	// any of this; an empty one answers like a missing report version.
 	return p, nil
+}
+
+// checkDimensionParam checks one dimension's own params (contract §4): a
+// dimension takes only its own members, every value is in its controlled
+// set, nothing is listed twice, and a pillar is neither blank nor too long.
+// An empty list is not refused - it is that dimension's missing_config, so a
+// person can still read the others.
+func checkDimensionParam(dimension DiagnosisDimensionParam) error {
+	field := "dimensions." + string(dimension.Key) + "."
+	takes := map[DiagnosisDimension][]string{
+		DimensionConsistency:      {"items"},
+		DimensionCoverage:         {"pillars"},
+		DimensionPerformance:      {"metrics", "platforms"},
+		DimensionAudienceFeedback: {"sources"},
+	}[dimension.Key]
+	for _, member := range []struct {
+		name  string
+		given int
+	}{
+		{"items", len(dimension.Items)}, {"pillars", len(dimension.Pillars)}, {"metrics", len(dimension.Metrics)},
+		{"platforms", len(dimension.Platforms)}, {"sources", len(dimension.Sources)},
+	} {
+		if member.given > 0 && !slices.Contains(takes, member.name) {
+			return FieldError{Field: field + member.name, Reason: "not a parameter of this dimension"}
+		}
+	}
+	if err := checkMembers(field+"items", dimension.Items, profileFieldKeys); err != nil {
+		return err
+	}
+	if err := checkMembers(field+"metrics", dimension.Metrics, Metrics); err != nil {
+		return err
+	}
+	if err := checkMembers(field+"platforms", dimension.Platforms, Platforms); err != nil {
+		return err
+	}
+	if err := checkMembers(field+"sources", dimension.Sources, ExcerptSources); err != nil {
+		return err
+	}
+	if len(dimension.Pillars) > MaxPillars {
+		return FieldError{Field: field + "pillars", Reason: "too many pillars"}
+	}
+	seen := map[string]bool{}
+	for _, pillar := range dimension.Pillars {
+		name := normalizePillar(pillar)
+		if name == "" {
+			return FieldError{Field: field + "pillars", Reason: "a pillar is blank"}
+		}
+		if err := checkRuneLimit(field+"pillars", name, MaxPillarRunes); err != nil {
+			return err
+		}
+		if seen[name] {
+			return FieldError{Field: field + "pillars", Reason: "a pillar is listed twice"}
+		}
+		seen[name] = true
+	}
+	return nil
+}
+
+// checkMembers refuses a value outside its set and a value given twice.
+func checkMembers[T ~string, S ~string](field string, values []T, allowed []S) error {
+	seen := map[T]bool{}
+	for _, value := range values {
+		if !oneOf(string(value), allowed) {
+			return FieldError{Field: field, Reason: "not in its controlled set"}
+		}
+		if seen[value] {
+			return FieldError{Field: field, Reason: "listed twice"}
+		}
+		seen[value] = true
+	}
+	return nil
 }
 
 // normalizePillar is the one normalization a pillar name gets: NFC and no
@@ -387,7 +568,8 @@ type DiagnosisSection struct {
 
 // DimensionResult is one dimension of one section: ok with facts, or
 // not_computable with a reason - never a zero standing in for "unknown"
-// (FR-012). PR 1 registers no dimension, so no section carries one yet.
+// (FR-012). Facts are each dimension's own type (opdiag_dimensions.go), and
+// every number in them is a count or a rational number written as a string.
 type DimensionResult struct {
 	Status       string                `json:"status"`
 	Reason       string                `json:"reason,omitempty"`

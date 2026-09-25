@@ -607,7 +607,8 @@ func TestContentOpDiagRefusalsAnswerLikeMissingRecords(t *testing.T) {
 		{"empty brand", opdiagRequest("x", opdiagParams("brand", []string{}, "")), "scope.account_ids"},
 		{"two accounts in an account report", opdiagRequest("x", opdiagParams("account", []string{fx.a1, fx.a2}, "")), "scope.account_ids"},
 		{"window", opdiagRequest("x", strings.Replace(opdiagParams("account", []string{fx.a1}, ""), `"end":"2026-09-30"`, `"end":"2026-08-01"`, 1)), "window"},
-		{"a dimension", opdiagRequest("x", strings.Replace(opdiagParams("account", []string{fx.a1}, ""), `"dimensions":[]`, `"dimensions":[{"key":"cadence"}]`, 1)), "dimensions"},
+		{"a dimension twice", opdiagRequest("x", strings.Replace(opdiagParams("account", []string{fx.a1}, ""), `"dimensions":[]`, `"dimensions":[{"key":"cadence"},{"key":"cadence"}]`, 1)), "dimensions"},
+		{"a dimension param it does not take", opdiagRequest("x", strings.Replace(opdiagParams("account", []string{fx.a1}, ""), `"dimensions":[]`, `"dimensions":[{"key":"cadence","items":["positioning"]}]`, 1)), "dimensions.cadence.items"},
 		{"no params", `{"title":"x"}`, "params"},
 		{"title", opdiagRequest(strings.Repeat("诊", feedbacklearning.MaxDiagnosisTitleRunes+1), opdiagParams("account", []string{fx.a1}, "")), "title"},
 	} {

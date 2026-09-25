@@ -5,11 +5,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   OPDIAG_DATA_ORIGINS,
+  OPDIAG_DIMENSION_REASONS,
   OPDIAG_DIMENSIONS,
+  OPDIAG_GAP_KINDS,
   OPDIAG_MARK_KINDS,
   OPDIAG_MARK_VERDICTS,
+  OPDIAG_RULE_IDS,
   OPDIAG_SCOPES,
   opdiagPath,
+  parseOpDiagDimension,
+  parseOpDiagPreview,
   parseOpDiagReportList,
   parseOpDiagReportVersion,
   parseOpDiagReportVersionList,
@@ -28,7 +33,8 @@ function goSetValues(varName: string): string[] {
   if (!declaration) throw new Error(`${varName} not found in opdiag_contract.go`);
   const constants = declaration[1]!.split(",").map((name) => name.trim()).filter(Boolean);
   return constants.map((name) => {
-    const value = new RegExp(`${name}\\s+[A-Za-z]+ = "([^"]+)"`).exec(goContract);
+    // Typed constants (`Name Type = "v"`) and untyped ones (`name = "v"`).
+    const value = new RegExp(`\\b${name}\\s+(?:[A-Za-z]+\\s+)?=\\s+"([^"]+)"`).exec(goContract);
     if (!value) throw new Error(`${name} has no literal`);
     return value[1]!;
   });
@@ -41,6 +47,9 @@ describe("controlled sets", () => {
     expect([...OPDIAG_MARK_KINDS]).toEqual(goSetValues("MarkKinds"));
     expect([...OPDIAG_MARK_VERDICTS]).toEqual(goSetValues("MarkVerdicts"));
     expect([...OPDIAG_DATA_ORIGINS]).toEqual(goSetValues("DataOrigins"));
+    expect([...OPDIAG_DIMENSION_REASONS]).toEqual(goSetValues("DimensionReasons"));
+    expect([...OPDIAG_GAP_KINDS]).toEqual(goSetValues("GapKinds"));
+    expect([...OPDIAG_RULE_IDS]).toEqual(goSetValues("DiagnosisRuleIDs"));
   });
 
   it("encodes each path segment", () => {
@@ -165,5 +174,94 @@ describe("work marks", () => {
     expect(parseOpDiagWorkMarkList({ marks: [markWire, markWire] })).toHaveLength(2);
     expect(parseOpDiagWorkMarkList({ marks: [{ ...markWire, mark_id: null }] })).toEqual([]);
     expect(parseOpDiagWorkMarkList(undefined)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------- PR 2: dimensions (T054)
+
+const common = { completeness: { expected: 2, present: 1, gap_keys: ["performance/metric_missing/publication/p2"] },
+  limits: ["performance.difference_is_not_cause"], records: [{ kind: "publication", id: "p1" }] };
+
+const performanceWire = {
+  status: "ok", ...common,
+  facts: { groups: [{
+    platform: "xiaohongshu", metric: "favorite",
+    current: { publications: 2, with_value: 1, unknown: 1, sum: "0", mean: { status: "ok", value: "0", display: "0.00" } },
+    baseline: { publications: 0, with_value: 0, unknown: 0, sum: null, mean: { status: "not_computable", reason: "no_data" } },
+    change: { status: "not_computable", reason: "no_data" },
+    stat_windows: ["发布后 7 天"], stat_window_mixed: false,
+  }] },
+};
+
+describe("a dimension", () => {
+  it("reads performance with its strings as the server wrote them, and an unknown sum as null", () => {
+    const dimension = parseOpDiagDimension("performance", performanceWire);
+    expect(dimension.status).toBe("ok");
+    if (dimension.status !== "ok") return;
+    const group = (dimension.facts as { groups: { current: { sum: string | null; mean: unknown }; baseline: { sum: string | null } }[] }).groups[0]!;
+    expect(group.current.sum).toBe("0");
+    expect(group.current.mean).toEqual({ status: "ok", value: "0", display: "0.00" });
+    expect(group.baseline.sum).toBeNull();
+    expect(dimension.completeness.gapKeys).toEqual(["performance/metric_missing/publication/p2"]);
+  });
+
+  it("reads not_computable with its reason, and an unknown reason as unknown", () => {
+    expect(parseOpDiagDimension("coverage", { status: "not_computable", reason: "missing_config", ...common }))
+      .toMatchObject({ status: "not_computable", reason: "missing_config" });
+    expect(parseOpDiagDimension("coverage", { status: "not_computable", reason: "too_low", ...common }))
+      .toMatchObject({ status: "not_computable", reason: "unknown" });
+  });
+
+  it("reads a cadence target that is set without a number as not set, never as 0", () => {
+    const cadence = parseOpDiagDimension("cadence", { status: "ok", ...common, facts: {
+      channels: [{ channel: "douyin", target: { set: true }, weeks: [
+        { iso_week: "2026-W37", start: "2026-09-07", complete: true, published: 0, compared: true, met: true },
+      ] }, { channel: "wechat_mp", target: { set: true, per_week: 0 }, weeks: [] }],
+      published_at_missing: 0,
+    } });
+    expect(cadence.status).toBe("ok");
+    if (cadence.status !== "ok") return;
+    const channels = (cadence.facts as { channels: { target: unknown }[] }).channels;
+    expect(channels[0]!.target).toEqual({ set: false });
+    expect(channels[1]!.target).toEqual({ set: true, perWeek: 0 });
+  });
+
+  it("degrades a malformed dimension to unknown and keeps the rest of the report", () => {
+    expect(parseOpDiagDimension("performance", { ...performanceWire, facts: { groups: [{ platform: "xiaohongshu" }] } }))
+      .toEqual({ status: "unknown" });
+    expect(parseOpDiagDimension("performance", { ...performanceWire, status: "great" })).toEqual({ status: "unknown" });
+    expect(parseOpDiagDimension("performance", { ...performanceWire, completeness: { expected: "2" } })).toEqual({ status: "unknown" });
+    expect(parseOpDiagDimension("ranking", performanceWire)).toEqual({ status: "unknown" });
+    // A mean the server wrote as a number is not read as one.
+    const numeric = structuredClone(performanceWire);
+    (numeric.facts.groups[0]!.current.mean as unknown) = { status: "ok", value: 0, display: 0 };
+    expect(parseOpDiagDimension("performance", numeric)).toEqual({ status: "unknown" });
+
+    const version = parseOpDiagReportVersion({
+      ...versionWire,
+      result: { ...resultWire, sections: [{ section: "account", account_id: "a1", dimensions: {
+        performance: { ...performanceWire, facts: "broken" }, audience_feedback: {
+          status: "ok", ...common, facts: { excerpts: 1, by_source: [], by_tag: [{ tag: "价格", excerpts: 1 }], untagged: 0 },
+        },
+      } }] },
+    });
+    expect(version?.result.sections[0]?.dimensions.performance).toEqual({ status: "unknown" });
+    expect(version?.result.sections[0]?.dimensions.audience_feedback?.status).toBe("ok");
+  });
+});
+
+describe("a preview", () => {
+  it("reads the result and the ROI reference as it is", () => {
+    const roi = { report_id: "roi-1", version_no: 3, metrics: { attributed_net_revenue: { display: "1,200.00" } } };
+    const preview = parseOpDiagPreview({ ...resultWire, roi_reference: roi, rules: ["roi_reference.shown_as_is"] });
+    expect(preview?.roiReference).toEqual(roi);
+    expect(preview?.gaps[0]?.kind).toBe("profile_field_pending");
+    expect(parseOpDiagPreview({ ...resultWire, gaps: [{ ...resultWire.gaps[0], kind: "vibes" }] })?.gaps[0]?.kind).toBe("unknown");
+  });
+
+  it("degrades a malformed preview", () => {
+    expect(parseOpDiagPreview({ ...resultWire, calc_version: 1 })).toBeNull();
+    expect(parseOpDiagPreview({ ...resultWire, roi_reference: "x" })).toBeNull();
+    expect(parseOpDiagPreview(undefined)).toBeNull();
   });
 });

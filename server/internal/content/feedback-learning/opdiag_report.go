@@ -54,6 +54,8 @@ type DiagnosisStore struct {
 	// database. A test replaces it to hold the whole collection order
 	// without one.
 	own diagnosisOwnRecords
+	// roiSummaries reads a 034 ROI report summary; nil is Store's own read.
+	roiSummaries diagnosisROISummaries
 }
 
 // DiagnosisReportRequest is the body of POST /reports and POST
@@ -282,6 +284,33 @@ func (s *DiagnosisStore) generateDiagnosis(ctx context.Context, workspaceID, act
 		return DiagnosisReportVersion{}, err
 	}
 	return written, nil
+}
+
+// ---------------------------------------------------------------- preview
+
+// PreviewDiagnosis computes a diagnosis from the given params and the
+// inputs as they are now, and stores nothing (POST /preview, T051): no row,
+// no audit entry, no fence. It reads in the same order as generating does,
+// so a foreign account is refused before anything about any account is
+// read, and it answers exactly what generating would store as the result.
+func (s *DiagnosisStore) PreviewDiagnosis(ctx context.Context, workspaceID, actor string, params *DiagnosisParams, now time.Time) (DiagnosisResult, error) {
+	if s == nil || s.Store == nil {
+		return DiagnosisResult{}, ErrStorage
+	}
+	if workspaceID == "" || actor == "" {
+		return DiagnosisResult{}, ErrInvalid
+	}
+	if params == nil {
+		return DiagnosisResult{}, FieldError{Field: "params", Reason: "required"}
+	}
+	used := *params
+	used.Window.Timezone = s.roi().location(ctx, workspaceID).String()
+	used.GeneratedAt = now.UTC().Format(time.RFC3339)
+	_, inputs, err := s.gatherDiagnosisInputs(ctx, workspaceID, actor, used, false)
+	if err != nil {
+		return DiagnosisResult{}, err
+	}
+	return CalculateDiagnosis(used, inputs)
 }
 
 // ---------------------------------------------------------------- reading
