@@ -138,7 +138,7 @@ description: "Task list for 035 feedback-learning — brand/account operating di
 **覆盖**：FR-050～FR-069（含 FR-063a）、FR-032（加入待办）；SC-006～SC-008、SC-014（服务端链路）；D14-V05 全部、D14-V08 服务端部分。Q6 若 PR 2 未做，在本 PR 做（T050）。
 **可选拆分**：3a（本模块部分，含全部 18 个迁移）/ 3b（建卡与提议确认两条跨模块路径，零迁移），见 plan.md。
 
-**文件**：六张表的迁移（18 个）；`topic-planning` 的两个迁移 `<N>_content_topic_card_origin_key.{up,down}.sql`、`<N+1>_content_topic_card_origin_key_idx.{up,down}.sql` 与 `topic-planning/store.go`（`CreateOnce`）及其测试（Q3 补充，contract §7.4）；`opdiag_annotations.go`、`opdiag_decisions.go` 与测试；`guards_test.go`（登记 `JudgementKinds`、`JudgementBases`、`AuthorKinds`、`SuggestionTargets`、`DecisionKinds`、`AdoptModes`、`EffectOutcomes`、`EffectFailures`、`ProposalStates`、`TodoStates`、`TodoOrigins`）；`server/internal/handler/content_opdiag_decisions.go` 与测试；删除清单与删除链、sqlc；`main.go`、`router.go`（upstream）；路由存在性用例；core `contract.ts`、`queries.ts`；`scripts/content-boundaries.json`（`adapters` 追加 `content_opdiag_decisions.go`）。
+**文件**：六张表的迁移（18 个）；`topic-planning` 的两个迁移 `<N>_content_topic_card_origin_key.{up,down}.sql`、`<N+1>_content_topic_card_origin_key_idx.{up,down}.sql` 与 `topic-planning/store.go`（`CreateOnce`）及其测试（Q3 补充，contract §7.4；`feedback-learning` 不 import `topic-planning`，经 handler 适配器接线）；`opdiag_annotations.go`、`opdiag_decisions.go` 与测试；`guards_test.go`（登记 `JudgementKinds`、`JudgementBases`、`AuthorKinds`、`SuggestionTargets`、`DecisionKinds`、`AdoptModes`、`EffectOutcomes`、`EffectFailures`、`ProposalStates`、`TodoStates`、`TodoOrigins`）；`server/internal/handler/content_opdiag_decisions.go` 与测试；删除清单与删除链、sqlc；`main.go`、`router.go`（upstream）；路由存在性用例；core `contract.ts`、`queries.ts`；`scripts/content-boundaries.json`（`adapters` 追加 `content_opdiag_decisions.go`）。
 
 ## Phase 10: 迁移（18 个）
 
@@ -168,17 +168,18 @@ description: "Task list for 035 feedback-learning — brand/account operating di
 - [ ] T072 先写：一个修订一个决定——并发两次提交，恰好一个成功，另一个 409 `suggestion_id`（唯一索引那一层也要被触发一次：用测试钩子让两者都越过读检查）
 - [ ] T073 先写：**提议确认**——当前版本 = 基础版本 → `ip-profile` 版本 +1，新版本十一项中未修改的十项与旧版本逐项相同、修改项 `status = confirmed`；提议 `confirmed` 带 `applied_revision_id`；当前版本 ≠ 基础版本 → 409 `base_revision_id` 且 `ip-profile` 版本数不变；放弃 → `dismissed`，不写 `ip-profile`
 - [ ] T074 先写：**加入待办**——`data_gap` 待办的 `gap_key` 必须在该版本缺口清单里；重复加入 → 409 `origin_gap_key`；待办状态修订
-- [ ] T075 先写守卫：六张表只插不改且有 `INSERT INTO`；拒绝路径的函数体不调用 `DiagTopicWriter` / `DiagProfileWriter` 的任何方法（按函数名扫）；迁移里没有经营记忆或 AI 判断表；模块里没有写经营记忆的路径（FR-068）
-- [ ] T076 新建 `opdiag_annotations.go`、`opdiag_decisions.go`：写接口 `DiagTopicWriter`、`DiagProfileWriter` 定义在模块里
+- [ ] T075 先写守卫：六张表只插不改且有 `INSERT INTO`；拒绝路径的函数体不调用 `TopicCardCreator` / `DiagProfileWriter` 的任何方法（按函数名扫）；迁移里没有经营记忆或 AI 判断表；模块里没有写经营记忆的路径（FR-068）
+- [ ] T075a 先写守卫（主控 2026-09-25）：扫 `server/internal/content/feedback-learning/` 下全部 `.go` 文件（含 `_test.go`）的 import，确认没有 `server/internal/content/topic-planning`（也没有 `ip-profile`）；变异：在 `opdiag_decisions.go` 里加一句该 import → 用例变红，再还原
+- [ ] T076 新建 `opdiag_annotations.go`、`opdiag_decisions.go`：写接口 `TopicCardCreator`（`CreateOnce(ctx, workspaceID, actor, key, TopicCardDraft)`、`Exists`）与 `DiagProfileWriter` 定义在模块里，只用本模块类型与字符串（contract §7.4）；模块测试用假 `TopicCardCreator`
 
 ## Phase 13: HTTP 与链路
 
 - [ ] T077 先写（工作流第 12 步）：`/reports/{reportId}/versions/{versionNo}/annotations|judgements|suggestions`、`/judgements/{judgementId}/revisions`、`/suggestions/{suggestionId}/revisions|decisions`、`/decisions/{decisionId}/retry`、`/profile-proposals/{proposalId}/confirm|dismiss`、`/todos/{todoId}/revisions` 各一条穿过真实中间件、参数 ≠ 上下文的用例
 - [ ] T078 先写：每个端点一条越权用例；决策顺序（contract §7.1）第 7～9 序各一条
 - [ ] T079 先写（真实库，handler 包）：**D14-V08 服务端链路**——建选题卡 → 建作品 → 登记发布记录 → 录一条指标与一条摘录 → 生成诊断（选表现与受众反馈）→ `scope` 与表现维度包含这条发布记录 → 在版本上写一条建议（`topic_card`）→ 采纳 `create` → 选题卡列表多一张 `draft`（SC-014）
-- [ ] T080 新建 `handler/content_opdiag_decisions.go`：`topicWriter`（`topicplanning.Store.Create` / `Get`）、`profileWriter`（`ipprofile.Service.CurrentPersonaRevision` + `SetProfile`）；upstream 提交挂路由；路由存在性用例
+- [ ] T080 新建 `handler/content_opdiag_decisions.go`，照 `handler/content_roi_records.go` 的 `roiAccounts` / `roiWorks` + `h.roiStore()` 同一接线：`opdiagTopicCards{store *topicplanning.Store}` 实现 `TopicCardCreator`（调 `topicplanning.Store.CreateOnce` / `Get`，`store` 取自既有 `h.topicPlanningStore()`），在 `h.opdiagStore()` 里注入；`profileWriter`（`ipprofile.Service.CurrentPersonaRevision` + `SetProfile`）；upstream 提交挂路由；路由存在性用例
 - [ ] T081 [P] core：判断、建议、决定、效果、提议、待办的 schema 与畸形响应用例；`queries.ts` 的 mutation（非乐观，成功后失效报告版本、annotations、选题卡列表）
-- [ ] T082 变异验证：拒绝路径里调一次 `topicWriter.Create` → T065、T075；提议采纳时直接 `SetProfile` → T067；建卡失败不写效果 → T069；重试时不带幂等键（改调 `Create`）→ T070、T070a；去掉 `base_revision_id` 比较 → T073；待办去掉 `gap_key` 重复检查 → T074
+- [ ] T082 变异验证：拒绝路径里调一次 `TopicCardCreator.CreateOnce` → T065、T075；在模块里 import `topic-planning` → T075a；提议采纳时直接 `SetProfile` → T067；建卡失败不写效果 → T069；重试时不带幂等键（改调 `Create`）→ T070、T070a；去掉 `base_revision_id` 比较 → T073；待办去掉 `gap_key` 重复检查 → T074
 - [ ] T083 本地验证同 T034
 - [ ] T084 **远程验收**：`~/loretide-ci/lt-verify.sh claude/035-pr3-opdiag-decisions all`；T072、T079 等带库用例以其 PASS / SKIP 计数为准
 

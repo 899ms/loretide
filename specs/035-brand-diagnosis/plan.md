@@ -52,7 +52,29 @@ description: "Implementation plan for 035 feedback-learning — brand/account op
 
 采纳为选题卡带每条建议一个的幂等键 `opdiag-suggestion:<suggestion_id>`；重试关联已建的卡，不建第二张；「卡已建、效果未记」由重试收敛（spec FR-063a，contract §7.4）。
 
-**这一条要动 `topic-planning`**：「同键至多一张卡」只能由建卡的一方保证。改动是增量的，放在 PR 3：`content_topic_card` 加可空列 `origin_key`（一个迁移）、唯一并发索引 `content_topic_card_origin_key_idx`（一个迁移）、公开函数 `Store.CreateOnce`。既有 `Create`、022 的响应 schema、`modules` 依赖表都不变。它是 `topic-planning` 的**公开契约新增**，PR 3 正文要按文档 12 §6 写明「公开契约变更：新增 `CreateOnce`，既有消费者不受影响」，并跑 `topic-planning` 的既有测试。
+**这一条要动 `topic-planning`**：「同键至多一张卡」只能由建卡的一方保证。改动是增量的，放在 PR 3：`content_topic_card` 加可空列 `origin_key`（一个迁移）、唯一并发索引 `content_topic_card_origin_key_idx`（一个迁移）、公开函数 `Store.CreateOnce`。既有 `Create`、022 的响应 schema、`modules` 依赖表都不变。它是 `topic-planning` 的**公开契约新增**，PR 3 正文要按文档 12 §6 写明「公开契约变更：新增 `CreateOnce`，既有消费者不受影响」，并跑 `topic-planning` 的既有测试。主控 2026-09-25 已接受这三处新增。
+
+**接线方式（主控 2026-09-25 追加条件：`feedback-learning` 不得 import `topic-planning`）**：模块在 `opdiag_decisions.go` 里定义小接口 `TopicCardCreator`，只用本模块的类型与字符串：
+
+```go
+// TopicCardDraft is what an adopted suggestion asks for. Plain strings only:
+// this module does not import topic-planning.
+type TopicCardDraft struct {
+	AccountID string // "" = no account
+	IPFit     string // the suggestion body
+}
+
+type TopicCardCreator interface {
+	// CreateOnce returns the card created under key, creating it the first time.
+	CreateOnce(ctx context.Context, workspaceID, actor, key string, draft TopicCardDraft) (topicCardID string, created bool, err error)
+	// Exists answers the link mode: the card is here and its account matches.
+	Exists(ctx context.Context, workspaceID, actor, topicCardID, accountID string) error
+}
+```
+
+`server/internal/handler/content_opdiag_decisions.go`（已登记为 `adapters` 的 handler 文件）里的 `opdiagTopicCards{store *topicplanning.Store}` 实现它，调 `topicplanning.Store.CreateOnce` / `Get`，由 `h.opdiagStore()` 注入，`topicplanning.Store` 取自既有的 `h.topicPlanningStore()`（`handler/content_topic.go:82`）。这与 034 完全同形：`handler/content_roi_records.go` 定义 `roiAccounts{service *ipprofile.Service}`、`roiWorks{store *workeditor.Store}`，在 `h.roiStore()` 里注入 `feedbacklearning.ROIStore`（`:88-95`），`feedback-learning` 自己不 import `ip-profile` 或 `work-editor`。`ip-profile` 的写接口 `DiagProfileWriter` 同样照此接线。`modules` 依赖表不变。
+
+一条守卫用例（tasks T075a）扫 `feedback-learning` 的全部 Go 源文件（含测试），确认没有 import `server/internal/content/topic-planning`；`pnpm check:content-boundaries` 也会挡，但守卫让它在 `go test` 里就红。
 
 ### 7. 图标——PR 4 核实
 
@@ -68,7 +90,7 @@ PR 4 核实项目所用 lucide 版本里有 `Stethoscope`；没有就换一个�
 
 1. **写事务第一句取删除栅栏、同事务写审计**：照 `feedback-learning/store.go:109` 的 `begin()`。
 2. **越权与「不存在」同形**：照 `handler/content_metric.go` 的 `feedbackScope` 与 034 的 `roiScope`。
-3. **不 import 别的模块，模块定义小接口、handler 适配器回答**：照 `feedbackPublications` 与 034 的 `Accounts` / `Works`。本卡新增的读接口：`DiagAccounts`（`AccountExists`、`Account`、`CurrentProfile`）、`DiagRules`（经营规则与时区）、`DiagTopics`（选题卡的账号）、`DiagWorks`（作品）、`DiagDelivery`（发布记录、审核、交付的全工作区列表）；写接口（PR 3）：`DiagTopicWriter`（建卡、只读核实卡）、`DiagProfileWriter`（`SetProfile`）。
+3. **不 import 别的模块，模块定义小接口、handler 适配器回答**：照 `feedbackPublications` 与 034 的 `Accounts` / `Works`。本卡新增的读接口：`DiagAccounts`（`AccountExists`、`Account`、`CurrentProfile`）、`DiagRules`（经营规则与时区）、`DiagTopics`（选题卡的账号）、`DiagWorks`（作品）、`DiagDelivery`（发布记录、审核、交付的全工作区列表）；写接口（PR 3）：`TopicCardCreator`（`CreateOnce` 建卡、`Exists` 只读核实卡，见「主控决定」第 6 条）、`DiagProfileWriter`（`SetProfile`）。这些接口只用本模块的类型与字符串，由 handler 里的适配器实现；`feedback-learning` 不 import `topic-planning` 或 `ip-profile`。
 4. **受控集 Go 为准 + `CHECK` 兜底 + 「恰好 N 项」用例 + 登记进 027 的第六集守卫**：照 027 与 034。
 5. **报告版本只插、`inputs` 存副本、读时派生「输入已有更新」、复算逐字节相同**：照 034 PR 4（#266）的 `roi_report.go`。
 6. **读对方源文件对表、不 import**：`profileFieldKeys` 对 `ip-profile/profile.go` 的 JSON 名，照 027 `TestThePlatformSetAgreesWithIPProfiles`。

@@ -447,7 +447,7 @@
 | `todo` | 栅栏 → 核验 → 决定 → 待办修订 1（`open`）→ 效果 `done` → 审计 | 一个（本模块） |
 | `profile_proposal` | 栅栏 → 核验（账号存在；读当前配置 `revision_id`，经适配器）→ 决定 → 提议修订 1（`proposed`）→ 效果 `done` → 审计 | 一个（本模块）；**不写 `ip-profile`** |
 | `topic_card` + `link` | 适配器只读核实选题卡存在且账号相符 → 栅栏 → 决定 → 效果 `done`（`target_id` = 该卡）→ 审计 | 一个（本模块） |
-| `topic_card` + `create` | ① 栅栏 → 决定 → 审计 → 提交；② 适配器调 `topicplanning.Store.CreateOnce`（幂等键 `opdiag-suggestion:<suggestion_id>`，`draft`，`account_id` 取 `target.account_id`，`ip_fit` 预填建议正文）；③ 栅栏 → 效果 `done` 或 `failed` → 审计 → 提交 | 三步，Q3=A；② 幂等，见 §7.4 |
+| `topic_card` + `create` | ① 栅栏 → 决定 → 审计 → 提交；② 经本模块的 `TopicCardCreator.CreateOnce`（handler 适配器实现，内部调 `topicplanning.Store.CreateOnce`；幂等键 `opdiag-suggestion:<suggestion_id>`，`draft`，`account_id` 取 `target.account_id`，`ip_fit` 预填建议正文）；③ 栅栏 → 效果 `done` 或 `failed` → 审计 → 提交 | 三步，Q3=A；② 幂等，见 §7.4 |
 
 重试（`/decisions/{decisionId}/retry`）：对最新效果为 `failed`、或**还没有任何效果记录**的 `topic_card` 采纳决定可用；走上表 `create` 的 ②③（同一个幂等键）或 `link` 的核实与③。已有 `done` 效果 → 409 `decision_id`。
 
@@ -476,9 +476,29 @@
 | 公开函数 | `func (s *Store) CreateOnce(ctx context.Context, actor string, card TopicCard, originKey string) (TopicCard, bool, error)`：栅栏事务内先按 `(workspace_id, origin_key)` 读，有则返回那张卡与 `created=false`；没有则按 `Create` 的同一套校验与 `insertCardTx` 插入并写 `origin_key`，返回 `created=true`。并发的第二个插入撞唯一索引时，在同一调用里回读并返回已建的卡，不向调用方报错。`originKey` 为空 → `ErrInvalid` |
 | 对外字段 | `TopicCard` 不新增对外字段（`origin_key` 只供 `CreateOnce` 查重），022 的响应 schema 不变 |
 
+**接线方式（主控 2026-09-25 追加条件：`feedback-learning` 不得 import `topic-planning`）**：模块在 `opdiag_decisions.go` 里定义小接口 `TopicCardCreator`，只用本模块的类型与字符串：
+
+```go
+// TopicCardDraft is what an adopted suggestion asks for. Plain strings only:
+// this module does not import topic-planning.
+type TopicCardDraft struct {
+	AccountID string // "" = no account
+	IPFit     string // the suggestion body
+}
+
+type TopicCardCreator interface {
+	// CreateOnce returns the card created under key, creating it the first time.
+	CreateOnce(ctx context.Context, workspaceID, actor, key string, draft TopicCardDraft) (topicCardID string, created bool, err error)
+	// Exists answers the link mode: the card is here and its account matches.
+	Exists(ctx context.Context, workspaceID, actor, topicCardID, accountID string) error
+}
+```
+
+`server/internal/handler/content_opdiag_decisions.go`（已登记为 `adapters` 的 handler 文件）里的 `opdiagTopicCards{store *topicplanning.Store}` 实现它，调 `topicplanning.Store.CreateOnce` / `Get`，由 `h.opdiagStore()` 注入，`topicplanning.Store` 取自既有的 `h.topicPlanningStore()`（`handler/content_topic.go:82`）。这与 034 完全同形：`handler/content_roi_records.go` 定义 `roiAccounts{service *ipprofile.Service}`、`roiWorks{store *workeditor.Store}`，在 `h.roiStore()` 里注入 `feedbacklearning.ROIStore`（`:88-95`），`feedback-learning` 自己不 import `ip-profile` 或 `work-editor`。`ip-profile` 的写接口 `DiagProfileWriter` 同样照此接线。`modules` 依赖表不变。
+
 **收敛**：「卡已建、效果未记」时，建议显示「已采纳，结果未记录」；重试再调 `CreateOnce` 得到同一张卡（`created=false`），写效果 `done` 指向它。任意次数、任意并发的重试，一条建议最多对应一张选题卡。
 
-**用例**（PR 3，tasks T070、T070a）：钩子在 ② 成功后、③ 之前注入失败 → 重试 → 选题卡总数恰好 +1，效果 `done` 指向那张卡；两个重试并发 → 同样恰好 +1。`topic-planning` 侧另有 `CreateOnce` 自己的用例（同键两次、并发两次、空键拒绝、既有 `Create` 不写 `origin_key`）。
+**用例**（PR 3，tasks T070、T070a）：钩子在 ② 成功后、③ 之前注入失败 → 重试 → 选题卡总数恰好 +1，效果 `done` 指向那张卡；两个重试并发 → 同样恰好 +1。`topic-planning` 侧另有 `CreateOnce` 自己的用例（同键两次、并发两次、空键拒绝、既有 `Create` 不写 `origin_key`）。守卫：`feedback-learning` 的 Go 源文件不 import `topic-planning`（tasks T075a）。
 
 ---
 
@@ -512,6 +532,7 @@ func (s *Store) DiagnosisSummary(ctx context.Context, workspaceID, reportID stri
 - **不聚合在 SQL 里**：沿用 027 的包级守卫；本卡的 SQL 里没有 `SUM(` / `AVG(` / `GROUP BY` / `count(`。
 - **不合并阅读与播放**：沿用 027 的包级守卫；表现维度按指标 id 泛型遍历。
 - **不读别人的表**：`opdiag_*.go` 的 SQL 只出现 `content_opdiag_`、`content_manual_metric`、`content_feedback_excerpt`，以及 034 读接口所在文件里的 `content_roi_`。
+- **不 import `topic-planning`**（主控 2026-09-25）：`feedback-learning` 的 Go 源文件（含测试）没有对 `server/internal/content/topic-planning` 的 import；建卡只经 `TopicCardCreator` 接口（§7.4）。
 - **不读素材与知识**：`opdiag_*.go` 与 `server/internal/handler/content_opdiag_*.go` 不引用 `source-inbox` / `sourceinbox` / `knowledge-base` / `knowledgebase`。
 - **不写开发诊断**：`opdiag_*.go` 不写 `diagnostics` 模块的表；开发诊断模块的源文件不出现 `content_opdiag_`。
 - **没有分数与角色**：参数、结果、`DiagnosisSummary` 的类型里没有 `score` / `grade` / `rating` / `rank` / `level` / `role` / `industry` 字段（反射）。
