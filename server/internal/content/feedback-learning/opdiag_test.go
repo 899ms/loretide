@@ -352,7 +352,8 @@ func TestTheProfileKeysAgreeWithIPProfiles(t *testing.T) {
 // ---------------------------------------------------------------- T011
 
 // T011 / FR-002 / FR-004 / FR-005 / SC-011: params that cannot be used are
-// refused naming the field; in PR 1 any dimension is.
+// refused naming the field. Since PR 2 the six dimensions are computed; a
+// dimension is refused only for its own params (T052).
 func TestDiagnosisParamsAreRefusedByName(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -373,7 +374,37 @@ func TestDiagnosisParamsAreRefusedByName(t *testing.T) {
 		{"a dimension twice", func(p *DiagnosisParams) {
 			p.Dimensions = []DiagnosisDimensionParam{{Key: DimensionCadence}, {Key: DimensionCadence}}
 		}, "dimensions"},
-		{"an ROI reference", func(p *DiagnosisParams) { p.ROIReportRef = &DiagnosisROIRef{ReportID: "r", VersionNo: 1} }, "roi_report_ref"},
+		{"items on cadence", func(p *DiagnosisParams) {
+			p.Dimensions = []DiagnosisDimensionParam{{Key: DimensionCadence, Items: []string{"positioning"}}}
+		}, "dimensions.cadence.items"},
+		{"an item that is not a profile item", func(p *DiagnosisParams) {
+			p.Dimensions = []DiagnosisDimensionParam{{Key: DimensionConsistency, Items: []string{"persona_prompt"}}}
+		}, "dimensions.consistency.items"},
+		{"a metric twice", func(p *DiagnosisParams) {
+			p.Dimensions = []DiagnosisDimensionParam{{Key: DimensionPerformance, Metrics: []Metric{MetricLike, MetricLike}}}
+		}, "dimensions.performance.metrics"},
+		{"an unknown platform", func(p *DiagnosisParams) {
+			p.Dimensions = []DiagnosisDimensionParam{{Key: DimensionPerformance, Metrics: []Metric{MetricLike}, Platforms: []Platform{"weibo"}}}
+		}, "dimensions.performance.platforms"},
+		{"an unknown source", func(p *DiagnosisParams) {
+			p.Dimensions = []DiagnosisDimensionParam{{Key: DimensionAudienceFeedback, Sources: []ExcerptSource{"email"}}}
+		}, "dimensions.audience_feedback.sources"},
+		{"a pillar twice after NFC and trimming", func(p *DiagnosisParams) {
+			p.Dimensions = []DiagnosisDimensionParam{{Key: DimensionCoverage, Pillars: []string{"café", " cafe\u0301 "}}}
+		}, "dimensions.coverage.pillars"},
+		{"a blank pillar", func(p *DiagnosisParams) {
+			p.Dimensions = []DiagnosisDimensionParam{{Key: DimensionCoverage, Pillars: []string{"  "}}}
+		}, "dimensions.coverage.pillars"},
+		{"a long pillar", func(p *DiagnosisParams) {
+			p.Dimensions = []DiagnosisDimensionParam{{Key: DimensionCoverage, Pillars: []string{strings.Repeat("穿", MaxPillarRunes+1)}}}
+		}, "dimensions.coverage.pillars"},
+		{"too many pillars", func(p *DiagnosisParams) {
+			pillars := []string{}
+			for i := range MaxPillars + 1 {
+				pillars = append(pillars, strings.Repeat("支", i+1))
+			}
+			p.Dimensions = []DiagnosisDimensionParam{{Key: DimensionCoverage, Pillars: pillars}}
+		}, "dimensions.coverage.pillars"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -383,22 +414,37 @@ func TestDiagnosisParamsAreRefusedByName(t *testing.T) {
 			fieldErrorNaming(t, err, tc.field)
 		})
 	}
-	// Every one of the six is well formed and still refused in PR 1: this
-	// build registers no dimension calculator.
+	// Every one of the six is now computed (PR 2 lifted PR 1's refusal): a
+	// dimension alone, with empty params, is a result and not a 400 - an
+	// empty list is that dimension's missing_config.
 	for _, dimension := range DiagnosisDimensions {
 		params := diagParams(ScopeAccount, "a1")
 		params.Dimensions = []DiagnosisDimensionParam{{Key: dimension}}
 		if _, err := prepareDiagnosisParams(params); err != nil {
 			t.Fatalf("%s: %v", dimension, err)
 		}
-		_, err := CalculateDiagnosis(params, nil)
-		fieldErrorNaming(t, err, "dimensions")
-		store, log := diagFixture()
-		_, _, err = store.gatherDiagnosisInputs(t.Context(), "ws", "u1", params, false)
-		fieldErrorNaming(t, err, "dimensions")
-		if slices.ContainsFunc(log.calls, func(call string) bool { return !strings.HasPrefix(call, "exists:") }) {
-			t.Fatalf("%s: account data was read before the dimension was refused: %v", dimension, log.calls)
+		store, _ := diagFixture()
+		_, inputs, err := store.gatherDiagnosisInputs(t.Context(), "ws", "u1", params, false)
+		if err != nil {
+			t.Fatalf("%s: %v", dimension, err)
 		}
+		result, err := CalculateDiagnosis(params, inputs)
+		if err != nil {
+			t.Fatalf("%s: %v", dimension, err)
+		}
+		if _, ok := result.Sections[0].Dimensions[dimension]; !ok {
+			t.Fatalf("%s is not in the result: %+v", dimension, result.Sections[0])
+		}
+	}
+	// A dimension with bad params is still refused before any account data
+	// is read.
+	params := diagParams(ScopeAccount, "a1")
+	params.Dimensions = []DiagnosisDimensionParam{{Key: DimensionConsistency, Items: []string{"role"}}}
+	store, log := diagFixture()
+	_, _, err := store.gatherDiagnosisInputs(t.Context(), "ws", "u1", params, false)
+	fieldErrorNaming(t, err, "dimensions.consistency.items")
+	if slices.ContainsFunc(log.calls, func(call string) bool { return !strings.HasPrefix(call, "exists:") }) {
+		t.Fatalf("account data was read before the dimension was refused: %v", log.calls)
 	}
 }
 

@@ -17,9 +17,11 @@ import { parseWithFallback } from "@multica/core/api/schema";
 //   pending_data, never as a judgement.
 // - A value outside a controlled set degrades to "unknown" and is shown as
 //   unknown, never as one of the known values.
-// - PR 1 computes the scope, the sections and the report-level gaps. A
-//   dimension's result is passed through untouched until PR 2 gives it a
-//   schema; every number in it will be a string.
+// - Each dimension is ok with its facts or not computable with a reason
+//   (PR 2). A count is a JSON integer; a sum, mean or difference is a string
+//   the server wrote, shown as it is and never parsed into a number here. A
+//   dimension whose shape is wrong reads as "unknown", and the rest of the
+//   report still reads.
 //
 // Contract: specs/035-brand-diagnosis/contracts/brand-diagnosis.md
 
@@ -44,6 +46,31 @@ export type OpDiagDataOrigin = (typeof OPDIAG_DATA_ORIGINS)[number];
 
 export const OPDIAG_SECTIONS = ["account", "unknown_account", "brand"] as const;
 export type OpDiagSection = (typeof OPDIAG_SECTIONS)[number];
+
+/** Why a dimension, or one fact of it, cannot be computed (FR-012). */
+export const OPDIAG_DIMENSION_REASONS = [
+  "no_data", "missing_config", "missing_comparison_window", "missing_observation_window", "no_delivery_channel",
+] as const;
+export type OpDiagDimensionReason = (typeof OPDIAG_DIMENSION_REASONS)[number];
+
+/** What a gap is missing: R-057's 补录待办 (FR-031). */
+export const OPDIAG_GAP_KINDS = [
+  "profile_field_pending", "work_unchecked", "work_untagged", "cadence_unset", "observation_unset",
+  "published_at_missing", "metric_missing", "account_unresolved", "work_missing", "publication_status_unknown",
+  "excerpt_untagged",
+] as const;
+export type OpDiagGapKind = (typeof OPDIAG_GAP_KINDS)[number];
+
+/** The rule ids a result names; the page translates them (FR-015). */
+export const OPDIAG_RULE_IDS = [
+  "common.unknown_is_not_zero", "common.no_cross_platform_ranking", "common.no_score",
+  "common.window_in_brand_timezone", "consistency.marks_on_older_profile", "coverage.multi_pillar_not_additive",
+  "cadence.target_is_brand_channel_level", "cadence.incomplete_week_not_compared",
+  "performance.difference_is_not_cause", "performance.samples_taken_at_different_ages",
+  "performance.stat_window_mixed", "audience_feedback.tags_not_additive", "execution_flow.no_threshold",
+  "roi_reference.shown_as_is", "scope.historical_import_account_unknown",
+] as const;
+export type OpDiagRuleId = (typeof OPDIAG_RULE_IDS)[number];
 
 /** Builds a path under /api/content-operating-diagnosis with each segment encoded. */
 export function opdiagPath(...parts: string[]): string {
@@ -78,7 +105,7 @@ export interface OpDiagInputCounts {
 
 export interface OpDiagGap {
   gapKey: string;
-  kind: string;
+  kind: OpDiagGapKind | "unknown";
   /** "" for a report-level gap. */
   dimension: string;
   ref: { kind: string; id: string };
@@ -101,17 +128,227 @@ export interface OpDiagResult {
   sections: {
     section: OpDiagSection | "unknown";
     accountId: string;
-    /** Per dimension, untouched until PR 2 gives it a schema. */
-    dimensions: Record<string, unknown>;
+    /** The selected dimensions of this section; the brand section has
+     *  cadence and execution_flow only. */
+    dimensions: Partial<Record<OpDiagDimension, OpDiagDimensionResult>>;
   }[];
   gaps: OpDiagGap[];
   /** Rule ids; the page translates them (FR-015). */
   rules: string[];
   /** Reference keys a judgement may cite (contract §5.8). */
   refs: string[];
+  /** The 034 ROI summary a person chose to show (Q6), as the server copied
+   *  it: shown as it is, never added to or compared with anything here. */
+  roiReference: Record<string, unknown> | null;
 }
 
+// ---------------------------------------------------------------- dimensions
+
+/** A sum, mean or difference: the server's reduced value and its display
+ *  string, or not computable with a reason. Never parsed into a number. */
+export type OpDiagNumber =
+  | { status: "ok"; value: string; display: string }
+  | { status: "not_computable" | "unknown"; reason: OpDiagDimensionReason | "unknown" };
+
+export interface OpDiagCompleteness {
+  expected: number;
+  present: number;
+  gapKeys: string[];
+}
+
+interface OpDiagDimensionCommon {
+  completeness: OpDiagCompleteness;
+  limits: string[];
+  records: { kind: string; id: string }[];
+}
+
+export interface OpDiagFactsByDimension {
+  consistency: {
+    works: number;
+    items: { item: string; profileStatus: string; consistent: number; inconsistent: number; unsure: number; unchecked: number }[];
+    marksOnOlderRevision: number;
+  };
+  coverage: { works: number; pillars: { pillar: string; works: number }[]; untagged: number };
+  cadence: {
+    channels: {
+      channel: string;
+      target: { set: false } | { set: true; perWeek: number };
+      weeks: { isoWeek: string; start: string; complete: boolean; published: number; compared: boolean; met: boolean | null }[];
+    }[];
+    publishedAtMissing: number;
+  };
+  performance: {
+    /** One group per (platform, metric); there is no total over groups. */
+    groups: {
+      platform: string;
+      metric: string;
+      current: OpDiagPerformanceWindow;
+      baseline: OpDiagPerformanceWindow;
+      change: OpDiagNumber;
+      statWindows: string[];
+      statWindowMixed: boolean;
+    }[];
+  };
+  audience_feedback: {
+    excerpts: number;
+    bySource: { platform: string; sourceType: string; excerpts: number }[];
+    byTag: { tag: string; excerpts: number }[];
+    untagged: number;
+  };
+  execution_flow: Record<string, unknown>;
+}
+
+export interface OpDiagPerformanceWindow {
+  publications: number;
+  withValue: number;
+  unknown: number;
+  /** null when no sample had a value: unknown, not 0. */
+  sum: string | null;
+  mean: OpDiagNumber;
+}
+
+export type OpDiagDimensionResult =
+  | (OpDiagDimensionCommon & { status: "ok"; facts: OpDiagFactsByDimension[OpDiagDimension] })
+  | (OpDiagDimensionCommon & { status: "not_computable"; reason: OpDiagDimensionReason | "unknown" })
+  | { status: "unknown" };
+
 const count = z.number().int().nonnegative();
+
+const numberSchema = z.union([
+  z.object({ status: z.literal("ok"), value: z.string(), display: z.string() }),
+  z.object({ status: z.literal("not_computable"), reason: oneOf(OPDIAG_DIMENSION_REASONS) }),
+]);
+
+function toNumber(wire: z.infer<typeof numberSchema>): OpDiagNumber {
+  return wire.status === "ok"
+    ? { status: "ok", value: wire.value, display: wire.display }
+    : { status: "not_computable", reason: wire.reason };
+}
+
+const performanceWindowSchema = z.object({
+  publications: count, with_value: count, unknown: count, sum: z.string().nullable(), mean: numberSchema,
+});
+
+function toPerformanceWindow(wire: z.infer<typeof performanceWindowSchema>): OpDiagPerformanceWindow {
+  return {
+    publications: wire.publications, withValue: wire.with_value, unknown: wire.unknown, sum: wire.sum,
+    mean: toNumber(wire.mean),
+  };
+}
+
+const factsSchemas = {
+  consistency: z.object({
+    works: count,
+    items: z.array(z.object({
+      item: z.string(), profile_status: z.string(), consistent: count, inconsistent: count, unsure: count, unchecked: count,
+    })),
+    marks_on_older_revision: count,
+  }).transform((wire): OpDiagFactsByDimension["consistency"] => ({
+    works: wire.works,
+    items: wire.items.map((item) => ({
+      item: item.item, profileStatus: item.profile_status, consistent: item.consistent,
+      inconsistent: item.inconsistent, unsure: item.unsure, unchecked: item.unchecked,
+    })),
+    marksOnOlderRevision: wire.marks_on_older_revision,
+  })),
+  coverage: z.object({
+    works: count, pillars: z.array(z.object({ pillar: z.string(), works: count })), untagged: count,
+  }),
+  cadence: z.object({
+    channels: z.array(z.object({
+      channel: z.string(),
+      target: z.object({ set: z.boolean(), per_week: z.number().int().optional() }),
+      weeks: z.array(z.object({
+        iso_week: z.string(), start: z.string(), complete: z.boolean(), published: count, compared: z.boolean(),
+        met: z.boolean().optional(),
+      })),
+    })),
+    published_at_missing: count,
+  }).transform((wire): OpDiagFactsByDimension["cadence"] => ({
+    channels: wire.channels.map((channel) => ({
+      channel: channel.channel,
+      // A target that says it is set but has no number is read as not set:
+      // never as 0.
+      target: channel.target.set && channel.target.per_week !== undefined
+        ? { set: true, perWeek: channel.target.per_week }
+        : { set: false },
+      weeks: channel.weeks.map((week) => ({
+        isoWeek: week.iso_week, start: week.start, complete: week.complete, published: week.published,
+        compared: week.compared, met: week.compared && week.met !== undefined ? week.met : null,
+      })),
+    })),
+    publishedAtMissing: wire.published_at_missing,
+  })),
+  performance: z.object({
+    groups: z.array(z.object({
+      platform: z.string(), metric: z.string(), current: performanceWindowSchema, baseline: performanceWindowSchema,
+      change: numberSchema, stat_windows: z.array(z.string()), stat_window_mixed: z.boolean(),
+    })),
+  }).transform((wire): OpDiagFactsByDimension["performance"] => ({
+    groups: wire.groups.map((group) => ({
+      platform: group.platform, metric: group.metric,
+      current: toPerformanceWindow(group.current), baseline: toPerformanceWindow(group.baseline),
+      change: toNumber(group.change), statWindows: group.stat_windows, statWindowMixed: group.stat_window_mixed,
+    })),
+  })),
+  audience_feedback: z.object({
+    excerpts: count,
+    by_source: z.array(z.object({ platform: z.string(), source_type: z.string(), excerpts: count })),
+    by_tag: z.array(z.object({ tag: z.string(), excerpts: count })),
+    untagged: count,
+  }).transform((wire): OpDiagFactsByDimension["audience_feedback"] => ({
+    excerpts: wire.excerpts,
+    bySource: wire.by_source.map((row) => ({ platform: row.platform, sourceType: row.source_type, excerpts: row.excerpts })),
+    byTag: wire.by_tag,
+    untagged: wire.untagged,
+  })),
+  // The lists are read as the server wrote them; the page shows their
+  // counts and ids and nothing is computed from them.
+  execution_flow: z.record(z.string(), z.unknown()),
+} as const;
+
+const dimensionCommonSchema = z.object({
+  completeness: z.object({ expected: count, present: count, gap_keys: z.array(z.string()) }),
+  limits: z.array(z.string()),
+  records: z.array(z.object({ kind: z.string(), id: z.string() })),
+});
+
+const dimensionStatusSchema = z.object({
+  status: z.enum(["ok", "not_computable"]),
+  reason: oneOf(OPDIAG_DIMENSION_REASONS).optional(),
+  facts: z.unknown().optional(),
+});
+
+/** Reads one dimension. A shape it does not know is "unknown", never a
+ *  zero and never a guess. */
+export function parseOpDiagDimension(key: string, data: unknown): OpDiagDimensionResult {
+  const schema = (factsSchemas as Record<string, z.ZodType | undefined>)[key];
+  const status = dimensionStatusSchema.safeParse(data);
+  const common = dimensionCommonSchema.safeParse(data);
+  if (!schema || !status.success || !common.success) return { status: "unknown" };
+  const shared: OpDiagDimensionCommon = {
+    completeness: {
+      expected: common.data.completeness.expected, present: common.data.completeness.present,
+      gapKeys: common.data.completeness.gap_keys,
+    },
+    limits: common.data.limits,
+    records: common.data.records,
+  };
+  if (status.data.status === "not_computable") {
+    return { ...shared, status: "not_computable", reason: status.data.reason ?? "unknown" };
+  }
+  const facts = schema.safeParse(status.data.facts);
+  if (!facts.success) return { status: "unknown" };
+  return { ...shared, status: "ok", facts: facts.data as OpDiagFactsByDimension[OpDiagDimension] };
+}
+
+function toDimensions(wire: Record<string, unknown> | null | undefined): Partial<Record<OpDiagDimension, OpDiagDimensionResult>> {
+  const out: Partial<Record<OpDiagDimension, OpDiagDimensionResult>> = {};
+  for (const key of OPDIAG_DIMENSIONS) {
+    if (wire && key in wire) out[key] = parseOpDiagDimension(key, wire[key]);
+  }
+  return out;
+}
 
 const resultSchema = z.object({
   calc_version: z.string(),
@@ -139,7 +376,7 @@ const resultSchema = z.object({
   })).nullable().optional(),
   gaps: z.array(z.object({
     gap_key: z.string(),
-    kind: z.string(),
+    kind: oneOf(OPDIAG_GAP_KINDS),
     dimension: text,
     ref: z.object({ kind: z.string(), id: z.string() }),
     account_id: text,
@@ -147,6 +384,7 @@ const resultSchema = z.object({
   })).nullable().optional(),
   rules: z.array(z.string()).nullable().optional(),
   refs: z.array(z.string()).nullable().optional(),
+  roi_reference: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
 function toResult(wire: z.infer<typeof resultSchema>): OpDiagResult {
@@ -173,7 +411,7 @@ function toResult(wire: z.infer<typeof resultSchema>): OpDiagResult {
     sections: (wire.sections ?? []).map((section) => ({
       section: section.section,
       accountId: section.account_id ?? "",
-      dimensions: section.dimensions ?? {},
+      dimensions: toDimensions(section.dimensions),
     })),
     gaps: (wire.gaps ?? []).map((gap) => ({
       gapKey: gap.gap_key,
@@ -185,7 +423,17 @@ function toResult(wire: z.infer<typeof resultSchema>): OpDiagResult {
     })),
     rules: wire.rules ?? [],
     refs: wire.refs ?? [],
+    roiReference: wire.roi_reference ?? null,
   };
+}
+
+/** POST preview: the result computed now and not stored. null when
+ *  malformed. */
+export function parseOpDiagPreview(data: unknown): OpDiagResult | null {
+  const parsed = parseWithFallback<z.infer<typeof resultSchema> | null>(
+    data, resultSchema, null, { endpoint: "content-operating-diagnosis/preview" },
+  );
+  return parsed ? toResult(parsed) : null;
 }
 
 // ---------------------------------------------------------------- report versions

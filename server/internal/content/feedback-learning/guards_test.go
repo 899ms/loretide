@@ -332,6 +332,15 @@ func TestThereIsNoSixthControlledSet(t *testing.T) {
 		}
 		delete(found, name)
 	}
+	// specs/035 PR 2's sets, contract §3: why a dimension cannot be computed
+	// (FR-012), what a gap is missing (R-057's 补录待办, FR-031) and the rule
+	// ids the result names instead of sentences (FR-015).
+	for _, name := range []string{"DimensionReasons", "GapKinds", "DiagnosisRuleIDs"} {
+		if !found[name] {
+			t.Errorf("035 PR 2 controlled set %s is gone", name)
+		}
+		delete(found, name)
+	}
 	for extra := range found {
 		t.Errorf("a controlled set %q was added; SOP 10.1 names those fields but gives no values, and inventing some puts words in the SOP's mouth that every stored row then has to be valid against", extra)
 	}

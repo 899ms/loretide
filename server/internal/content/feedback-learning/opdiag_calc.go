@@ -15,20 +15,14 @@ import (
 // The same params and inputs give the same bytes under the same calc version,
 // whatever order the inputs arrive in.
 //
-// PR 1 computes the report's scope, its sections (with no dimension in
-// them), its report-level configuration gaps and the rules that always
-// apply. The dimension calculators are registered in PR 2; a dimension
-// without one is refused naming "dimensions". Registering one adds its
-// results beside these and changes none of them, so every version generated
-// under PR 1 still recomputes to the same bytes (FR-011).
+// It computes the report's scope, its sections, the selected dimensions of
+// each section (opdiag_dimensions.go), the report-level configuration gaps
+// with every gap the dimensions found, the rules, the reference keys and the
+// ROI summary a person chose to show beside it. The dimensions only add to
+// what PR 1 computed and change none of it, so every version generated under
+// PR 1 still recomputes to the same bytes (FR-011).
 //
 // Contract: specs/035-brand-diagnosis/contracts/brand-diagnosis.md §5
-
-// dimensionCalculator computes one dimension for one section. PR 2 fills
-// the registry; PR 1 leaves it empty.
-type dimensionCalculator func(set *diagnosisInputSet, p preparedDiagnosis, section DiagnosisSection) DimensionResult
-
-var dimensionCalculators = map[DiagnosisDimension]dimensionCalculator{}
 
 // diagnosisCalculators are the calc versions this build can recompute. A
 // change to an existing dimension adds "opdiag-calc/2" beside the first; it
@@ -50,6 +44,10 @@ type diagnosisInputSet struct {
 	reviews      map[string]diagReviewFields
 	tasks        map[string]diagDeliveryTaskFields
 	marks        map[string]diagWorkMarkFields
+	// roi is the copy of the ROI report summary the params named (Q6), and
+	// roiID its "<report_id>/<version_no>"; nil when none was named.
+	roi   *ReportSummary
+	roiID string
 }
 
 func decodeInto[T any](target map[string]T, input DiagnosisInput) error {
@@ -109,6 +107,15 @@ func decodeDiagnosisInputs(inputs []DiagnosisInput) (*diagnosisInputSet, error) 
 			err = decodeInto(set.tasks, input)
 		case inputWorkMark:
 			err = decodeInto(set.marks, input)
+		case inputROISummary:
+			if set.roi != nil {
+				return nil, FieldError{Field: "inputs", Reason: "an input is listed twice"}
+			}
+			var summary ReportSummary
+			if json.Unmarshal(input.Fields, &summary) != nil {
+				return nil, FieldError{Field: "inputs", Reason: "unreadable input"}
+			}
+			set.roi, set.roiID = &summary, input.ID
 		default:
 			return nil, FieldError{Field: "inputs", Reason: "unknown input kind"}
 		}
@@ -247,9 +254,24 @@ func CalculateDiagnosis(params DiagnosisParams, inputs []DiagnosisInput) (Diagno
 			Section: sectionBrand, Dimensions: map[DiagnosisDimension]DimensionResult{},
 		})
 	}
+	// The selected dimensions of each section; the brand section carries
+	// only its cadence and execution flow.
+	dimensionGaps := []DiagnosisGap{}
+	dimensionRefs := make([]map[DiagnosisDimension][]string, len(result.Sections))
 	for i := range result.Sections {
+		dimensionRefs[i] = map[DiagnosisDimension][]string{}
 		for _, dimension := range params.Dimensions {
-			result.Sections[i].Dimensions[dimension.Key] = dimensionCalculators[dimension.Key](set, p, result.Sections[i])
+			if result.Sections[i].Section == sectionBrand && !slices.Contains(brandSectionDimensions, dimension.Key) {
+				continue
+			}
+			out := dimensionCalculators[dimension.Key](set, p, result.Sections[i])
+			if result.Sections[i].Section == sectionUnknownAccount && scope.HistoricalImportPublications > 0 &&
+				!slices.Contains(out.result.Limits, ruleHistoricalImportUnknownAcct) {
+				out.result.Limits = append(out.result.Limits, ruleHistoricalImportUnknownAcct)
+			}
+			result.Sections[i].Dimensions[dimension.Key] = out.result
+			dimensionGaps = append(dimensionGaps, out.gaps...)
+			dimensionRefs[i][dimension.Key] = out.refs
 		}
 	}
 
@@ -271,7 +293,8 @@ func CalculateDiagnosis(params DiagnosisParams, inputs []DiagnosisInput) (Diagno
 			})
 		}
 	}
-	slices.SortFunc(result.Gaps, func(left, right DiagnosisGap) int { return cmp.Compare(left.GapKey, right.GapKey) })
+	// Then every gap a dimension found, each key once (FR-030).
+	result.Gaps = mergeGaps(result.Gaps, dimensionGaps)
 
 	// Rules that always apply, then the named limitation of this ruling:
 	// historical imports have no topic card, so no account (FR-026).
@@ -281,21 +304,34 @@ func CalculateDiagnosis(params DiagnosisParams, inputs []DiagnosisInput) (Diagno
 		result.Rules = append(result.Rules, ruleHistoricalImportUnknownAcct)
 	}
 
+	// The ROI summary a person chose to show (Q6): the stored copy, as it
+	// is. Nothing above read it, and nothing adds, compares or divides it.
+	if ref := params.ROIReportRef; ref != nil {
+		if set.roi == nil || set.roiID != roiInputID(*ref) {
+			return DiagnosisResult{}, FieldError{Field: "inputs", Reason: "the ROI summary named in the params has no input"}
+		}
+		result.ROIReference = set.roi
+		result.Rules = append(result.Rules, ruleROIShownAsIs)
+	} else if set.roi != nil {
+		return DiagnosisResult{}, FieldError{Field: "inputs", Reason: "an ROI summary no param names"}
+	}
+
 	// Reference keys (contract §5.8): the scope, each section's dimensions,
 	// each gap.
-	for _, section := range result.Sections {
-		name := section.Section
-		if section.Section == sectionAccount {
-			name = sectionAccount + ":" + section.AccountID
-		}
+	for i, section := range result.Sections {
+		name := sectionRefName(section)
 		for _, dimension := range DiagnosisDimensions {
 			if _, ok := section.Dimensions[dimension]; ok {
 				result.Refs = append(result.Refs, name+"/"+string(dimension))
+				result.Refs = append(result.Refs, dimensionRefs[i][dimension]...)
 			}
 		}
 	}
 	for _, gap := range result.Gaps {
 		result.Refs = append(result.Refs, "gap/"+gap.GapKey)
+	}
+	if result.ROIReference != nil {
+		result.Refs = append(result.Refs, "roi_reference")
 	}
 	return result, nil
 }
