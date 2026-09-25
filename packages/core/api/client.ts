@@ -1096,6 +1096,19 @@ export class ApiClient {
     return this.fetch<unknown>(`/api/content-operating-diagnosis/${path}`, {method: "POST", body: JSON.stringify(body)});
   }
 
+  // Platform search optimization (specs/036). Two methods, as for the
+  // operating diagnosis: every path lives under /api/content-search, every
+  // write is a POST that adds a row, and the caller builds the path with each
+  // id segment already encoded (searchPath in content/topic-planning/search).
+  async contentSearchGet(path: string, query: Record<string, string> = {}): Promise<unknown> {
+    const search = new URLSearchParams(query).toString();
+    return this.fetch<unknown>(`/api/content-search/${path}${search ? `?${search}` : ""}`);
+  }
+
+  async contentSearchPost(path: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.fetch<unknown>(`/api/content-search/${path}`, {method: "POST", body: JSON.stringify(body)});
+  }
+
   // The brand's operating rules (specs/029). Brand-scoped: which brand is
   // decided by the workspace header, so neither path carries an id.
   async contentOperatingRules(): Promise<unknown> {

@@ -430,6 +430,12 @@ var concurrentIndexCleanups = map[string]string{
 	"581_content_opdiag_report_version_time_idx": "content_opdiag_report_version_time_idx",
 	"583_content_opdiag_work_mark_key_idx":       "content_opdiag_work_mark_key_idx",
 	"584_content_opdiag_work_mark_work_idx":      "content_opdiag_work_mark_work_idx",
+
+	// specs/036 search themes (PR 1). Its own block, as above. The table
+	// migration (590) builds no index and is absent. The numbers are
+	// provisional and move with the files at merge.
+	"591_content_search_theme_revision_key_idx":  "content_search_theme_revision_key_idx",
+	"592_content_search_theme_revision_time_idx": "content_search_theme_revision_time_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction

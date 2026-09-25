@@ -2111,6 +2111,20 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/preview", h.PreviewContentOpDiagReport)
 		})
 
+		// Platform search optimization (specs/036 PR 1): search themes.
+		// Outside RequireWorkspaceMember like /api/content-topics: every
+		// decision, refusals included, reaches workspace-core's Authorize in
+		// the handler. A theme changes only by a new revision; there is no
+		// PUT, PATCH or DELETE.
+		r.Route("/api/content-search", func(r chi.Router) {
+			r.Use(h.DiagnosticTrace)
+			r.Get("/themes", h.ListContentSearchThemes)
+			r.Post("/themes", h.CreateContentSearchTheme)
+			r.Get("/themes/{themeId}", h.GetContentSearchTheme)
+			r.Get("/themes/{themeId}/revisions", h.ListContentSearchThemeRevisions)
+			r.Post("/themes/{themeId}/revisions", h.ReviseContentSearchTheme)
+		})
+
 		// --- Workspace-scoped routes (all require workspace membership) ---
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireWorkspaceMember(queries))
