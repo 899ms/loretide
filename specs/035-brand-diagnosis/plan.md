@@ -6,13 +6,13 @@ description: "Implementation plan for 035 feedback-learning — brand/account op
 
 **Spec**: [spec.md](./spec.md) ｜ **Contract**: [contracts/brand-diagnosis.md](./contracts/brand-diagnosis.md) ｜ **Tasks**: [tasks.md](./tasks.md)
 
-**Status**: 待裁决（Q1～Q8）。下文按推荐值写；主控改判的，裁决后在本 PR 里改。**八张表、十六个索引、二十四个迁移，拆四个 PR。**
+**Status**: 已裁决（主控 2026-09-25，PR #267 评论）：Q1～Q8 采纳推荐值；Q3 补充建卡幂等键；下列五条「主控决定」全部已定。**本模块八张表、十六个索引、二十四个迁移，外加 `topic-planning` 的一列、一个索引、两个迁移（Q3 补充），拆四个 PR。**
 
-## 主控决定（待裁决，2026-09-25）
+## 主控决定（均已裁定，2026-09-25，PR #267 评论）
 
-本规格 PR **不改** `scripts/content-boundaries.json`（D8）。下面每条写明需要主控拍板的内容与推荐值。
+本规格 PR **不改** `scripts/content-boundaries.json`（D8）。
 
-### 1. 模块落点（D9 / Q1）——推荐：放进 `feedback-learning`
+### 1. 模块落点（D9 / Q1）——放进 `feedback-learning`，主控已裁定 2026-09-25
 
 | | A `feedback-learning`（推荐） | B 新模块 `operating-diagnosis` |
 |---|---|---|
@@ -23,9 +23,9 @@ description: "Implementation plan for 035 feedback-learning — brand/account op
 | 读账号、配置、选题卡、作品、发布记录 | 经 handler 适配器（两者相同） | 同左 |
 | 代价 | `feedback-learning` 的包级守卫（spec Current State §3）约束本卡的写法；模块变大（027 + 034 + 035） | 一行 `modules` 改动；多一层公开接口 |
 
-**推荐 A**。B 唯一的好处是模块小一些，而代价正是用户禁止的那张表。
+**A，主控已裁定 2026-09-25**。B 唯一的好处是模块小一些，而代价正是用户禁止的那张表。
 
-### 2. `adapters` 追加（需主控批准；各实施 PR 自己加，本规格 PR 不改）
+### 2. `adapters` 追加——已同意，由各实施 PR 自带（主控已裁定 2026-09-25；本规格 PR 不改）
 
 | PR | 条目 | 为什么需要 |
 |---|---|---|
@@ -40,13 +40,27 @@ description: "Implementation plan for 035 feedback-learning — brand/account op
 
 每个实施 PR 合入前，把自己的迁移改号为紧接当时 `app-main` 最大号之后的连续号（文件名、`concurrentIndexCleanups` 的键一起改）。撰写时 `app-main` 最大号 575，#266 将占 576–578。
 
-### 4. D14-V08：只能部分自动化
+### 4. D14-V08：部分自动化验收——已接受
 
-服务端链路用一条 handler 包的真实库用例串起来（SC-014）；浏览器闭环进 `manual-ui-todo.md` U-40，记「未执行」；「真实联网」本版不适用。请主控确认接受这一部分验收（与 034 的 D14-V15 同一处理）。
+服务端链路用一条 handler 包的真实库用例串起来（SC-014）；浏览器闭环进 `manual-ui-todo.md` U-40，记「未执行」；「真实联网」本版不适用。主控已接受这一部分验收（2026-09-25，与 034 的 D14-V15 同一处理）。
 
-### 5. Q2～Q8
+### 5. Q2～Q8——均采纳推荐值，主控已裁定 2026-09-25
 
-见 `spec.md` 文末「待裁决」，每题都有推荐值与影响范围。
+见 `spec.md` 文末「裁决记录」。
+
+### 6. Q3 补充：建卡幂等键——主控已裁定 2026-09-25
+
+采纳为选题卡带每条建议一个的幂等键 `opdiag-suggestion:<suggestion_id>`；重试关联已建的卡，不建第二张；「卡已建、效果未记」由重试收敛（spec FR-063a，contract §7.4）。
+
+**这一条要动 `topic-planning`**：「同键至多一张卡」只能由建卡的一方保证。改动是增量的，放在 PR 3：`content_topic_card` 加可空列 `origin_key`（一个迁移）、唯一并发索引 `content_topic_card_origin_key_idx`（一个迁移）、公开函数 `Store.CreateOnce`。既有 `Create`、022 的响应 schema、`modules` 依赖表都不变。它是 `topic-planning` 的**公开契约新增**，PR 3 正文要按文档 12 §6 写明「公开契约变更：新增 `CreateOnce`，既有消费者不受影响」，并跑 `topic-planning` 的既有测试。
+
+### 7. 图标——PR 4 核实
+
+PR 4 核实项目所用 lucide 版本里有 `Stethoscope`；没有就换一个项目里已有、且与开发诊断的 `Activity` 不同的图标，并在 PR 正文写明（tasks T085）。
+
+### 8. 顺带发现的既有问题——维持后续项
+
+027 `PendingRegistrations` 直接读 `review-delivery` 的表、`feedback-learning` 包注释过时：不在本批（见文末）。
 
 ## 照抄什么，不发明什么
 
@@ -97,6 +111,9 @@ description: "Implementation plan for 035 feedback-learning — brand/account op
 server/
 ├── migrations/
 │   └── <N>_content_opdiag_*.{up,down}.sql        # 24 个；不预留编号，合入前接当时 app-main 最大号（contract §1、§2）
+├── migrations/<N>_content_topic_card_origin_key*.{up,down}.sql   # 2 个，PR 3（Q3 补充）
+├── internal/content/topic-planning/
+│   └── store.go + store_integration_test.go   # CreateOnce（PR 3，公开契约新增）
 ├── internal/content/feedback-learning/
 │   ├── opdiag_contract.go        # 受控集、参数与结果类型、FieldError 复用、profileFieldKeys（PR 1）
 │   ├── opdiag_inputs.go          # 输入类型、fingerprint、适配器接口、收集顺序（PR 1）
@@ -163,16 +180,16 @@ specs/035-brand-diagnosis/manual-ui-todo.md        # PR 4 回写状态
 
 ### PR 3 —— 人写判断与建议、采纳与拒绝
 
-六张表 + 十二个索引 = 十八个迁移。`opdiag_annotations.go`、`opdiag_decisions.go`；handler 的两个写适配器。端点：contract §7 标 3 的行。
+六张表 + 十二个索引 = 十八个迁移；另有 `topic-planning` 的加列与唯一索引两个迁移和公开函数 `CreateOnce`（「主控决定」第 6 条），PR 3 合计二十个迁移。`opdiag_annotations.go`、`opdiag_decisions.go`；handler 的两个写适配器。端点：contract §7 标 3 的行。
 
 最容易漏的四处：
 
-1. **建卡的三步**（Q3）：第 ② 步失败必须写效果 `failed`；第 ③ 步失败（卡已建、效果没记）必须让建议显示「已采纳，结果未记录」，并允许 `link` 补登——用测试钩子在 ② 与 ③ 之间注入失败，钉住两种情况。
+1. **建卡的三步与幂等键**（Q3 与补充）：第 ② 步失败必须写效果 `failed`；第 ③ 步失败（卡已建、效果没记）时建议显示「已采纳，结果未记录」，重试凭幂等键拿回同一张卡——用测试钩子在 ② 与 ③ 之间注入失败，钉住「重试后恰好一张卡」；并发两次重试同样恰好一张。
 2. **拒绝不写**（FR-061）：拒绝路径不经任何写适配器；用例数调用次数与所有 `content_opdiag_*` 表行数。
 3. **提议确认的版本比较**（Q8）：先读后写的顺序与 409；`SetProfile` 组装时其余十项原样沿用（用例比对新版本与旧版本逐项）。
 4. **一个修订一个决定**：唯一索引 `content_opdiag_decision_suggestion_idx` 是最后一道防线；并发两次提交用例，恰好一个成功，另一个 409。
 
-规模偏大：若审查不便，可拆成 3a（判断、建议、拒绝、待办、提议的本模块部分，十八个迁移全在 3a）与 3b（建卡与提议确认两条跨模块路径，零迁移）。拆不拆由主控在派单时定。
+规模偏大：若审查不便，可拆成 3a（判断、建议、拒绝、待办、提议的本模块部分，本模块十八个迁移全在 3a）与 3b（建卡与提议确认两条跨模块路径，含 `topic-planning` 的两个迁移与 `CreateOnce`）。拆不拆由主控在派单时定。
 
 ### PR 4 —— 页面
 
@@ -209,14 +226,14 @@ specs/035-brand-diagnosis/manual-ui-todo.md        # PR 4 回写状态
 ## 已知边界
 
 1. **一致性与覆盖全靠人标注**（Q2=A）。没人标就只有「未检查 / 未标注」；这是执行器禁用时唯一诚实的做法。
-2. **建卡与记效果之间有窗口**（Q3=A）。窗口里失败会留下一张没人认领的草稿卡；它可见、可丢弃，建议可用「关联已有卡」补登。彻底消除要 `topic-planning` 暴露接受外部事务的函数（Q3=B）。
+2. **建卡与记效果之间有窗口，由重试收敛**（Q3=A 与补充）。窗口里失败时卡已建而效果未记，建议显示「已采纳，结果未记录」；重试凭幂等键拿回同一张卡，不会多建。窗口本身仍在（卡不会自动出现在效果里，要有人点重试）；彻底消除要 `topic-planning` 暴露接受外部事务的函数（Q3=B，不做）。
 3. **提议确认有读写竞态**（Q8=A）。读当前 `revision_id` 与 `SetProfile` 之间，别人改了配置，本卡看不到；结果是别人的修改被本次确认覆盖成「当前值 + 提议值」。彻底消除要给 `SetProfile` 加 `base_revision`（后续项）。
-4. **账号归属只走选题卡**（FR-026）。历史导入的作品没有选题卡，全部进「账号未知」；需要的话后续卡可以给作品标注加 `kind = account`，但那是人工补录，不是推断。
+4. **账号归属只走选题卡**（FR-026，主控已接受 2026-09-25）。历史导入的作品没有选题卡，全部进「账号未知」，报告里列为具名局限 `scope.historical_import_account_unknown`；需要的话后续卡可以给作品标注加 `kind = account`，但那是人工补录，不是推断。
 5. **采样时点不一致**（Q7=A）。老发布记录的「最后一次采样」通常比新的晚，均值之差会带上这个偏差；局限说明固定写出，不做校正。
 6. **`inputs` 存副本**会让报告版本行变大（每月几百条输入，约几百 KB 的 jsonb），换来的是复算不依赖原表。
 7. **D14-V08 只能部分自动化**（「主控决定」第 4 条）。
 
-## 发现的既有问题（后续项，不在本卡修）
+## 发现的既有问题（后续项，不在本卡修；主控 2026-09-25 确认不在本批）
 
 - `feedback-learning/metric.go:208` `PendingRegistrations` 直接读 `review-delivery` 的表 `content_publication_record`（违反文档 12 §4 第 1 条）。
 - `feedback-learning` 的包注释写着「It aggregates nothing」，034 加入 ROI 计算后已不准确（守卫只管 SQL，注释管的是整个包）；本卡放进来后更不准确。建议改注释，不在本卡改。

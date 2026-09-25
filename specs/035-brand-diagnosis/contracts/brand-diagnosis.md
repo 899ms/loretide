@@ -1,8 +1,8 @@
 # 合同：品牌/账号经营诊断（035）
 
-**状态**：待裁决（Q1～Q8，见 `spec.md` 文末）。下文按各题的**推荐值**写；主控改判的，在裁决后同一 PR 里改这里。每个列名、受控集都要能指回 `spec.md` 开头的 R-057 原文或主控 D1–D9；指不回去的在 `spec.md`「本规格补的设计」里单列。
+**状态**：已裁决（主控 2026-09-25，PR #267 评论）：Q1～Q8 采纳推荐值；Q3 补充的建卡幂等键见 §7.4；历史导入的具名局限见 §5.9。每个列名、受控集都要能指回 `spec.md` 开头的 R-057 原文或主控 D1–D9；指不回去的在 `spec.md`「本规格补的设计」里单列。
 
-模块：`feedback-learning`（Q1=A）。Go 代码在 `server/internal/content/feedback-learning/` 下以 `opdiag_` 为文件名前缀；handler 文件以 `content_opdiag_` 为前缀。路由前缀 `/api/content-operating-diagnosis`。
+模块：`feedback-learning`（Q1=A，主控已裁定 2026-09-25）。Go 代码在 `server/internal/content/feedback-learning/` 下以 `opdiag_` 为文件名前缀；handler 文件以 `content_opdiag_` 为前缀。路由前缀 `/api/content-operating-diagnosis`。
 
 ---
 
@@ -156,7 +156,7 @@
 | todo_revision | `content_opdiag_todo_revision_key_idx` | `(workspace_id, todo_id, revision)` | 是 | |
 | | `content_opdiag_todo_revision_time_idx` | `(workspace_id, created_at DESC)` | | |
 
-**八张表、十六个索引、二十四个迁移**：PR 1 六个（report_version、work_mark 各 1 + 2），PR 2 零个，PR 3 十八个。
+**八张表、十六个索引、二十四个迁移**：PR 1 六个（report_version、work_mark 各 1 + 2），PR 2 零个，PR 3 十八个。另有 §7.4 在 `topic-planning` 的两个迁移（加列、唯一索引），也在 PR 3，PR 3 合计二十个。
 
 ---
 
@@ -345,7 +345,9 @@
 
 ### 5.9 规则 id（`DiagnosisRuleIDs`，前端翻译）
 
-`common.unknown_is_not_zero`、`common.no_cross_platform_ranking`、`common.no_score`、`common.window_in_brand_timezone`、`consistency.marks_on_older_profile`、`coverage.multi_pillar_not_additive`、`cadence.target_is_brand_channel_level`、`cadence.incomplete_week_not_compared`、`performance.difference_is_not_cause`、`performance.samples_taken_at_different_ages`、`performance.stat_window_mixed`、`audience_feedback.tags_not_additive`、`execution_flow.no_threshold`、`roi_reference.shown_as_is`。
+`common.unknown_is_not_zero`、`common.no_cross_platform_ranking`、`common.no_score`、`common.window_in_brand_timezone`、`consistency.marks_on_older_profile`、`coverage.multi_pillar_not_additive`、`cadence.target_is_brand_channel_level`、`cadence.incomplete_week_not_compared`、`performance.difference_is_not_cause`、`performance.samples_taken_at_different_ages`、`performance.stat_window_mixed`、`audience_feedback.tags_not_additive`、`execution_flow.no_threshold`、`roi_reference.shown_as_is`、`scope.historical_import_account_unknown`。
+
+`scope.historical_import_account_unknown` 是具名局限（主控 2026-09-25 接受「历史导入归账号未知」）：只要范围内有历史导入作品（`work.historical_import = true`）的发布记录，它就进 `result.rules`，并进 `unknown_account` 节每个维度的 `limits`；`scope` 另给 `historical_import_publications` 计数。账号范围的报告里这些记录不属于该账号，同样在 `rules` 里列出这条局限，前端据此写「有 N 条历史导入发布记录因无法关联账号而未计入」。
 
 四语言文案里这些键的译文**不许**含「增长 / 提升 / 下降 / 导致 / 带来 / 因为」及 `growth` / `caused` / `because`（除了明确的否定句，例如 `performance.difference_is_not_cause` 的译文「差值只描述两个窗口的数字，不说明原因」——守卫按键白名单放行这一条）。
 
@@ -364,7 +366,7 @@
 | `pillar-untagged` | 三条作品，一条标「穿搭」，一条先标「穿搭」后 `untagged` 再标「面料知识」，一条无标注 | 穿搭 1、面料知识 1、未标注 1 |
 | `pillars-empty` | 选覆盖维度，`pillars = []` | `not_computable/missing_config` |
 | `observation-unset` | 经营规则无观察时点 | `publications_missing_metrics_after_window` 为 `not_computable/missing_observation_window` |
-| `unknown-account` | 历史导入作品（无选题卡）的一条发布记录 | 品牌范围出现 `unknown_account` 节；缺口 `account_unresolved` |
+| `unknown-account` | 历史导入作品（无选题卡）的一条发布记录 | 品牌范围出现 `unknown_account` 节；缺口 `account_unresolved`；`rules` 与该节 `limits` 含 `scope.historical_import_account_unknown`；`scope.historical_import_publications = 1` |
 | `order-independent` | 任一样例打乱输入数组顺序 | `result` JSON 逐字节相同 |
 
 ---
@@ -445,9 +447,9 @@
 | `todo` | 栅栏 → 核验 → 决定 → 待办修订 1（`open`）→ 效果 `done` → 审计 | 一个（本模块） |
 | `profile_proposal` | 栅栏 → 核验（账号存在；读当前配置 `revision_id`，经适配器）→ 决定 → 提议修订 1（`proposed`）→ 效果 `done` → 审计 | 一个（本模块）；**不写 `ip-profile`** |
 | `topic_card` + `link` | 适配器只读核实选题卡存在且账号相符 → 栅栏 → 决定 → 效果 `done`（`target_id` = 该卡）→ 审计 | 一个（本模块） |
-| `topic_card` + `create` | ① 栅栏 → 决定 → 审计 → 提交；② 适配器调 `topicplanning.Store.Create`（`draft`，`account_id` 取 `target.account_id`，`ip_fit` 预填建议正文）；③ 栅栏 → 效果 `done` 或 `failed` → 审计 → 提交 | 三步，Q3=A |
+| `topic_card` + `create` | ① 栅栏 → 决定 → 审计 → 提交；② 适配器调 `topicplanning.Store.CreateOnce`（幂等键 `opdiag-suggestion:<suggestion_id>`，`draft`，`account_id` 取 `target.account_id`，`ip_fit` 预填建议正文）；③ 栅栏 → 效果 `done` 或 `failed` → 审计 → 提交 | 三步，Q3=A；② 幂等，见 §7.4 |
 
-重试（`/decisions/{decisionId}/retry`）：只对最新效果为 `failed` 的 `topic_card` 决定可用；走上表 `create` 的 ②③ 或 `link` 的核实与③。
+重试（`/decisions/{decisionId}/retry`）：对最新效果为 `failed`、或**还没有任何效果记录**的 `topic_card` 采纳决定可用；走上表 `create` 的 ②③（同一个幂等键）或 `link` 的核实与③。已有 `done` 效果 → 409 `decision_id`。
 
 **提议确认**：适配器读账号当前配置 → `revision_id ≠ base_revision_id` → 409；相等 → 组装新 `ExpressionProfile`（当前各项原样，`patches` 里的项替换 `value` 并置 `status = confirmed`）→ `ipprofile.Service.SetProfile` → 栅栏 → 提议修订 `confirmed` 带 `applied_revision_id` → 审计 → 提交。读与 `SetProfile` 之间的竞态见 plan.md「已知边界」（Q8）。
 
@@ -460,6 +462,23 @@
 | `topic_card` | `{"account_id": "a1"}`（可为 ''） | 账号存在 |
 | `todo` | `{"title": "...", "account_id": ""}` | 标题非空 ≤200 rune |
 | `profile_proposal` | `{"account_id": "a1", "patches": [{"field": "content_pillars", "value": "..."}]}` | 账号存在；`field` ∈ 八个文本项，不重复；1～8 项 |
+
+### 7.4 建卡幂等键（Q3 补充，主控已裁定 2026-09-25）
+
+**键**：`opdiag-suggestion:<suggestion_id>`，每条建议一个，与修订号无关——同一建议的新修订再采纳，仍指向同一张卡。
+
+**由谁保证**：只有建卡的一方能保证「同键至多一张」，所以放在 `topic-planning`。**增量**改动：既有 `Create` 行为不变，`modules` 依赖表不变（键存在 `topic-planning` 自己的表上，不依赖 `idempotency` 模块）。
+
+| 改动 | 内容 |
+|---|---|
+| 迁移 1 | `ALTER TABLE content_topic_card ADD COLUMN IF NOT EXISTS origin_key text`（可空，既有行为 NULL；照 536 / 537 给该表加列的先例） |
+| 迁移 2 | `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS content_topic_card_origin_key_idx ON content_topic_card (workspace_id, origin_key)`（NULL 互不冲突，既有卡不受影响；登记进 `concurrentIndexCleanups`） |
+| 公开函数 | `func (s *Store) CreateOnce(ctx context.Context, actor string, card TopicCard, originKey string) (TopicCard, bool, error)`：栅栏事务内先按 `(workspace_id, origin_key)` 读，有则返回那张卡与 `created=false`；没有则按 `Create` 的同一套校验与 `insertCardTx` 插入并写 `origin_key`，返回 `created=true`。并发的第二个插入撞唯一索引时，在同一调用里回读并返回已建的卡，不向调用方报错。`originKey` 为空 → `ErrInvalid` |
+| 对外字段 | `TopicCard` 不新增对外字段（`origin_key` 只供 `CreateOnce` 查重），022 的响应 schema 不变 |
+
+**收敛**：「卡已建、效果未记」时，建议显示「已采纳，结果未记录」；重试再调 `CreateOnce` 得到同一张卡（`created=false`），写效果 `done` 指向它。任意次数、任意并发的重试，一条建议最多对应一张选题卡。
+
+**用例**（PR 3，tasks T070、T070a）：钩子在 ② 成功后、③ 之前注入失败 → 重试 → 选题卡总数恰好 +1，效果 `done` 指向那张卡；两个重试并发 → 同样恰好 +1。`topic-planning` 侧另有 `CreateOnce` 自己的用例（同键两次、并发两次、空键拒绝、既有 `Create` 不写 `origin_key`）。
 
 ---
 

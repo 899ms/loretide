@@ -4,7 +4,7 @@ description: "Task list for 035 feedback-learning — brand/account operating di
 
 # Tasks: 品牌/账号经营诊断（035）
 
-**Prerequisites**: `spec.md`、`plan.md`、`contracts/brand-diagnosis.md`；**Q1～Q8 须先经主控裁定**（按推荐值写；改判的在开工前改本文件）。
+**Prerequisites**: `spec.md`、`plan.md`、`contracts/brand-diagnosis.md`。**已裁决**（主控 2026-09-25，PR #267 评论）：Q1～Q8 采纳推荐值；Q3 补充建卡幂等键（PR 3）；`adapters` 由各 PR 自带；D14-V08 部分自动化验收已接受；图标在 PR 4 核实。
 
 **改动文件必须在 plan.md → Project Structure 清单内。**
 
@@ -135,15 +135,16 @@ description: "Task list for 035 feedback-learning — brand/account operating di
 # PR 3 —— 人写判断与建议、采纳与拒绝
 
 **分支**：`claude/035-pr3-opdiag-decisions`，依赖 PR 2 合入。
-**覆盖**：FR-050～FR-069、FR-032（加入待办）；SC-006～SC-008、SC-014（服务端链路）；D14-V05 全部、D14-V08 服务端部分。Q6 若 PR 2 未做，在本 PR 做（T050）。
+**覆盖**：FR-050～FR-069（含 FR-063a）、FR-032（加入待办）；SC-006～SC-008、SC-014（服务端链路）；D14-V05 全部、D14-V08 服务端部分。Q6 若 PR 2 未做，在本 PR 做（T050）。
 **可选拆分**：3a（本模块部分，含全部 18 个迁移）/ 3b（建卡与提议确认两条跨模块路径，零迁移），见 plan.md。
 
-**文件**：六张表的迁移（18 个）；`opdiag_annotations.go`、`opdiag_decisions.go` 与测试；`guards_test.go`（登记 `JudgementKinds`、`JudgementBases`、`AuthorKinds`、`SuggestionTargets`、`DecisionKinds`、`AdoptModes`、`EffectOutcomes`、`EffectFailures`、`ProposalStates`、`TodoStates`、`TodoOrigins`）；`server/internal/handler/content_opdiag_decisions.go` 与测试；删除清单与删除链、sqlc；`main.go`、`router.go`（upstream）；路由存在性用例；core `contract.ts`、`queries.ts`；`scripts/content-boundaries.json`（`adapters` 追加 `content_opdiag_decisions.go`）。
+**文件**：六张表的迁移（18 个）；`topic-planning` 的两个迁移 `<N>_content_topic_card_origin_key.{up,down}.sql`、`<N+1>_content_topic_card_origin_key_idx.{up,down}.sql` 与 `topic-planning/store.go`（`CreateOnce`）及其测试（Q3 补充，contract §7.4）；`opdiag_annotations.go`、`opdiag_decisions.go` 与测试；`guards_test.go`（登记 `JudgementKinds`、`JudgementBases`、`AuthorKinds`、`SuggestionTargets`、`DecisionKinds`、`AdoptModes`、`EffectOutcomes`、`EffectFailures`、`ProposalStates`、`TodoStates`、`TodoOrigins`）；`server/internal/handler/content_opdiag_decisions.go` 与测试；删除清单与删除链、sqlc；`main.go`、`router.go`（upstream）；路由存在性用例；core `contract.ts`、`queries.ts`；`scripts/content-boundaries.json`（`adapters` 追加 `content_opdiag_decisions.go`）。
 
 ## Phase 10: 迁移（18 个）
 
 - [ ] T058 六个建表：`content_opdiag_judgement_revision`、`_suggestion_revision`、`_decision`、`_effect`、`_profile_proposal_revision`、`_todo_revision`（contract §1.3～§1.8）
 - [ ] T059 [P] 十二个索引迁移；`concurrentIndexCleanups` 追加 12 条；六表进删除清单与删除链、`make sqlc`
+- [ ] T059a `topic-planning` 两个迁移：`ALTER TABLE content_topic_card ADD COLUMN IF NOT EXISTS origin_key text`；`CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS content_topic_card_origin_key_idx ON content_topic_card (workspace_id, origin_key)`，登记进 `concurrentIndexCleanups`（contract §7.4）
 - [ ] T060 跑迁移测试（文首固定写法），报出四条迁移规则用例的名字与结果
 
 ## Phase 11: 判断与建议（先写）
@@ -159,8 +160,10 @@ description: "Task list for 035 feedback-learning — brand/account operating di
 - [ ] T066 先写：**采纳为待办**——一个事务三行（决定、待办修订 1、效果 `done`）；审计失败整体回滚、三行都不在
 - [ ] T067 先写：**采纳为提议**——一个事务三行；`base_revision_id` = 适配器读到的当前版本；`ip-profile` 版本数不变（SC-007）
 - [ ] T068 先写：**采纳为选题卡 `create`**——顺序：决定提交 → 建卡 → 效果 `done` 带卡 id；卡是 `draft`，`ip_fit` = 建议正文，账号 = `target.account_id`；没有调用任何启动、审核或发布的接口
+- [ ] T068a 先写（`topic-planning`，真实 DB）：`CreateOnce` 同键调两次 → 一张卡，第二次 `created=false` 且返回同一张；两个事务并发同键 → 恰好一张，两者都拿到它；空键 → `ErrInvalid`；既有 `Create` 建的卡 `origin_key` 为 NULL，行为不变；跑 `topic-planning` 既有全部测试
 - [ ] T069 先写：建卡失败（假适配器返回错误）→ 决定在、效果 `failed` 带 `failure_code`；重试成功 → 第二条效果 `done`；已 `done` 再重试 → 409 `decision_id`（SC-008）
-- [ ] T070 先写：测试钩子在建卡成功后、记效果前注入失败 → 选题卡存在、没有 `done` 效果；读 annotations 时该决定显示「已采纳，结果未记录」；用 `link` 重试指向那张卡 → 效果 `done`（Q3 已知边界）
+- [ ] T070 先写（真实 DB，Q3 补充的验收用例）：测试钩子在建卡成功后、记效果前注入失败 → 选题卡存在、没有效果记录，读 annotations 时该决定显示「已采纳，结果未记录」；**重试（`create`）→ 凭幂等键拿回同一张卡，工作区选题卡总数恰好比采纳前多 1**，效果 `done` 指向那张卡；再重试 → 409 `decision_id`
+- [ ] T070a 先写（真实 DB）：同一「卡已建、效果未记」状态下两个重试并发 → 选题卡总数仍恰好多 1，最多一条效果 `done`，另一个得到 409 或同一张卡的 `done`（PR 正文写明实际行为）；同一建议写新修订再采纳 → 仍指向同一张卡
 - [ ] T071 先写：**采纳为选题卡 `link`**——卡不存在或账号不符 → 与不存在同形；成功时决定与效果同一事务
 - [ ] T072 先写：一个修订一个决定——并发两次提交，恰好一个成功，另一个 409 `suggestion_id`（唯一索引那一层也要被触发一次：用测试钩子让两者都越过读检查）
 - [ ] T073 先写：**提议确认**——当前版本 = 基础版本 → `ip-profile` 版本 +1，新版本十一项中未修改的十项与旧版本逐项相同、修改项 `status = confirmed`；提议 `confirmed` 带 `applied_revision_id`；当前版本 ≠ 基础版本 → 409 `base_revision_id` 且 `ip-profile` 版本数不变；放弃 → `dismissed`，不写 `ip-profile`
@@ -175,7 +178,7 @@ description: "Task list for 035 feedback-learning — brand/account operating di
 - [ ] T079 先写（真实库，handler 包）：**D14-V08 服务端链路**——建选题卡 → 建作品 → 登记发布记录 → 录一条指标与一条摘录 → 生成诊断（选表现与受众反馈）→ `scope` 与表现维度包含这条发布记录 → 在版本上写一条建议（`topic_card`）→ 采纳 `create` → 选题卡列表多一张 `draft`（SC-014）
 - [ ] T080 新建 `handler/content_opdiag_decisions.go`：`topicWriter`（`topicplanning.Store.Create` / `Get`）、`profileWriter`（`ipprofile.Service.CurrentPersonaRevision` + `SetProfile`）；upstream 提交挂路由；路由存在性用例
 - [ ] T081 [P] core：判断、建议、决定、效果、提议、待办的 schema 与畸形响应用例；`queries.ts` 的 mutation（非乐观，成功后失效报告版本、annotations、选题卡列表）
-- [ ] T082 变异验证：拒绝路径里调一次 `topicWriter.Create` → T065、T075；提议采纳时直接 `SetProfile` → T067；建卡失败不写效果 → T069；去掉 `base_revision_id` 比较 → T073；待办去掉 `gap_key` 重复检查 → T074
+- [ ] T082 变异验证：拒绝路径里调一次 `topicWriter.Create` → T065、T075；提议采纳时直接 `SetProfile` → T067；建卡失败不写效果 → T069；重试时不带幂等键（改调 `Create`）→ T070、T070a；去掉 `base_revision_id` 比较 → T073；待办去掉 `gap_key` 重复检查 → T074
 - [ ] T083 本地验证同 T034
 - [ ] T084 **远程验收**：`~/loretide-ci/lt-verify.sh claude/035-pr3-opdiag-decisions all`；T072、T079 等带库用例以其 PASS / SKIP 计数为准
 
@@ -188,7 +191,7 @@ description: "Task list for 035 feedback-learning — brand/account operating di
 
 **文件**：`packages/core/paths/{paths,route-icons}.ts`、`packages/views/layout/route-icon-components.tsx`、`packages/core/diagnostics/diagnostic-context.ts`（upstream）；`packages/core/content/feedback-learning/opdiag/{display,display.test}.ts`；`packages/views/content/feedback-learning/opdiag/*.tsx`；`packages/views/locales/{en,zh-Hans,ja,ko}/*.json`；`apps/web/app/[workspaceSlug]/(dashboard)/operating-diagnosis/page.tsx`；`scripts/content-boundaries.json`（`adapters` 追加页面）；`specs/035-brand-diagnosis/manual-ui-todo.md`。
 
-- [ ] T085 upstream 提交：`paths.ts` 加 `operatingDiagnosis`；`route-icons.ts` 加 `operatingDiagnosis`（`RouteIconName` 加 `Stethoscope`）；`route-icon-components.tsx` 登记 `Stethoscope`；`diagnostic-context.ts` 加 `["operating-diagnosis"]`；跑 `route-icons.test.ts`、`diagnostic-context.test.ts`
+- [ ] T085 先核实图标（主控 2026-09-25）：在 `packages/views` 依赖的 lucide 版本里确认 `Stethoscope` 导出存在（查 `node_modules/lucide-react` 的导出或 `pnpm typecheck`）；**不存在就换一个项目里已引入过、且不是开发诊断 `Activity` 的图标**，在 PR 正文写明用了哪个、为什么。然后 upstream 提交：`paths.ts` 加 `operatingDiagnosis`；`route-icons.ts` 加 `operatingDiagnosis`（`RouteIconName` 加所选图标名）；`route-icon-components.tsx` 登记所选图标；`diagnostic-context.ts` 加 `["operating-diagnosis"]`；跑 `route-icons.test.ts`、`diagnostic-context.test.ts`
 - [ ] T086 [P] node 测试先行：`opdiag/display.ts`——按 `status`、`reason`、`kind`、规则 id 选 i18n 键；`display` 字符串原样透传，不解析数字；未知值走 `default` 分支显示通用「不可计算」/「未知」
 - [ ] T087 [P] node 测试先行（不是 UI 单测，读 JSON）：四语言里 `operating_diagnosis` 命名空间的译文不含「增长 / 提升 / 下降 / 导致 / 带来 / 因为」与 `growth` / `caused` / `because`，只放行 `performance.difference_is_not_cause` 这一条否定句（SC-003 文案部分）；导航名与开发诊断的不同
 - [ ] T088 `apps/web/.../operating-diagnosis/page.tsx` 适配器；`adapters` 追加该路径
@@ -208,4 +211,4 @@ description: "Task list for 035 feedback-learning — brand/account operating di
 # 收尾
 
 - [ ] T099 每个 PR 合入后，主控在文档仓库回写 BO-02 的进度与 D14-V01/04/05/08 的覆盖情况；D14-V08 记「部分：服务端链路已自动化（T079）；浏览器闭环未执行；真实联网不适用（本版无联网）」
-- [ ] T100 登记后续卡：AI 判断层（D1，挂接键与允许清单见 contract §8）；经营记忆的人工采纳（D3）；待办接入今日工作台；账号级授权记录（Q5）；`SetProfile` 加 `base_revision`（Q8）；027 `PendingRegistrations` 改走 `review-delivery` 公开接口；`feedback-learning` 包注释更新
+- [ ] T100 登记后续卡（主控 2026-09-25 确认不在本批）：AI 判断层（D1，挂接键与允许清单见 contract §8）；经营记忆的人工采纳（D3）；待办接入今日工作台；账号级授权记录（Q5）；`SetProfile` 加 `base_revision`（Q8）；027 `PendingRegistrations` 改走 `review-delivery` 公开接口；`feedback-learning` 包注释更新
