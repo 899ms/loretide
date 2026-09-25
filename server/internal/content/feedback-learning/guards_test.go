@@ -341,6 +341,21 @@ func TestThereIsNoSixthControlledSet(t *testing.T) {
 		}
 		delete(found, name)
 	}
+	// specs/035 PR 3's sets, contract §3: R-057's judgement, alternative
+	// explanation and limitation and its "允许定性分析" (FR-050, FR-051), the
+	// one author of this version (FR-053), R-057's three adoption targets
+	// (FR-052), D14-V05's adopt and reject, ruling Q3's create and link and
+	// the outcomes and failure codes of carrying one out, D3's proposal
+	// states, and the todo's states and two origins (Q4, FR-032).
+	for _, name := range []string{
+		"JudgementKinds", "JudgementBases", "AuthorKinds", "SuggestionTargets", "DecisionKinds", "AdoptModes",
+		"EffectOutcomes", "EffectFailures", "ProposalStates", "TodoStates", "TodoOrigins",
+	} {
+		if !found[name] {
+			t.Errorf("035 PR 3 controlled set %s is gone", name)
+		}
+		delete(found, name)
+	}
 	for extra := range found {
 		t.Errorf("a controlled set %q was added; SOP 10.1 names those fields but gives no values, and inventing some puts words in the SOP's mouth that every stored row then has to be valid against", extra)
 	}

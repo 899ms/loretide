@@ -156,6 +156,9 @@ func newTopicFixture(t *testing.T) topicFixture {
 		"517_content_source_id_unique_idx.up.sql",
 		"536_content_topic_card_fit_source_ids.up.sql",
 		"537_content_topic_card_evidence_source_ids.up.sql",
+		// specs/035 PR 3: CreateOnce's origin key and its unique index.
+		"611_content_topic_card_origin_key.up.sql",
+		"612_content_topic_card_origin_key_idx.up.sql",
 	} {
 		sql, readErr := os.ReadFile(filepath.Join(migrations, name))
 		if readErr != nil {
@@ -1275,5 +1278,168 @@ func TestPatchBodyConcurrentDifferentFieldsDoNotOverwriteEachOther(t *testing.T)
 	}
 	if stored.AudienceProblemJudgment != "updated audience" || stored.Timing != "updated timing" {
 		t.Fatalf("concurrent patches lost an edit: %#v", stored)
+	}
+}
+
+// ---------------------------------------------------------------- CreateOnce
+
+// originKeyOf reads the stored origin key of a card; "" is NULL.
+func originKeyOf(t *testing.T, fx topicFixture, topicCardID string) string {
+	t.Helper()
+	var key *string
+	fx.db.QueryRow(t, `SELECT origin_key FROM content_topic_card WHERE topic_card_id=$1`, topicCardID).Scan(&key)
+	if key == nil {
+		return ""
+	}
+	return *key
+}
+
+// T068a (specs/035 contract §7.4): the same key twice is one card; the
+// second call answers that card with created false and writes nothing. A
+// different key is another card.
+func TestCreateOnceWritesOneCardPerKey(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, actor, key = "workspace-create-once", "actor-once", "opdiag-suggestion:s1"
+	first, created, err := fx.store.CreateOnce(ctx, actor, completeCard(workspace), key)
+	if err != nil || !created {
+		t.Fatalf("first CreateOnce = created %v, %v", created, err)
+	}
+	if first.Status != StatusDraft || first.IPFit != completeCard(workspace).IPFit {
+		t.Fatalf("first card = %#v", first)
+	}
+	again := completeCard(workspace)
+	again.IPFit = "a different body"
+	second, created, err := fx.store.CreateOnce(ctx, actor, again, key)
+	if err != nil || created {
+		t.Fatalf("second CreateOnce = created %v, %v", created, err)
+	}
+	if second.TopicCardID != first.TopicCardID || second.IPFit != first.IPFit {
+		t.Fatalf("second answered %s (%q), want the first card %s", second.TopicCardID, second.IPFit, first.TopicCardID)
+	}
+	if n := fx.db.Count(t, `SELECT count(*) FROM content_topic_card WHERE workspace_id=$1`, workspace); n != 1 {
+		t.Fatalf("%d cards after two calls with one key, want 1", n)
+	}
+	if got := originKeyOf(t, fx, first.TopicCardID); got != key {
+		t.Fatalf("origin key = %q, want %q", got, key)
+	}
+	other, created, err := fx.store.CreateOnce(ctx, actor, completeCard(workspace), "opdiag-suggestion:s2")
+	if err != nil || !created || other.TopicCardID == first.TopicCardID {
+		t.Fatalf("another key = %s created %v, %v", other.TopicCardID, created, err)
+	}
+	// The key is per workspace.
+	elsewhere, created, err := fx.store.CreateOnce(ctx, actor, completeCard("workspace-create-once-b"), key)
+	if err != nil || !created || elsewhere.TopicCardID == first.TopicCardID {
+		t.Fatalf("same key in another workspace = %s created %v, %v", elsewhere.TopicCardID, created, err)
+	}
+}
+
+// T068a: two transactions with the same key at once end with exactly one
+// card, and both callers get it. The first writer holds its insert open, so
+// the CreateOnce behind it passes its read, waits on the unique index, and
+// then has to answer the card the first one committed.
+func TestCreateOnceRacingTheSameKeyAnswersTheWinnersCard(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, actor, key = "workspace-create-once-race", "actor-once", "opdiag-suggestion:race"
+	tx, err := fx.db.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	winner, err := fx.store.insertCardTx(ctx, tx, func() TopicCard {
+		card, _ := prepareNewCard(completeCard(workspace))
+		card.TopicCardID = "card-winner"
+		return card
+	}(), key)
+	if err != nil {
+		t.Fatalf("hold the first insert: %v", err)
+	}
+	type answer struct {
+		card    TopicCard
+		created bool
+		err     error
+	}
+	done := make(chan answer, 1)
+	go func() {
+		card, created, callErr := fx.store.CreateOnce(ctx, actor, completeCard(workspace), key)
+		done <- answer{card, created, callErr}
+	}()
+	// Give the second call time to pass its read and block on the index.
+	time.Sleep(300 * time.Millisecond)
+	if err = tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got := <-done
+	if got.err != nil || got.created || got.card.TopicCardID != winner.TopicCardID {
+		t.Fatalf("the racing call = %s created %v, %v; want the winner %s", got.card.TopicCardID, got.created,
+			got.err, winner.TopicCardID)
+	}
+	if n := fx.db.Count(t, `SELECT count(*) FROM content_topic_card WHERE workspace_id=$1`, workspace); n != 1 {
+		t.Fatalf("%d cards after a race on one key, want 1", n)
+	}
+
+	// And many at once, with nothing held: still one card, the same for all.
+	const racers = 8
+	ids := make([]string, racers)
+	errs := make([]error, racers)
+	start := make(chan struct{})
+	var group sync.WaitGroup
+	for i := range racers {
+		group.Go(func() {
+			<-start
+			card, _, callErr := fx.store.CreateOnce(ctx, actor, completeCard(workspace), "opdiag-suggestion:many")
+			ids[i], errs[i] = card.TopicCardID, callErr
+		})
+	}
+	close(start)
+	group.Wait()
+	for i := range racers {
+		if errs[i] != nil || ids[i] != ids[0] {
+			t.Fatalf("racer %d = %q, %v; racer 0 = %q", i, ids[i], errs[i], ids[0])
+		}
+	}
+	if n := fx.db.Count(t, `SELECT count(*) FROM content_topic_card WHERE workspace_id=$1 AND origin_key=$2`,
+		workspace, "opdiag-suggestion:many"); n != 1 {
+		t.Fatalf("%d cards for one key after %d racers, want 1", n, racers)
+	}
+}
+
+// T068a: an empty key is refused and writes nothing; Create never writes a
+// key, so every card it made before or after this card is untouched.
+func TestCreateOnceNeedsAKeyAndCreateNeverWritesOne(t *testing.T) {
+	fx := newTopicFixture(t)
+	ctx := t.Context()
+	const workspace, actor = "workspace-create-once-empty", "actor-once"
+	for _, key := range []string{"", "   "} {
+		if _, _, err := fx.store.CreateOnce(ctx, actor, completeCard(workspace), key); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("key %q = %v, want ErrInvalid", key, err)
+		}
+	}
+	if n := fx.db.Count(t, `SELECT count(*) FROM content_topic_card WHERE workspace_id=$1`, workspace); n != 0 {
+		t.Fatalf("%d cards after refused keys", n)
+	}
+	plain, err := fx.store.Create(ctx, actor, completeCard(workspace))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := originKeyOf(t, fx, plain.TopicCardID); got != "" {
+		t.Fatalf("Create wrote origin key %q", got)
+	}
+	// Two plain cards side by side: NULL keys never collide.
+	if _, err = fx.store.Create(ctx, actor, completeCard(workspace)); err != nil {
+		t.Fatalf("a second plain card: %v", err)
+	}
+	// The response shape is unchanged: no origin key in a card's JSON.
+	keyed, _, err := fx.store.CreateOnce(ctx, actor, completeCard(workspace), "opdiag-suggestion:json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(keyed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "origin") {
+		t.Fatalf("a card's JSON carries the origin key: %s", encoded)
 	}
 }

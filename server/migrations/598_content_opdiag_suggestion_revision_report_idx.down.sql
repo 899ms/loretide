@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_opdiag_suggestion_revision_report_idx;

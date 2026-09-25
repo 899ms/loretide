@@ -237,16 +237,19 @@ func (d opdiagDelivery) Tasks(ctx context.Context, workspaceID, actor string) ([
 	return out, nil
 }
 
-// opdiagStore wires the diagnosis store: 027's store, and one adapter per
-// module the diagnosis reads.
+// opdiagStore wires the diagnosis store: 027's store, one adapter per
+// module the diagnosis reads, and the two write adapters adopting a
+// suggestion uses (PR 3, content_opdiag_decisions.go).
 func (h *Handler) opdiagStore() *feedbacklearning.DiagnosisStore {
 	return &feedbacklearning.DiagnosisStore{
-		Store:    h.feedbackStore(),
-		Accounts: opdiagAccounts{service: h.contentAccountService()},
-		Rules:    opdiagRules{store: h.operatingRulesStore(), timezones: roiTimezones{db: h.DB}},
-		Topics:   opdiagTopics{store: h.topicPlanningStore()},
-		Works:    opdiagWorks{store: h.workEditorStore()},
-		Delivery: opdiagDelivery{store: h.reviewDeliveryStore()},
+		Store:      h.feedbackStore(),
+		Accounts:   opdiagAccounts{service: h.contentAccountService()},
+		Rules:      opdiagRules{store: h.operatingRulesStore(), timezones: roiTimezones{db: h.DB}},
+		Topics:     opdiagTopics{store: h.topicPlanningStore()},
+		Works:      opdiagWorks{store: h.workEditorStore()},
+		Delivery:   opdiagDelivery{store: h.reviewDeliveryStore()},
+		TopicCards: opdiagTopicCards{store: h.topicPlanningStore()},
+		Profiles:   opdiagProfileWriter{service: h.contentAccountService()},
 	}
 }
 

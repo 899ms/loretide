@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_opdiag_judgement_revision_key_idx;

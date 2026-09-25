@@ -4,6 +4,20 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  OPDIAG_ACCOUNTS_KEY_PREFIX,
+  OPDIAG_ADOPT_MODES,
+  OPDIAG_AUTHOR_KINDS,
+  OPDIAG_DECISION_KINDS,
+  OPDIAG_EFFECT_FAILURES,
+  OPDIAG_EFFECT_OUTCOMES,
+  OPDIAG_EFFECT_STATES,
+  OPDIAG_JUDGEMENT_BASES,
+  OPDIAG_JUDGEMENT_KINDS,
+  OPDIAG_PROPOSAL_STATES,
+  OPDIAG_SUGGESTION_TARGETS,
+  OPDIAG_TODO_ORIGINS,
+  OPDIAG_TODO_STATES,
+  OPDIAG_TOPIC_CARDS_KEY_PREFIX,
   OPDIAG_DATA_ORIGINS,
   OPDIAG_DIMENSION_REASONS,
   OPDIAG_DIMENSIONS,
@@ -20,6 +34,14 @@ import {
   parseOpDiagReportVersionList,
   parseOpDiagWorkMark,
   parseOpDiagWorkMarkList,
+  parseOpDiagAnnotations,
+  parseOpDiagDecision,
+  parseOpDiagJudgement,
+  parseOpDiagProposal,
+  parseOpDiagProposalList,
+  parseOpDiagSuggestion,
+  parseOpDiagTodo,
+  parseOpDiagTodoList,
 } from "./contract";
 
 // specs/035 PR 1 (T032). The sets are held to the Go source, and every
@@ -263,5 +285,142 @@ describe("a preview", () => {
     expect(parseOpDiagPreview({ ...resultWire, calc_version: 1 })).toBeNull();
     expect(parseOpDiagPreview({ ...resultWire, roi_reference: "x" })).toBeNull();
     expect(parseOpDiagPreview(undefined)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------- PR 3 (T081)
+
+const goDecisionSources = ["opdiag_annotations.go", "opdiag_decisions.go"]
+  .map((name) => readFileSync(join(goDir, name), "utf8"))
+  .join("\n");
+
+function goSetValuesIn(source: string, varName: string): string[] {
+  const declaration = new RegExp(`var ${varName} = \\[\\][A-Za-z]+\\{([^}]*)\\}`, "s").exec(source);
+  if (!declaration) throw new Error(`${varName} not found`);
+  return declaration[1]!.split(",").map((name) => name.trim()).filter(Boolean).map((name) => {
+    const value = new RegExp(`\\b${name}\\s+(?:[A-Za-z]+\\s+)?=\\s+"([^"]+)"`).exec(source);
+    if (!value) throw new Error(`${name} has no literal`);
+    return value[1]!;
+  });
+}
+
+describe("PR 3 controlled sets", () => {
+  it("are the Go sets, in order", () => {
+    expect([...OPDIAG_JUDGEMENT_KINDS]).toEqual(goSetValuesIn(goDecisionSources, "JudgementKinds"));
+    expect([...OPDIAG_JUDGEMENT_BASES]).toEqual(goSetValuesIn(goDecisionSources, "JudgementBases"));
+    expect([...OPDIAG_AUTHOR_KINDS]).toEqual(goSetValuesIn(goDecisionSources, "AuthorKinds"));
+    expect([...OPDIAG_SUGGESTION_TARGETS]).toEqual(goSetValuesIn(goDecisionSources, "SuggestionTargets"));
+    expect([...OPDIAG_DECISION_KINDS]).toEqual(goSetValuesIn(goDecisionSources, "DecisionKinds"));
+    expect([...OPDIAG_ADOPT_MODES]).toEqual(goSetValuesIn(goDecisionSources, "AdoptModes"));
+    expect([...OPDIAG_EFFECT_OUTCOMES]).toEqual(goSetValuesIn(goDecisionSources, "EffectOutcomes"));
+    expect([...OPDIAG_EFFECT_FAILURES]).toEqual(goSetValuesIn(goDecisionSources, "EffectFailures"));
+    expect([...OPDIAG_PROPOSAL_STATES]).toEqual(goSetValuesIn(goDecisionSources, "ProposalStates"));
+    expect([...OPDIAG_TODO_STATES]).toEqual(goSetValuesIn(goDecisionSources, "TodoStates"));
+    expect([...OPDIAG_TODO_ORIGINS]).toEqual(goSetValuesIn(goDecisionSources, "TodoOrigins"));
+    for (const state of OPDIAG_EFFECT_STATES) {
+      expect(goDecisionSources).toContain(`= "${state}"`);
+    }
+  });
+
+  it("copies the other modules' key prefixes as they are", () => {
+    const coreDir = join(__dirname, "../../..");
+    expect(readFileSync(join(coreDir, "content/topic-planning/queries.ts"), "utf8"))
+      .toContain(`all: (workspaceId: string) => ["${OPDIAG_TOPIC_CARDS_KEY_PREFIX}", workspaceId]`);
+    expect(readFileSync(join(coreDir, "content/ip-profile/queries.ts"), "utf8"))
+      .toContain(`all: (wsId: string) => ["${OPDIAG_ACCOUNTS_KEY_PREFIX}", wsId]`);
+  });
+});
+
+const judgementWire = {
+  judgement_id: "j1", revision: 1, report_id: "r1", version_no: 1, kind: "judgement", basis: "evidence",
+  evidence_refs: ["scope"], about_judgement_id: "", body: "节奏稳定", author_kind: "human", voided: false,
+  recorded_by: "u1", created_at: "2026-10-02T01:00:00Z",
+};
+
+const suggestionWire = {
+  suggestion_id: "s1", revision: 2, report_id: "r1", version_no: 1, body: "写一篇面料对比", target_kind: "topic_card",
+  target: { account_id: "a1" }, judgement_ids: ["j1"], evidence_refs: null, author_kind: "human", voided: false,
+  recorded_by: "u1", created_at: "2026-10-02T01:00:00Z",
+};
+
+const decisionWire = {
+  decision_id: "d1", suggestion_id: "s1", suggestion_revision: 2, decision: "adopt", mode: "create",
+  link_target_id: "", note: "", decided_by: "u1", created_at: "2026-10-02T01:00:00Z", target_kind: "topic_card",
+  effects: [{
+    effect_id: "e1", decision_id: "d1", outcome: "failed", target_kind: "topic_card", target_id: "",
+    failure_code: "storage", created_at: "2026-10-02T01:00:01Z",
+  }],
+  effect_state: "failed",
+};
+
+describe("annotations", () => {
+  it("read judgements, suggestions and decisions with their outcomes", () => {
+    const annotations = parseOpDiagAnnotations({
+      report_id: "r1", version_no: 1, judgements: [judgementWire], suggestions: [suggestionWire], decisions: [decisionWire],
+    });
+    expect(annotations?.judgements[0]).toMatchObject({ judgementId: "j1", basis: "evidence", evidenceRefs: ["scope"] });
+    expect(annotations?.suggestions[0]).toMatchObject({
+      suggestionId: "s1", targetKind: "topic_card", target: { accountId: "a1", title: "", patches: [] }, evidenceRefs: [],
+    });
+    expect(annotations?.decisions[0]).toMatchObject({
+      decisionId: "d1", mode: "create", effectState: "failed",
+      effects: [{ outcome: "failed", failureCode: "storage", targetId: "" }],
+    });
+  });
+
+  it("read an adoption with no outcome as unrecorded, and an unknown author as unknown", () => {
+    const decision = parseOpDiagDecision({ ...decisionWire, effects: null, effect_state: "unrecorded" });
+    expect(decision).toMatchObject({ effectState: "unrecorded", effects: [] });
+    expect(parseOpDiagJudgement({ ...judgementWire, author_kind: "ai" })?.authorKind).toBe("unknown");
+    expect(parseOpDiagSuggestion({ ...suggestionWire, target_kind: "business_memory" })?.targetKind).toBe("unknown");
+    expect(parseOpDiagDecision({ ...decisionWire, mode: "", decision: "reject", effect_state: "none" }))
+      .toMatchObject({ mode: "", decision: "reject", effectState: "none" });
+    expect(parseOpDiagDecision({ ...decisionWire, mode: "copy" })?.mode).toBe("unknown");
+  });
+
+  it("degrade malformed responses", () => {
+    expect(parseOpDiagAnnotations({ report_id: "r1" })).toBeNull();
+    expect(parseOpDiagJudgement({ ...judgementWire, revision: "1" })).toBeNull();
+    expect(parseOpDiagSuggestion({ ...suggestionWire, body: 3 })).toBeNull();
+    expect(parseOpDiagDecision({ ...decisionWire, suggestion_revision: null })).toBeNull();
+  });
+});
+
+describe("proposals and todos", () => {
+  const proposalWire = {
+    proposal_id: "p1", revision: 1, account_id: "a1", decision_id: "d2", base_revision_id: "rev-1",
+    patches: [{ field: "positioning", value: "面料专家" }], state: "proposed", applied_revision_id: "", voided: false,
+    recorded_by: "u1", created_at: "2026-10-02T01:00:00Z", current_revision_id: "rev-2", base_is_current: false,
+    items: [{ field: "positioning", current_value: "穿搭", current_status: "confirmed", proposed_value: "面料专家" }],
+  };
+  const todoWire = {
+    todo_id: "t1", revision: 1, title: "补定位", note: "", account_id: "a1", origin_kind: "data_gap",
+    origin_decision_id: "", origin_report_id: "r1", origin_version_no: 1,
+    origin_gap_key: "scope/profile_field_pending/profile_field/a1/positioning", state: "open", voided: false,
+    recorded_by: "u1", created_at: "2026-10-02T01:00:00Z",
+  };
+
+  it("read a proposal's current -> proposed items and whether its base is still current", () => {
+    const [proposal] = parseOpDiagProposalList({ proposals: [proposalWire] });
+    expect(proposal).toMatchObject({
+      baseRevisionId: "rev-1", currentRevisionId: "rev-2", baseIsCurrent: false,
+      items: [{ field: "positioning", currentValue: "穿搭", proposedValue: "面料专家" }],
+    });
+    // A confirm response carries no comparison; it never reads as current.
+    const { current_revision_id: _c, base_is_current: _b, items: _i, ...confirmed } = proposalWire;
+    expect(parseOpDiagProposal({ ...confirmed, state: "confirmed", applied_revision_id: "rev-3" }))
+      .toMatchObject({ state: "confirmed", appliedRevisionId: "rev-3", baseIsCurrent: false, items: [] });
+  });
+
+  it("read todos", () => {
+    expect(parseOpDiagTodoList({ todos: [todoWire] })[0]).toMatchObject({ originKind: "data_gap", originVersionNo: 1 });
+    expect(parseOpDiagTodo({ ...todoWire, state: "later" })?.state).toBe("unknown");
+  });
+
+  it("degrade malformed responses", () => {
+    expect(parseOpDiagProposal({ ...proposalWire, voided: "no" })).toBeNull();
+    expect(parseOpDiagProposalList({ proposals: "x" })).toEqual([]);
+    expect(parseOpDiagTodo({ ...todoWire, title: null })).toBeNull();
+    expect(parseOpDiagTodoList(null)).toEqual([]);
   });
 });
