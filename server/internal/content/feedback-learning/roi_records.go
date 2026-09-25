@@ -62,6 +62,11 @@ type ROIStore struct {
 	// latest revision; a test parks both writers there to prove the unique
 	// index, and not only the read, turns the loser into a 409.
 	BeforeRevisionInsert func(ctx context.Context, kind, id string)
+	// AfterImportClaim is a test seam and nil in production. It runs right
+	// after an import has claimed its Idempotency-Key, inside the still-open
+	// transaction; a test holds the first importer there so a second one
+	// with the same key has to wait on the claim's unique index.
+	AfterImportClaim func(ctx context.Context)
 }
 
 // ROIListFilter narrows a list. From is inclusive, To exclusive, both on the
@@ -437,12 +442,7 @@ func (s *ROIStore) writeCost(ctx context.Context, workspaceID, actor, costID str
 			record.SourceType, record.RecordedBy = source, actor
 			record.DedupeKey = CostDedupeKey(record, s.location(ctx, workspaceID))
 			if !record.Voided {
-				matches, err := queryIDs(ctx, tx, `SELECT r.cost_id FROM content_roi_cost_revision r
-					WHERE r.workspace_id=$1 AND r.dedupe_key=$2 AND r.cost_id<>$3 AND NOT r.voided
-					  AND r.revision = (SELECT l.revision FROM content_roi_cost_revision l
-					      WHERE l.workspace_id=r.workspace_id AND l.cost_id=r.cost_id
-					      ORDER BY l.revision DESC LIMIT 1)
-					ORDER BY r.cost_id`, workspaceID, record.DedupeKey, costID)
+				matches, err := costDuplicates(ctx, tx, workspaceID, record.DedupeKey, costID)
 				if err != nil {
 					return costID, err
 				}
@@ -451,34 +451,9 @@ func (s *ROIStore) writeCost(ctx context.Context, workspaceID, actor, costID str
 				}
 			}
 			s.beforeInsert(ctx, "cost", costID)
-			if err = tx.QueryRow(ctx, `INSERT INTO content_roi_cost_revision
-				(workspace_id, cost_id, revision, voided, category, pricing, amount_minor,
-				 currency, labor_minutes, labor_rate_minor, incurred_at, ad_spend, account_id,
-				 work_id, campaign_label, evidence_note, note, dedupe_key, not_duplicate_of,
-				 source_type, import_batch_id, recorded_by)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'',$21)
-				RETURNING created_at`,
-				workspaceID, costID, record.Revision, record.Voided, record.Category,
-				string(record.Pricing), record.amountMinor, record.Currency, record.LaborMinutes,
-				record.laborRateMinor, record.IncurredAt, record.AdSpend, record.AccountID,
-				record.WorkID, record.CampaignLabel, record.EvidenceNote, record.Note,
-				record.DedupeKey, record.NotDuplicateOf, string(source), actor).
-				Scan(&record.CreatedAt); err != nil {
-				return costID, insertError(err)
+			if err = insertCost(ctx, tx, &record); err != nil {
+				return costID, err
 			}
-			for _, allocation := range record.Allocations {
-				if _, err = tx.Exec(ctx, `INSERT INTO content_roi_cost_allocation
-					(workspace_id, cost_id, cost_revision, target_kind, target_id, method, weight,
-					 allocated_minor)
-					VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-					workspaceID, costID, record.Revision, string(allocation.TargetKind),
-					allocation.TargetID, string(allocation.Method), allocation.Weight,
-					int64(allocation.AllocatedMinor)); err != nil {
-					return costID, ErrStorage
-				}
-			}
-			record.CreatedAt = record.CreatedAt.UTC()
-			record.fill()
 			written = record
 			return costID, nil
 		})
@@ -486,6 +461,55 @@ func (s *ROIStore) writeCost(ctx context.Context, workspaceID, actor, costID str
 		return CostRevision{}, err
 	}
 	return written, nil
+}
+
+// costDuplicates is every other current cost - latest revision not voided -
+// with this dedupe key. excludeID is the cost being revised ("" for a new
+// one), which is never its own duplicate. It runs in the caller's
+// transaction, so an import sees the rows it has already written.
+func costDuplicates(ctx context.Context, tx pgx.Tx, workspaceID, key, excludeID string) ([]string, error) {
+	return queryIDs(ctx, tx, `SELECT r.cost_id FROM content_roi_cost_revision r
+		WHERE r.workspace_id=$1 AND r.dedupe_key=$2 AND r.cost_id<>$3 AND NOT r.voided
+		  AND r.revision = (SELECT l.revision FROM content_roi_cost_revision l
+		      WHERE l.workspace_id=r.workspace_id AND l.cost_id=r.cost_id
+		      ORDER BY l.revision DESC LIMIT 1)
+		ORDER BY r.cost_id`, workspaceID, key, excludeID)
+}
+
+// insertCost writes one cost revision and its shares, and fills in what the
+// database answered. Every column comes from the record: the entry point has
+// already set its source, import batch and author.
+func insertCost(ctx context.Context, tx pgx.Tx, record *CostRevision) error {
+	if err := tx.QueryRow(ctx, `INSERT INTO content_roi_cost_revision
+		(workspace_id, cost_id, revision, voided, category, pricing, amount_minor,
+		 currency, labor_minutes, labor_rate_minor, incurred_at, ad_spend, account_id,
+		 work_id, campaign_label, evidence_note, note, dedupe_key, not_duplicate_of,
+		 source_type, import_batch_id, recorded_by)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+		RETURNING created_at`,
+		record.WorkspaceID, record.CostID, record.Revision, record.Voided, record.Category,
+		string(record.Pricing), record.amountMinor, record.Currency, record.LaborMinutes,
+		record.laborRateMinor, record.IncurredAt, record.AdSpend, record.AccountID,
+		record.WorkID, record.CampaignLabel, record.EvidenceNote, record.Note,
+		record.DedupeKey, record.NotDuplicateOf, string(record.SourceType), record.ImportBatchID,
+		record.RecordedBy).
+		Scan(&record.CreatedAt); err != nil {
+		return insertError(err)
+	}
+	for _, allocation := range record.Allocations {
+		if _, err := tx.Exec(ctx, `INSERT INTO content_roi_cost_allocation
+			(workspace_id, cost_id, cost_revision, target_kind, target_id, method, weight,
+			 allocated_minor)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+			record.WorkspaceID, record.CostID, record.Revision, string(allocation.TargetKind),
+			allocation.TargetID, string(allocation.Method), allocation.Weight,
+			int64(allocation.AllocatedMinor)); err != nil {
+			return ErrStorage
+		}
+	}
+	record.CreatedAt = record.CreatedAt.UTC()
+	record.fill()
+	return nil
 }
 
 // ListCosts returns the latest revision of each cost, newest first. Voided
@@ -744,13 +768,7 @@ func (s *ROIStore) writeLead(ctx context.Context, workspaceID, actor, leadID str
 			record.SourceType, record.RecordedBy = source, actor
 			record.DedupeKey = LeadDedupeKey(record.CustomerRef, record.FirstSeenAt, s.location(ctx, workspaceID))
 			if !record.Voided && record.MergedInto == "" && record.DedupeKey != "" {
-				matches, err := queryIDs(ctx, tx, `SELECT r.lead_id FROM content_roi_lead_revision r
-					WHERE r.workspace_id=$1 AND r.dedupe_key=$2 AND r.lead_id<>$3
-					  AND NOT r.voided AND r.merged_into = ''
-					  AND r.revision = (SELECT l.revision FROM content_roi_lead_revision l
-					      WHERE l.workspace_id=r.workspace_id AND l.lead_id=r.lead_id
-					      ORDER BY l.revision DESC LIMIT 1)
-					ORDER BY r.lead_id`, workspaceID, record.DedupeKey, leadID)
+				matches, err := leadDuplicates(ctx, tx, workspaceID, record.DedupeKey, leadID)
 				if err != nil {
 					return leadID, err
 				}
@@ -769,6 +787,18 @@ func (s *ROIStore) writeLead(ctx context.Context, workspaceID, actor, leadID str
 		return LeadRevision{}, err
 	}
 	return written, nil
+}
+
+// leadDuplicates is every other current lead - latest revision neither voided
+// nor merged into another - with this dedupe key.
+func leadDuplicates(ctx context.Context, tx pgx.Tx, workspaceID, key, excludeID string) ([]string, error) {
+	return queryIDs(ctx, tx, `SELECT r.lead_id FROM content_roi_lead_revision r
+		WHERE r.workspace_id=$1 AND r.dedupe_key=$2 AND r.lead_id<>$3
+		  AND NOT r.voided AND r.merged_into = ''
+		  AND r.revision = (SELECT l.revision FROM content_roi_lead_revision l
+		      WHERE l.workspace_id=r.workspace_id AND l.lead_id=r.lead_id
+		      ORDER BY l.revision DESC LIMIT 1)
+		ORDER BY r.lead_id`, workspaceID, key, excludeID)
 }
 
 func insertLead(ctx context.Context, tx pgx.Tx, lead *LeadRevision) error {
@@ -1192,12 +1222,7 @@ func (s *ROIStore) writeDeal(ctx context.Context, workspaceID, actor, dealID str
 			record.DedupeKey = DealDedupeKey(record.OrderRef, record.LeadID, record.ClosedAt,
 				record.Currency, int64(record.AmountMinor), s.location(ctx, workspaceID))
 			if !record.Voided {
-				matches, err := queryIDs(ctx, tx, `SELECT r.deal_id FROM content_roi_deal_revision r
-					WHERE r.workspace_id=$1 AND r.dedupe_key=$2 AND r.deal_id<>$3 AND NOT r.voided
-					  AND r.revision = (SELECT l.revision FROM content_roi_deal_revision l
-					      WHERE l.workspace_id=r.workspace_id AND l.deal_id=r.deal_id
-					      ORDER BY l.revision DESC LIMIT 1)
-					ORDER BY r.deal_id`, workspaceID, record.DedupeKey, dealID)
+				matches, err := dealDuplicates(ctx, tx, workspaceID, record.DedupeKey, dealID)
 				if err != nil {
 					return dealID, err
 				}
@@ -1206,21 +1231,9 @@ func (s *ROIStore) writeDeal(ctx context.Context, workspaceID, actor, dealID str
 				}
 			}
 			s.beforeInsert(ctx, "deal", dealID)
-			if err = tx.QueryRow(ctx, `INSERT INTO content_roi_deal_revision
-				(workspace_id, deal_id, revision, voided, lead_id, order_ref, amount_minor,
-				 currency, closed_at, gross_basis, gross_profit_minor, cogs_minor, note,
-				 dedupe_key, not_duplicate_of, source_type, import_batch_id, recorded_by)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'',$17)
-				RETURNING created_at`,
-				workspaceID, dealID, record.Revision, record.Voided, record.LeadID,
-				record.OrderRef, int64(record.AmountMinor), record.Currency, record.ClosedAt,
-				string(record.GrossBasis), record.grossProfitMinor, record.cogsMinor, record.Note,
-				record.DedupeKey, record.NotDuplicateOf, string(source), actor).
-				Scan(&record.CreatedAt); err != nil {
-				return dealID, insertError(err)
+			if err = insertDeal(ctx, tx, &record); err != nil {
+				return dealID, err
 			}
-			record.CreatedAt = record.CreatedAt.UTC()
-			record.fill()
 			written = record
 			return dealID, nil
 		})
@@ -1228,6 +1241,38 @@ func (s *ROIStore) writeDeal(ctx context.Context, workspaceID, actor, dealID str
 		return DealRevision{}, err
 	}
 	return written, nil
+}
+
+// dealDuplicates is every other current deal - latest revision not voided -
+// with this dedupe key.
+func dealDuplicates(ctx context.Context, tx pgx.Tx, workspaceID, key, excludeID string) ([]string, error) {
+	return queryIDs(ctx, tx, `SELECT r.deal_id FROM content_roi_deal_revision r
+		WHERE r.workspace_id=$1 AND r.dedupe_key=$2 AND r.deal_id<>$3 AND NOT r.voided
+		  AND r.revision = (SELECT l.revision FROM content_roi_deal_revision l
+		      WHERE l.workspace_id=r.workspace_id AND l.deal_id=r.deal_id
+		      ORDER BY l.revision DESC LIMIT 1)
+		ORDER BY r.deal_id`, workspaceID, key, excludeID)
+}
+
+// insertDeal writes one deal revision as the record carries it.
+func insertDeal(ctx context.Context, tx pgx.Tx, record *DealRevision) error {
+	if err := tx.QueryRow(ctx, `INSERT INTO content_roi_deal_revision
+		(workspace_id, deal_id, revision, voided, lead_id, order_ref, amount_minor,
+		 currency, closed_at, gross_basis, gross_profit_minor, cogs_minor, note,
+		 dedupe_key, not_duplicate_of, source_type, import_batch_id, recorded_by)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+		RETURNING created_at`,
+		record.WorkspaceID, record.DealID, record.Revision, record.Voided, record.LeadID,
+		record.OrderRef, int64(record.AmountMinor), record.Currency, record.ClosedAt,
+		string(record.GrossBasis), record.grossProfitMinor, record.cogsMinor, record.Note,
+		record.DedupeKey, record.NotDuplicateOf, string(record.SourceType), record.ImportBatchID,
+		record.RecordedBy).
+		Scan(&record.CreatedAt); err != nil {
+		return insertError(err)
+	}
+	record.CreatedAt = record.CreatedAt.UTC()
+	record.fill()
+	return nil
 }
 
 // checkNet is FR-024: the deal amount less every current refund/adjustment

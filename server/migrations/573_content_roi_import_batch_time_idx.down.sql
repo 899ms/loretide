@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_roi_import_batch_time_idx;

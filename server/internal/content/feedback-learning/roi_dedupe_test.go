@@ -91,3 +91,29 @@ func TestADealWithAnOrderReferenceIsKeyedByItAlone(t *testing.T) {
 		t.Error("without an order reference, the lead must be part of the key")
 	}
 }
+
+// Contract §4: Unicode NFC. "é" as one code point and as "e" plus a combining
+// acute accent are the same text, and give the same key - for every text part
+// of every key.
+func TestTheKeyIsTheSameForComposedAndDecomposedText(t *testing.T) {
+	composed, decomposed := "Café 拍摄", "Cafe\u0301 拍摄"
+	if composed == decomposed {
+		t.Fatal("the two spellings are byte-equal; the test proves nothing")
+	}
+	location := shanghai(t)
+	if CostDedupeKey(dedupeCost(t, composed, "3000.00"), location) !=
+		CostDedupeKey(dedupeCost(t, decomposed, "3000.00"), location) {
+		t.Error("cost: composed and decomposed categories gave different keys")
+	}
+	day := time.Date(2026, 9, 1, 2, 0, 0, 0, time.UTC)
+	if LeadDedupeKey("客户-é", day, time.UTC) != LeadDedupeKey("客户-e\u0301", day, time.UTC) {
+		t.Error("lead: composed and decomposed customer labels gave different keys")
+	}
+	if DealDedupeKey("TB-é", "", day, "CNY", 1, time.UTC) != DealDedupeKey("TB-e\u0301", "", day, "CNY", 1, time.UTC) {
+		t.Error("deal: composed and decomposed order references gave different keys")
+	}
+	// NFC is not case folding and not accent stripping.
+	if LeadDedupeKey("客户-é", day, time.UTC) == LeadDedupeKey("客户-e", day, time.UTC) {
+		t.Error("an accent was stripped")
+	}
+}

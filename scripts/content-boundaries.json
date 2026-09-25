@@ -73,6 +73,7 @@
       "github.com/jackc/pgx/v5",
       "github.com/google/uuid",
       "github.com/gorilla/websocket",
+      "golang.org/x/text/unicode/norm",
       "go.opentelemetry.io/otel"
     ],
     "packages/core/content": [
@@ -125,6 +126,7 @@
     "server/internal/handler/content_marketing_node.go",
     "server/internal/handler/content_roi_records.go",
     "server/internal/handler/content_roi_preview.go",
-    "apps/web/app/[workspaceSlug]/(dashboard)/marketing-nodes/page.tsx"
+    "apps/web/app/[workspaceSlug]/(dashboard)/marketing-nodes/page.tsx",
+    "server/internal/handler/content_roi_import.go"
   ]
 }

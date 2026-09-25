@@ -48,8 +48,8 @@ export type CsvParse =
 
 /** Splits one CSV line, honouring double quotes so a quoted comma stays in its
  *  cell. Not a general CSV library: a pasted spreadsheet selection is the
- *  input, and this is what that produces. */
-function splitLine(line: string): string[] {
+ *  input, and this is what that produces. Also read by roi/csv.ts. */
+export function splitLine(line: string): string[] {
   const cells: string[] = [];
   let current = "";
   let quoted = false;

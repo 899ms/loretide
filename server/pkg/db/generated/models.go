@@ -942,6 +942,28 @@ type ContentRoiDealRevision struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentRoiImportBatch struct {
+	ImportBatchID  string             `json:"import_batch_id"`
+	WorkspaceID    string             `json:"workspace_id"`
+	RecordKind     string             `json:"record_kind"`
+	RowCount       int32              `json:"row_count"`
+	WrittenCount   int32              `json:"written_count"`
+	SkippedCount   int32              `json:"skipped_count"`
+	Rows           []byte             `json:"rows"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	RecordedBy     string             `json:"recorded_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentRoiImportClaim struct {
+	WorkspaceID        string             `json:"workspace_id"`
+	RecordKind         string             `json:"record_kind"`
+	IdempotencyKey     string             `json:"idempotency_key"`
+	RequestFingerprint string             `json:"request_fingerprint"`
+	ImportBatchID      string             `json:"import_batch_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContentRoiLeadRevision struct {
 	WorkspaceID    string             `json:"workspace_id"`
 	LeadID         string             `json:"lead_id"`
