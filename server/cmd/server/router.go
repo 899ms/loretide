@@ -2095,6 +2095,21 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Get("/reports/{reportId}/versions/{versionNo}", h.GetContentROIReportVersion)
 		})
 
+		// Brand/account operating diagnosis (specs/035 PR 1): report versions
+		// and work marks. Outside RequireWorkspaceMember like /api/content-roi:
+		// every decision, refusals included, reaches workspace-core's Authorize
+		// in the handler. Both are append-only; there is no PUT, PATCH or DELETE.
+		r.Route("/api/content-operating-diagnosis", func(r chi.Router) {
+			r.Use(h.DiagnosticTrace)
+			r.Get("/reports", h.ListContentOpDiagReports)
+			r.Post("/reports", h.CreateContentOpDiagReport)
+			r.Get("/reports/{reportId}/versions", h.ListContentOpDiagReportVersions)
+			r.Post("/reports/{reportId}/versions", h.GenerateContentOpDiagReportVersion)
+			r.Get("/reports/{reportId}/versions/{versionNo}", h.GetContentOpDiagReportVersion)
+			r.Get("/work-marks", h.ListContentOpDiagWorkMarks)
+			r.Post("/work-marks", h.RecordContentOpDiagWorkMark)
+		})
+
 		// --- Workspace-scoped routes (all require workspace membership) ---
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireWorkspaceMember(queries))

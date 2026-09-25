@@ -422,6 +422,14 @@ var concurrentIndexCleanups = map[string]string{
 	// table migration (576) builds no index and is absent.
 	"577_content_roi_report_version_key_idx":  "content_roi_report_version_key_idx",
 	"578_content_roi_report_version_time_idx": "content_roi_report_version_time_idx",
+
+	// specs/035 operating diagnosis report versions and work marks (PR 1).
+	// Its own block, as above. The two table migrations (579, 582) build no
+	// index and are absent.
+	"580_content_opdiag_report_version_key_idx":  "content_opdiag_report_version_key_idx",
+	"581_content_opdiag_report_version_time_idx": "content_opdiag_report_version_time_idx",
+	"583_content_opdiag_work_mark_key_idx":       "content_opdiag_work_mark_key_idx",
+	"584_content_opdiag_work_mark_work_idx":      "content_opdiag_work_mark_work_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction
