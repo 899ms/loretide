@@ -790,6 +790,62 @@ type ContentMarketingNodeRevision struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentOpdiagDecision struct {
+	WorkspaceID        string             `json:"workspace_id"`
+	DecisionID         string             `json:"decision_id"`
+	SuggestionID       string             `json:"suggestion_id"`
+	SuggestionRevision int32              `json:"suggestion_revision"`
+	Decision           string             `json:"decision"`
+	Mode               string             `json:"mode"`
+	LinkTargetID       string             `json:"link_target_id"`
+	Note               string             `json:"note"`
+	DecidedBy          string             `json:"decided_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentOpdiagEffect struct {
+	WorkspaceID string             `json:"workspace_id"`
+	EffectID    string             `json:"effect_id"`
+	DecisionID  string             `json:"decision_id"`
+	Outcome     string             `json:"outcome"`
+	TargetKind  string             `json:"target_kind"`
+	TargetID    string             `json:"target_id"`
+	FailureCode string             `json:"failure_code"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentOpdiagJudgementRevision struct {
+	WorkspaceID      string             `json:"workspace_id"`
+	JudgementID      string             `json:"judgement_id"`
+	Revision         int32              `json:"revision"`
+	ReportID         string             `json:"report_id"`
+	VersionNo        int32              `json:"version_no"`
+	Kind             string             `json:"kind"`
+	Basis            string             `json:"basis"`
+	EvidenceRefs     []string           `json:"evidence_refs"`
+	AboutJudgementID string             `json:"about_judgement_id"`
+	Body             string             `json:"body"`
+	AuthorKind       string             `json:"author_kind"`
+	Voided           bool               `json:"voided"`
+	RecordedBy       string             `json:"recorded_by"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentOpdiagProfileProposalRevision struct {
+	WorkspaceID       string             `json:"workspace_id"`
+	ProposalID        string             `json:"proposal_id"`
+	Revision          int32              `json:"revision"`
+	AccountID         string             `json:"account_id"`
+	DecisionID        string             `json:"decision_id"`
+	BaseRevisionID    string             `json:"base_revision_id"`
+	Patches           []byte             `json:"patches"`
+	State             string             `json:"state"`
+	AppliedRevisionID string             `json:"applied_revision_id"`
+	Voided            bool               `json:"voided"`
+	RecordedBy        string             `json:"recorded_by"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContentOpdiagReportVersion struct {
 	WorkspaceID string             `json:"workspace_id"`
 	ReportID    string             `json:"report_id"`
@@ -803,6 +859,41 @@ type ContentOpdiagReportVersion struct {
 	Result      []byte             `json:"result"`
 	CreatedBy   string             `json:"created_by"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentOpdiagSuggestionRevision struct {
+	WorkspaceID  string             `json:"workspace_id"`
+	SuggestionID string             `json:"suggestion_id"`
+	Revision     int32              `json:"revision"`
+	ReportID     string             `json:"report_id"`
+	VersionNo    int32              `json:"version_no"`
+	Body         string             `json:"body"`
+	TargetKind   string             `json:"target_kind"`
+	Target       []byte             `json:"target"`
+	JudgementIds []string           `json:"judgement_ids"`
+	EvidenceRefs []string           `json:"evidence_refs"`
+	AuthorKind   string             `json:"author_kind"`
+	Voided       bool               `json:"voided"`
+	RecordedBy   string             `json:"recorded_by"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentOpdiagTodoRevision struct {
+	WorkspaceID      string             `json:"workspace_id"`
+	TodoID           string             `json:"todo_id"`
+	Revision         int32              `json:"revision"`
+	Title            string             `json:"title"`
+	Note             string             `json:"note"`
+	AccountID        string             `json:"account_id"`
+	OriginKind       string             `json:"origin_kind"`
+	OriginDecisionID string             `json:"origin_decision_id"`
+	OriginReportID   string             `json:"origin_report_id"`
+	OriginVersionNo  int32              `json:"origin_version_no"`
+	OriginGapKey     string             `json:"origin_gap_key"`
+	State            string             `json:"state"`
+	Voided           bool               `json:"voided"`
+	RecordedBy       string             `json:"recorded_by"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
 type ContentOpdiagWorkMark struct {
@@ -1141,6 +1232,7 @@ type ContentTopicCard struct {
 	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
 	FitSourceIds              []byte             `json:"fit_source_ids"`
 	EvidenceSourceIds         []byte             `json:"evidence_source_ids"`
+	OriginKey                 pgtype.Text        `json:"origin_key"`
 }
 
 type ContentWork struct {
