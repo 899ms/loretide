@@ -1,6 +1,6 @@
 # 合同：平台搜索优化（036）
 
-**状态**：待裁决（Q1～Q8 见 `spec.md` 文末）。下文按推荐值写；每个列名、受控集都要能指回 `spec.md` 开头的 R-060 原文或主控 D1–D8，指不回去的在 `spec.md`「本规格补的设计」里单列。
+**状态**：已裁决（主控已裁定 2026-09-25，PR #272 评论）：Q1～Q8 采纳推荐值；实施五个 PR（原 PR 2 拆成 PR 2 / PR 3）。每个列名、受控集都要能指回 `spec.md` 开头的 R-060 原文或主控 D1–D8，指不回去的在 `spec.md`「本规格补的设计」里单列。
 
 | 部分 | 模块 | Go 文件前缀 | handler 文件 |
 |---|---|---|---|
@@ -71,7 +71,7 @@
 
 同一 `suggestion_id` 只能有一行：唯一索引兜底（§2），Go 先查，冲突映射为 409 `suggestion_id`。
 
-### 1.4 `content_search_suggestion_effect` —— 效果（`topic-planning`，PR 2，只插）
+### 1.4 `content_search_suggestion_effect` —— 效果（`topic-planning`，PR 2 建表、PR 3 写入，只插）
 
 | 列 | 说明 |
 |---|---|
@@ -84,7 +84,7 @@
 
 一个决定可有多条效果（失败后重试）；**最多一条 `done`**：Go 在写入前查（同一事务里先对该决定行 `SELECT ... FOR UPDATE`，并发的两次重试因此排队，后到者看得见先到者的 `done`），另有一条用例。不加部分唯一索引（与 035 §1.6 同一理由）。
 
-### 1.5 `content_search_metric` —— 搜索指标（`feedback-learning`，PR 3，只插）
+### 1.5 `content_search_metric` —— 搜索指标（`feedback-learning`，PR 4，只插）
 
 与 027 `content_manual_metric` 同形（Q2=A）：
 
@@ -103,7 +103,7 @@
 | `source_type` | text NOT NULL CHECK `manual` | 服务端写 |
 | `recorded_by`, `created_at` | | |
 
-### 1.6 `content_search_rank_observation_revision` —— 排名观察（`feedback-learning`，PR 3）
+### 1.6 `content_search_rank_observation_revision` —— 排名观察（`feedback-learning`，PR 4）
 
 | 列 | 类型 | 说明 |
 |---|---|---|
@@ -122,7 +122,7 @@
 
 `CHECK ((result_kind = 'position' AND position >= 1 AND scanned_depth IS NULL) OR (result_kind = 'not_found' AND scanned_depth >= 1 AND position IS NULL))` 兜底。
 
-### 1.7 `content_artifact_version` 的 `action` CHECK（`work-editor`，PR 2，Q3=A）
+### 1.7 `content_artifact_version` 的 `action` CHECK（`work-editor`，PR 3，Q3=A）
 
 照迁移 535，一条 `ALTER TABLE`：
 
@@ -153,7 +153,7 @@ down 迁移还原为四项（注释写明：已有 `suggestion_applied` 行时 d
 | `content_search_rank_observation_theme_idx` | 1.6 | `(workspace_id, theme_id, observed_at)` | 否 | 按主题读 |
 | `content_search_rank_observation_record_idx` | 1.6 | `(workspace_id, publication_record_id, observed_at)` | 否 | 按发布记录读 |
 
-合计：PR 1 两个、PR 2 四个、PR 3 五个。
+合计：PR 1 两个、PR 2 四个、PR 4 五个。
 
 ---
 
@@ -283,13 +283,13 @@ down 迁移还原为四项（注释写明：已有 `suggestion_applied` 行时 d
 | GET | `/suggestions/compare` | 2 | `ids=a,b[,c,d]`；只读 |
 | GET | `/suggestions/{suggestionId}` | 2 | 当前修订 + 差异 + 状态 |
 | POST | `/suggestions/{suggestionId}/revisions` | 2 | 新修订 |
-| POST | `/suggestions/{suggestionId}/decisions` | 2 | `{decision, revision, note}` |
-| POST | `/decisions/{decisionId}/retry` | 2 | 重试采用 |
-| GET | `/metrics` | 3 | `publication_record_id` 必填 |
-| POST | `/metrics` | 3 | 登记一条 |
-| GET | `/rank-observations` | 3 | `theme_id` / `publication_record_id` / `query` 至少一个；`include_voided` |
-| POST | `/rank-observations` | 3 | 登记一次 |
-| POST | `/rank-observations/{observationId}/revisions` | 3 | 更正 / 作废 |
+| POST | `/suggestions/{suggestionId}/decisions` | 2 | `{decision, revision, note}`；PR 2 只接受 `abandon`，PR 3 放开 `adopt` |
+| POST | `/decisions/{decisionId}/retry` | 3 | 重试采用 |
+| GET | `/metrics` | 4 | `publication_record_id` 必填 |
+| POST | `/metrics` | 4 | 登记一条 |
+| GET | `/rank-observations` | 4 | `theme_id` / `publication_record_id` / `query` 至少一个；`include_voided` |
+| POST | `/rank-observations` | 4 | 登记一次 |
+| POST | `/rank-observations/{observationId}/revisions` | 4 | 更正 / 作废 |
 
 `/suggestions/compare` 是静态段，必须先于 `/suggestions/{suggestionId}` 匹配；路由用例各一条。
 
@@ -371,7 +371,7 @@ type SearchThemes interface {
 
 适配器里的 nil store 返回调用方的 `ErrStorage`。每个方法一条「工作区删除已提交后」用例，断言端点 404。
 
-### 7.4 `work-editor.ApplyBody`（公开契约新增，PR 2）
+### 7.4 `work-editor.ApplyBody`（公开契约新增，PR 3）
 
 `work-editor/apply.go`：
 
@@ -399,13 +399,13 @@ func (s *Store) ApplyBody(ctx context.Context, workspaceID, actor, workID, artif
 - 实现为 `appendVersion` 的一个新意图（加 `baseVersionID`、`body` 两个字段到 `versionIntent`），不另开一条写版本的路径；`TestTheVersionTableHasNoUpdateOrDeletePath` 与 `TestSourceAndActionAreNeverReadFromInput` 继续成立。
 - 顺序：栅栏 → 幂等 `Claim`（重放即返回）→ 审计 → 锁文档 → 最新版本 == `BaseVersionID`（文档没有版本时也算不等）→ `draft_status == saved` → `Body != 基础版本正文` → 取号插入 → 编辑副本 = `Body`、`saved` → 幂等 `Complete` → 提交。
 - 幂等请求由适配器用 `idempotency.NewRequest("apply-search-suggestion", artifactID, key, {base_version_id, sha256(body)})` 构造；同键不同输入 → `idempotency.ErrConflict` → 适配器映射为 `ErrStorage`（不应发生：同一建议的基础版本与正文不变）。
-- 这是 `work-editor` 的**公开契约新增**：既有四个入口、响应形状、024/025/031 的消费者都不变。PR 2 正文按文档 12 §6 写明。
+- 这是 `work-editor` 的**公开契约新增**：既有四个入口、响应形状、024/025/031 的消费者都不变。PR 3 正文按文档 12 §6 写明。
 
 ---
 
 ## 8. 给 EP-06 的约定（预检报告过期）
 
-本卡不建预检表（Current State §1）。EP-06 落地时 MUST：
+本卡不建预检表（Current State §1）。主控已裁定 2026-09-25：接受「采用必产生新 `version_id`」的结构性保证；报告的实际过期待 EP-06 落地后按下面三条补测（后续项）。EP-06 落地时 MUST：
 
 1. 预检报告以 `(artifact_id, version_id)` 为键；
 2. 「报告相对当前稿过期」= 报告的 `version_id` ≠ 该文档最新版本的 `version_id`，读时派生；
