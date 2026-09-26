@@ -20,7 +20,8 @@
     "operating_diagnosis": "운영 진단",
     "accounts": "계정",
     "content_diagnostics": "콘텐츠 진단",
-    "historical_import": "과거 콘텐츠 가져오기"
+    "historical_import": "과거 콘텐츠 가져오기",
+    "search_optimization": "검색 최적화"
   },
   "tab": {
     "issue": "태스크",

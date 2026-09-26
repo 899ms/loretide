@@ -113,6 +113,7 @@ const PAGE_KEYWORDS: Record<WorkspacePageKey, string[]> = {
   operatingDiagnosis: ["operating", "diagnosis", "metrics", "经营", "诊断", "指标"],
   accounts: ["accounts", "brand", "persona", "账号", "品牌"],
   contentDiagnostics: ["diagnostics", "content", "traces", "诊断", "内容"],
+  searchOptimization: ["search", "optimization", "seo", "关键词", "搜索优化"],
 };
 
 const NAV_PAGE_KEYS = Object.keys(WORKSPACE_PAGES) as WorkspacePageKey[];

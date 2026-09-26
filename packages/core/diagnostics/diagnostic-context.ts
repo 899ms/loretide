@@ -93,6 +93,7 @@ const WORKSPACE_ROUTES: readonly RoutePattern[] = [
   ["accounts"],
   ["historical-import"],
   ["diagnostics"],
+  ["search-optimization"],
 ];
 
 const GLOBAL_ROUTES: readonly RoutePattern[] = [

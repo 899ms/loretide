@@ -20,7 +20,8 @@
     "operating_diagnosis": "经营诊断",
     "accounts": "账号",
     "content_diagnostics": "内容诊断",
-    "historical_import": "历史导入"
+    "historical_import": "历史导入",
+    "search_optimization": "搜索优化"
   },
   "tab": {
     "issue": "任务",

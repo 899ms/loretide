@@ -1564,3 +1564,5 @@ export {
   type MarketingNodeSourceOption,
   type MarketingNodesPageProps,
 } from "./marketing-nodes";
+export { SearchThemesSection } from "./search";
+export { SearchSuggestionsSection } from "./search/suggestions";

@@ -1854,6 +1854,54 @@
     "judgement": "Judgement", "suggestion": "Suggestion", "body": "Text", "targetKind": "Target", "saveJudgement": "Record judgement", "saveSuggestion": "Record suggestion", "adopt": "Adopt", "reject": "Reject", "retry": "Retry", "confirm": "Confirm", "dismiss": "Dismiss", "todos": "Supplemental todos", "proposals": "Profile proposals", "createTodo": "Create todo from gap", "manualOnly": "Manual records only", "pendingData": "Pending data; no AI conclusion was generated.", "loading": "Loading…", "loadFailed": "Could not load. Please refresh later.", "saving": "Saving…", "saved": "Saved", "failed": "Could not save.",
     "sections": { "account": "Account", "unknown_account": "Unresolved account", "brand": "Brand" }, "dimension": { "consistency": "Consistency", "coverage": "Coverage", "cadence": "Cadence", "performance": "Performance", "audience_feedback": "Audience feedback", "execution_flow": "Execution flow" }, "reasons": { "no_data": "No data", "missing_config": "Missing configuration", "missing_comparison_window": "Missing comparison window", "missing_observation_window": "Missing observation window", "no_delivery_channel": "No delivery channel" }, "rulesMap": { "common.unknown_is_not_zero": "Unknown is not zero", "common.no_cross_platform_ranking": "No cross-platform ranking", "common.no_score": "No score", "common.window_in_brand_timezone": "Window is read in the brand timezone", "performance.difference_is_not_cause": "A difference is not a cause" }
   },
+  "search_optimization": {
+    "title": "Search optimization",
+    "description": "Record search topics, manual suggestions, publication metrics and individual observations. This page does not fetch platform data.",
+    "open": "Open search optimization",
+    "editorLinkLabel": "Search optimization",
+    "noAi": "Suggestions are written and reviewed by people. This page does not use AI or browse the web.",
+    "fixedGuidance": "Answer the question. Keep evidence and the source version visible. One observation is not a stable or platform-wide rank.",
+    "unknown": "Unknown",
+    "loading": "Loading...",
+    "loadFailed": "Could not load these records. Refresh and try again.",
+    "invalidContext": "The selected topic, publication and account do not match. Choose compatible records.",
+    "saveFailed": "Could not save. Your draft is still here; review it and retry.",
+    "saved": "Saved",
+    "empty": "No records yet.",
+    "select": "Select",
+    "all": "All",
+    "none": "None",
+    "save": "Save",
+    "retry": "Retry",
+    "revise": "Revise",
+    "values": {
+      "intent": { "learn": "Learn", "solve": "Solve", "compare": "Compare", "buy": "Buy", "find": "Find", "unclassified": "Unclassified", "unknown": "Unknown" },
+      "origin": { "manual_keyword": "Manually entered keyword", "customer_question": "Customer question", "authorized_material": "Authorized material", "unknown": "Unknown" },
+      "state": { "open": "Open", "adopted": "Adopted", "adopt_failed": "Adoption failed", "adopt_unrecorded": "Outcome not recorded", "abandoned": "Dismissed", "unknown": "Unknown" },
+      "failure": { "base_moved": "The base version is no longer current", "draft_unsaved": "The editing copy is not saved", "no_change": "The proposed text has no changes", "target_not_found": "The document was not found", "storage": "A storage error occurred", "unknown": "Unknown" },
+      "aspect": { "title": "Title", "body": "Body", "topics": "Topics", "description": "Description", "unknown": "Unknown" },
+      "author": { "human": "Written by a person", "ai": "AI", "unknown": "Unknown" },
+      "dataOrigin": { "manual_only": "Entered by a person", "unknown": "Unknown" },
+      "metric": { "search_impression": "Search impressions", "search_visit": "Search visits", "unknown": "Unknown metric" },
+      "resultKind": { "position": "Found at a position", "not_found": "Not found in scanned results", "unknown": "Unknown result" },
+      "rank_single_observation": "One observation; it does not represent a stable or platform-wide rank.",
+      "no_data_source": "No search data source is available in this version."
+    },
+    "optimization.no_ranking_promise": "No ranking is promised.",
+    "themes": {
+      "title": "Search topics", "description": "Questions and terms people want to find; source links are recorded for context.",
+      "platform": "Platform", "filterPlatform": "Filter by platform", "filterTopicCard": "Filter by topic card", "allTopicCards": "All topic cards", "account": "Account", "brandAccount": "Brand level (no account)", "name": "Topic name", "goal": "Business goal", "questions": "Questions", "keywords": "Keywords", "intent": "Search intent", "origin": "Source", "originNote": "Source note", "sources": "Materials", "topicCards": "Topic cards", "briefs": "Brief revisions", "note": "Notes", "create": "Record topic", "revise": "Save revision", "archive": "Archive topic", "history": "Revision history", "volume": "Search volume", "competition": "Competition", "rank": "Rank observations", "unknown": "Unknown (no search data interface in this version)", "noObservations": "Unknown (no observations recorded)", "includeArchived": "Include archived topics", "allPlatforms": "All platforms", "noChannel": "This platform has no registrable publication channel.", "empty": "No search topics yet.", "selectTopic": "Select a topic", "recordedBy": "Recorded by", "unavailableReference": "This reference is no longer available; remove it before saving.", "themeId": "Topic ID", "dataOrigin": "Data origin"
+    },
+    "suggestions": {
+      "title": "Optimization suggestions", "description": "Suggestions remain attached to a work, document, topic and exact base version.", "work": "Work", "artifact": "Document", "theme": "Search topic", "question": "Question to answer", "aspects": "Items involved", "rationale": "Reasoning", "evidence": "Evidence materials", "body": "Proposed full text", "base": "Base version", "filterState": "Filter by state", "search": "Filter question, covered items or evidence", "searchHint": "Search questions, items, reasons, text or evidence IDs", "state": "State", "create": "Record suggestion", "revise": "Save revision", "history": "Suggestion revision", "historyCurrentOnly": "The current API exposes the current revision only.", "compare": "Compare selected (2–4)", "sameBase": "Same base version", "differentBase": "Different base versions", "adopt": "Adopt", "abandon": "Dismiss", "decisionNote": "Decision note", "retry": "Retry recording the result", "adoptUnrecorded": "Adopted; the version was written but its result was not recorded.", "adoptFailed": "Adoption failed", "baseMoved": "The base version is no longer the latest. Refresh before adopting.", "themeChanged": "The selected search topic has changed since this suggestion was based on it.", "baseVersion": "Base version body", "diff": "Text differences", "inserted": "Added lines: {{count}}", "deleted": "Removed lines: {{count}}", "empty": "No suggestions yet.", "pick": "Choose a work and document", "errorConflict": "The record changed elsewhere (409). The latest data has been refreshed; review it before retrying.", "failure": "Failure reason"
+    },
+    "metrics": {
+      "title": "Search performance", "description": "Manually record values shown by the platform for a publication record.", "publication": "Publication record", "account": "Account", "metric": "Metric", "value": "Value", "unit": "Unit", "window": "Statistics window", "sampledAt": "Sampled at", "evidence": "Evidence note", "record": "Record metric", "unrecorded": "Unknown (not recorded)", "unknown": "Unknown (the platform did not provide a value)", "zero": "0 (confirmed zero)", "empty": "No publication record is available for this document."
+    },
+    "observations": {
+      "title": "Rank observations", "publication": "Publication record", "account": "Account", "query": "Search query", "observedAt": "Observed at", "conditions": "Observation conditions", "result": "Result", "position": "Position", "scannedDepth": "Scanned depth", "evidence": "Evidence note", "record": "Record observation", "revise": "Correct observation", "void": "Void observation", "voided": "Voided", "empty": "No observations recorded; rank is unknown.", "singleObservation": "One observation; it does not represent a stable or platform-wide rank.", "channelMissing": "This platform has no registrable publication channel.", "includeVoided": "Include voided observations"
+    }
+  },
   "contentOperatingDiagnosisDetails": {
     "accountRequired": "Select exactly one account for an account report.", "selectAccount": "Select at least one account.", "itemsHint": "Profile fields, separated by commas", "pillarsHint": "Content pillars, separated by commas", "metricsHint": "Metrics, separated by commas", "allPlatforms": "Blank means all platforms", "allSources": "Blank means all sources", "platforms": "Platforms",
     "regenerate": "Generate a new version from current inputs", "completeness": "Completeness", "missingItems": "Missing items", "current": "Current window", "baseline": "Comparison window", "change": "Difference between window means", "statWindows": "Stat windows", "mixedStatWindow": "Mixed stat windows", "publications": "Publications", "withValue": "With value", "sum": "Sum", "mean": "Mean", "limits": "Limits", "records": "Records", "openFix": "Open entry", "todoAdded": "Already added", "roiAsIs": "Copied as-is; excluded from this diagnosis calculation", "consistent": "Consistent", "inconsistent": "Inconsistent", "unsure": "Unsure", "noWindowWorks": "No works appear in this report window.", "historicalImport": "Historical import", "unmarked": "Not marked", "tagged": "Tagged", "confirmed": "Consistent", "unchecked": "Unchecked", "untagged": "Untagged", "marksOnOlderProfile": "Marks on older profile revisions", "pillarsNotAdditive": "A work can have several pillars; these counts are not additive.", "target": "Target", "unset": "Not set", "met": "Met", "notMet": "Not met", "notCompared": "Not compared", "incompleteWeek": "Incomplete week", "publishedAtMissing": "Missing publication time", "excerpts": "Excerpts", "tagsNotAdditive": "An excerpt can have several tags; counts are not additive.", "selectExactlyOne": "Choose exactly one account.",

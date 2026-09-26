@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useT } from "@multica/views/i18n";
+import { AppLink } from "@multica/views/navigation";
+import { paths, useRequiredWorkspaceSlug } from "@multica/core/paths";
 import {
   AI_ENTRY_POINTS,
   ARTIFACT_KINDS,
@@ -334,6 +336,7 @@ function ArtifactEditor({
   renderArtifactExtras?: (context: ArtifactExtrasContext) => ReactNode;
 }) {
   const { t } = useT("common");
+  const slug = useRequiredWorkspaceSlug();
   const autosave = useAutosaveArtifact(wsId, work.workId);
   const versions = useArtifactVersions(wsId, work.workId, artifact.artifactId);
   const versionAction = useArtifactVersionAction(wsId, work.workId, artifact.artifactId);
@@ -373,11 +376,20 @@ function ArtifactEditor({
   const history = versions.data ?? [];
   const badge = draftBadge(body, artifact);
   const unsent = draftIsUnsent(body, artifact);
+  const searchOptimizationHref = `${paths.workspace(slug).searchOptimization()}?${new URLSearchParams({
+    work_id: work.workId,
+    artifact_id: artifact.artifactId,
+  }).toString()}`;
 
   return (
     <>
       <SettingsSection title={t(($) => $.contentWorks.editorTitle)}>
         <SettingsCard>
+          <SettingsRow label={t(($) => $.search_optimization.editorLinkLabel)}>
+            <AppLink href={searchOptimizationHref} className="text-body underline">
+              {t(($) => $.search_optimization.open)}
+            </AppLink>
+          </SettingsRow>
           <SettingsRow
             label={t(($) => $.contentWorks.bodyLabel)}
             description={t(($) => $.contentWorks.draftStatus[badge])}
