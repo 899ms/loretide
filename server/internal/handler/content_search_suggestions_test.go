@@ -6,16 +6,61 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/multica-ai/multica/server/internal/content/diagnostics"
 	topicplanning "github.com/multica-ai/multica/server/internal/content/topic-planning"
 	workeditor "github.com/multica-ai/multica/server/internal/content/work-editor"
 	workspacecore "github.com/multica-ai/multica/server/internal/content/workspace-core"
 	"github.com/multica-ai/multica/server/internal/testutil"
 )
+
+// failSecondSuggestionFence permits the adoption decision and the work-editor
+// version transaction, then refuses the effect transaction. It lets this
+// handler integration test exercise recovery with the real ApplyBody port.
+type failSecondSuggestionFence struct {
+	mu     sync.Mutex
+	calls  int
+	failAt int
+}
+
+type saveVersionBeforeApplyGuard struct {
+	delegate                         diagnostics.WorkspaceWriteGuard
+	saver                            *workeditor.Store
+	workspace, actor, work, artifact string
+	once                             sync.Once
+	err                              error
+}
+
+func (g *saveVersionBeforeApplyGuard) LockForContentDiagnosticWrite(ctx context.Context, tx pgx.Tx, workspaceID string) error {
+	g.once.Do(func() {
+		_, g.err = g.saver.SaveVersion(ctx, g.workspace, g.actor, g.work, g.artifact)
+	})
+	if g.err != nil {
+		return g.err
+	}
+	return g.delegate.LockForContentDiagnosticWrite(ctx, tx, workspaceID)
+}
+
+func (g *failSecondSuggestionFence) LockForContentDiagnosticWrite(_ context.Context, _ pgx.Tx, _ string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.calls++
+	if g.failAt > 0 && g.calls >= g.failAt {
+		return diagnostics.ErrDenied
+	}
+	return nil
+}
+
+func (g *failSecondSuggestionFence) allowFutureWrites() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.failAt = 0
+}
 
 // specs/036 PR 2: suggestions over HTTP and the searchWorks adapter (T046
 // to T050; FR-100, FR-104, FR-105; SC-003, SC-008, SC-012). The database
@@ -204,6 +249,278 @@ func TestContentSearchSuggestionRoundTrip(t *testing.T) {
 	assertROIField(t, roiCall(t, h.ListContentSearchSuggestions, world.wsID, "GET", "/?state=rejected", ""), http.StatusBadRequest, "state")
 }
 
+// T064/T065: preflight failures leave no decision, a successful adoption
+// appends exactly one suggestion_applied version, and a repeat reports the
+// decision conflict before observing that the document has since moved.
+func TestContentSearchSuggestionAdoptionPreflightAndRepeat(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	h := feedbackHandler(t)
+	world := suggestionWorkspace(t, h, "suggest-adopt")
+	id, _ := roiCreated(t, roiCall(t, h.CreateContentSearchSuggestion, world.wsID, "POST", "/", suggestionBody(world, "")), "suggestion_id")
+	if _, err := testPool.Exec(t.Context(), `UPDATE content_artifact SET draft_body='未保存', draft_status='working'
+		WHERE workspace_id=$1 AND artifact_id=$2`, world.wsID, world.artifact); err != nil {
+		t.Fatal(err)
+	}
+	assertROIField(t, roiCall(t, h.DecideContentSearchSuggestion, world.wsID, "POST", "/",
+		`{"decision":"adopt","revision":1}`, "suggestionId", id), http.StatusConflict, "draft_status")
+	if rows := suggestionRows(t, "content_search_suggestion_decision", world.wsID); rows != 0 {
+		t.Fatalf("draft preflight wrote %d decisions", rows)
+	}
+	if _, err := testPool.Exec(t.Context(), `UPDATE content_artifact SET draft_body=$3, draft_status='saved'
+		WHERE workspace_id=$1 AND artifact_id=$2`, world.wsID, world.artifact, suggestionBaseBody); err != nil {
+		t.Fatal(err)
+	}
+	adopted := roiCall(t, h.DecideContentSearchSuggestion, world.wsID, "POST", "/",
+		`{"decision":"adopt","revision":1}`, "suggestionId", id)
+	adopted.Want(http.StatusCreated)
+	if adopted.Map()["state"] != "adopted" {
+		t.Fatalf("adoption = %v", adopted.Map())
+	}
+	var action string
+	if err := testPool.QueryRow(t.Context(), `SELECT action FROM content_artifact_version
+		WHERE workspace_id=$1 AND artifact_id=$2 ORDER BY revision DESC LIMIT 1`, world.wsID, world.artifact).Scan(&action); err != nil {
+		t.Fatal(err)
+	}
+	if action != "suggestion_applied" {
+		t.Fatalf("latest action = %q", action)
+	}
+	assertROIField(t, roiCall(t, h.DecideContentSearchSuggestion, world.wsID, "POST", "/",
+		`{"decision":"adopt","revision":1}`, "suggestionId", id), http.StatusConflict, "suggestion_id")
+}
+
+// T067/T068: the first real ApplyBody transaction can commit before the
+// effect ledger is available. A retry (including two concurrent retries)
+// replays that one version, records one done effect, and appends no version.
+func TestContentSearchSuggestionRetryReplaysTheRealWorkVersion(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	ctx := t.Context()
+	h := feedbackHandler(t)
+	newUnrecorded := func(slug string) (*topicplanning.SuggestionStore, suggestionWorld, topicplanning.SuggestionView, *failSecondSuggestionFence, string) {
+		t.Helper()
+		world := suggestionWorkspace(t, h, slug)
+		id, _ := roiCreated(t, roiCall(t, h.CreateContentSearchSuggestion, world.wsID, "POST", "/", suggestionBody(world, "")), "suggestion_id")
+		store := h.searchSuggestionsStore()
+		fence := &failSecondSuggestionFence{failAt: 2}
+		store.Guard = fence
+		view, err := store.DecideSearchSuggestion(ctx, world.wsID, testUserID, id,
+			topicplanning.DecisionRequest{Decision: topicplanning.DecisionAdopt, Revision: 1})
+		if err != nil || view.State != topicplanning.StateAdoptUnrecorded || view.Decision == nil {
+			t.Fatalf("unrecorded adoption = %+v, %v", view, err)
+		}
+		if versions := suggestionRows(t, "content_artifact_version", world.wsID); versions != 2 {
+			t.Fatalf("versions after committed apply = %d, want 2", versions)
+		}
+		var committedVersionID string
+		if err := testPool.QueryRow(ctx, `SELECT version_id FROM content_artifact_version
+			WHERE workspace_id=$1 AND artifact_id=$2 ORDER BY revision DESC LIMIT 1`, world.wsID, world.artifact).
+			Scan(&committedVersionID); err != nil {
+			t.Fatal(err)
+		}
+		if committedVersionID == "" || committedVersionID == world.version {
+			t.Fatalf("ApplyBody committed version id %q; original was %q", committedVersionID, world.version)
+		}
+		return store, world, view, fence, committedVersionID
+	}
+
+	store, world, first, fence, committedVersionID := newUnrecorded("suggest-retry-real")
+	fence.allowFutureWrites()
+	recovered, err := store.RetrySearchSuggestionDecision(ctx, world.wsID, testUserID, first.Decision.DecisionID)
+	if err != nil || recovered.State != topicplanning.StateAdopted || len(recovered.Effects) != 1 {
+		t.Fatalf("recovered adoption = %+v, %v", recovered, err)
+	}
+	if recovered.Effects[0].VersionID != committedVersionID || suggestionRows(t, "content_artifact_version", world.wsID) != 2 {
+		t.Fatalf("recovery changed version history: %+v", recovered.Effects)
+	}
+
+	store, world, first, fence, committedVersionID = newUnrecorded("suggest-retry-real-race")
+	fence.allowFutureWrites()
+	errs := make([]error, 2)
+	views := make([]topicplanning.SuggestionView, 2)
+	var retries sync.WaitGroup
+	for i := range errs {
+		i := i
+		retries.Go(func() {
+			views[i], errs[i] = store.RetrySearchSuggestionDecision(ctx, world.wsID, testUserID, first.Decision.DecisionID)
+		})
+	}
+	retries.Wait()
+	var successes, conflicts int
+	var successfulEffectIDs []string
+	for i, retryErr := range errs {
+		conflict, isConflict := errors.AsType[topicplanning.SearchConflict](retryErr)
+		switch {
+		case retryErr == nil:
+			successes++
+			if views[i].State != topicplanning.StateAdopted || len(views[i].Effects) != 1 || views[i].Effects[0].VersionID != committedVersionID {
+				t.Errorf("successful retry view = %+v; want one adopted effect for original version %q", views[i], committedVersionID)
+			} else {
+				successfulEffectIDs = append(successfulEffectIDs, views[i].Effects[0].EffectID)
+			}
+		case isConflict && conflict.Field == "decision_id":
+			conflicts++
+		default:
+			t.Errorf("concurrent retry = %v", retryErr)
+		}
+	}
+	if successes < 1 || successes+conflicts != len(errs) || suggestionRows(t, "content_artifact_version", world.wsID) != 2 {
+		t.Fatalf("retries successes=%d conflicts=%d; versions=%d", successes, conflicts, suggestionRows(t, "content_artifact_version", world.wsID))
+	}
+	final, err := store.GetSearchSuggestion(ctx, world.wsID, testUserID, first.SuggestionID)
+	if err != nil || final.State != topicplanning.StateAdopted || len(final.Effects) != 1 || final.Effects[0].VersionID != committedVersionID {
+		t.Fatalf("final concurrent retry view = %+v, %v; want one effect for original version %q", final, err, committedVersionID)
+	}
+	for _, effectID := range successfulEffectIDs {
+		if effectID != final.Effects[0].EffectID {
+			t.Errorf("successful retry effect id %q differs from persisted %q", effectID, final.Effects[0].EffectID)
+		}
+	}
+}
+
+// T069: after the decision commits, a concurrent human save wins the
+// work-editor fence before ApplyBody checks the base. The adoption is recorded
+// as base_moved and the human's v4 remains the sole new version.
+func TestContentSearchSuggestionSaveWinsBetweenDecisionAndApply(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	h := feedbackHandler(t)
+	world := suggestionWorkspace(t, h, "suggest-save-race")
+	if _, err := testPool.Exec(t.Context(), `UPDATE content_artifact SET draft_body=$3, draft_status='saved'
+		WHERE workspace_id=$1 AND artifact_id=$2`, world.wsID, world.artifact, suggestionBaseBody); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testPool.Exec(t.Context(), `UPDATE content_artifact_version SET revision=3
+		WHERE workspace_id=$1 AND artifact_id=$2 AND version_id=$3`, world.wsID, world.artifact, world.version); err != nil {
+		t.Fatal(err)
+	}
+	body := suggestionBody(world, "")
+	id, _ := roiCreated(t, roiCall(t, h.CreateContentSearchSuggestion, world.wsID, "POST", "/", body), "suggestion_id")
+
+	store := h.searchSuggestionsStore()
+	works := store.Works.(searchWorks)
+	saver := *works.store
+	race := &saveVersionBeforeApplyGuard{
+		delegate: works.store.Guard, saver: &saver, workspace: world.wsID, actor: testUserID,
+		work: world.work, artifact: world.artifact,
+	}
+	works.store.Guard = race
+	store.Works = works
+	view, err := store.DecideSearchSuggestion(t.Context(), world.wsID, testUserID, id,
+		topicplanning.DecisionRequest{Decision: topicplanning.DecisionAdopt, Revision: 1})
+	if err != nil || view.State != topicplanning.StateAdoptFailed || view.FailureCode != topicplanning.FailureBaseMoved {
+		t.Fatalf("adoption after racing save = %+v, %v", view, err)
+	}
+	if race.err != nil {
+		t.Fatalf("the competing SaveVersion failed: %v", race.err)
+	}
+	versions := suggestionRows(t, "content_artifact_version", world.wsID)
+	if versions != 2 {
+		t.Fatalf("version count after racing save = %d, want initial v3 plus saved v4", versions)
+	}
+	var latestRevision int
+	var latestBody, latestAction string
+	if err := testPool.QueryRow(t.Context(), `SELECT revision, body, action FROM content_artifact_version
+		WHERE workspace_id=$1 AND artifact_id=$2 ORDER BY revision DESC LIMIT 1`, world.wsID, world.artifact).
+		Scan(&latestRevision, &latestBody, &latestAction); err != nil {
+		t.Fatal(err)
+	}
+	if latestRevision != 4 || latestBody != suggestionBaseBody || latestAction != "saved" {
+		t.Fatalf("latest version after race = rev %d body %q action %q", latestRevision, latestBody, latestAction)
+	}
+}
+
+// T072: a v3 approval and delivery snapshot remain byte-for-byte bound to v3
+// after adopting a suggestion into v4. v4 has no inherited review; it requires
+// a new review request, which starts pending.
+func TestContentSearchAdoptionKeepsOldReviewAndDeliveryOnV3(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	h := feedbackHandler(t)
+	world := suggestionWorkspace(t, h, "suggest-review-isolation")
+	t.Cleanup(func() {
+		for _, table := range []string{"content_publication_record", "content_delivery_task", "content_review_transition", "content_review_request"} {
+			_, _ = testPool.Exec(context.Background(), `DELETE FROM `+table+` WHERE workspace_id=$1`, world.wsID)
+		}
+	})
+	if _, err := testPool.Exec(t.Context(), `UPDATE content_artifact SET draft_body=$3, draft_status='saved'
+		WHERE workspace_id=$1 AND artifact_id=$2`, world.wsID, world.artifact, suggestionBaseBody); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testPool.Exec(t.Context(), `UPDATE content_artifact_version SET revision=3
+		WHERE workspace_id=$1 AND artifact_id=$2 AND version_id=$3`, world.wsID, world.artifact, world.version); err != nil {
+		t.Fatal(err)
+	}
+	review := submitReview(t, world.wsID, world.artifact, world.version)
+	decide(t, world.wsID, review, "approved", "v3 人工审核通过")
+	task := createDelivery(t, world.wsID, world.artifact, review)
+	advance(t, world.wsID, task, `{"status":"ready"}`, http.StatusOK)
+	advance(t, world.wsID, task, `{"status":"handed_off","handoff_method":"export"}`, http.StatusOK)
+
+	var oldReviewRow, oldTaskRow string
+	if err := testPool.QueryRow(t.Context(), `SELECT row_to_json(r)::text FROM content_review_request r WHERE review_request_id=$1`, review).Scan(&oldReviewRow); err != nil {
+		t.Fatal(err)
+	}
+	if err := testPool.QueryRow(t.Context(), `SELECT row_to_json(d)::text FROM content_delivery_task d WHERE delivery_task_id=$1`, task).Scan(&oldTaskRow); err != nil {
+		t.Fatal(err)
+	}
+	theme, _ := roiCreated(t, roiCall(t, h.CreateContentSearchTheme, world.wsID, "POST", "/",
+		`{"name":"羊绒大衣护理","platform":"xiaohongshu","keywords":["羊绒"],"intent":"solve","origin":"manual_keyword"}`), "theme_id")
+	body := fmt.Sprintf(`{"work_id":%q,"artifact_id":%q,"base_version_id":%q,"theme_id":%q,
+		"target_question":"羊绒大衣能机洗吗","aspects":["body"],"rationale":"依据","proposed_body":"采用后的新正文"}`,
+		world.work, world.artifact, world.version, theme)
+	id, _ := roiCreated(t, roiCall(t, h.CreateContentSearchSuggestion, world.wsID, "POST", "/", body), "suggestion_id")
+	adopted := roiCall(t, h.DecideContentSearchSuggestion, world.wsID, "POST", "/",
+		`{"decision":"adopt","revision":1}`, "suggestionId", id)
+	adopted.Want(http.StatusCreated)
+	versionID := adopted.Map()["effects"].([]any)[0].(map[string]any)["version_id"].(string)
+
+	var afterReviewRow string
+	if err := testPool.QueryRow(t.Context(), `SELECT row_to_json(r)::text FROM content_review_request r WHERE review_request_id=$1`, review).Scan(&afterReviewRow); err != nil {
+		t.Fatal(err)
+	}
+	if afterReviewRow != oldReviewRow {
+		t.Fatalf("v3 review row changed:\nbefore %s\nafter  %s", oldReviewRow, afterReviewRow)
+	}
+	var afterTaskRow string
+	if err := testPool.QueryRow(t.Context(), `SELECT row_to_json(d)::text FROM content_delivery_task d WHERE delivery_task_id=$1`, task).
+		Scan(&afterTaskRow); err != nil {
+		t.Fatal(err)
+	}
+	if afterTaskRow != oldTaskRow {
+		t.Fatalf("existing delivery task row changed:\nbefore %s\nafter  %s", oldTaskRow, afterTaskRow)
+	}
+	var adoptedRevision int
+	if err := testPool.QueryRow(t.Context(), `SELECT revision FROM content_artifact_version
+		WHERE workspace_id=$1 AND artifact_id=$2 AND version_id=$3`, world.wsID, world.artifact, versionID).Scan(&adoptedRevision); err != nil {
+		t.Fatal(err)
+	}
+	if adoptedRevision != 4 {
+		t.Fatalf("adopted version revision = %d, want 4", adoptedRevision)
+	}
+	var oldReviewCount int
+	if err := testPool.QueryRow(t.Context(), `SELECT count(*) FROM content_review_request
+		WHERE workspace_id=$1 AND artifact_id=$2 AND version_id=$3`, world.wsID, world.artifact, versionID).Scan(&oldReviewCount); err != nil {
+		t.Fatal(err)
+	}
+	if oldReviewCount != 0 {
+		t.Fatalf("v4 inherited %d reviews", oldReviewCount)
+	}
+	newReview := submitReview(t, world.wsID, world.artifact, versionID)
+	var newStatus, newVersion string
+	if err := testPool.QueryRow(t.Context(), `SELECT status, version_id FROM content_review_request
+		WHERE review_request_id=$1`, newReview).Scan(&newStatus, &newVersion); err != nil {
+		t.Fatal(err)
+	}
+	if newStatus != "pending" || newVersion != versionID || versionID == world.version {
+		t.Fatalf("new v4 review = status %q version %q; adopted %q, old %q", newStatus, newVersion, versionID, world.version)
+	}
+}
+
 // T047 / contract §7.1 / FR-100: the decision order, first failure winning.
 // A non-member and a suggestion that is not here - missing, or another
 // brand's - answer byte for byte alike; then the body, by field; then the
@@ -265,7 +582,7 @@ func TestContentSearchSuggestionDecisionOrder(t *testing.T) {
 		assertROIField(t, roiCall(t, h.CreateContentSearchSuggestion, world.wsID, "POST", "/", tc.body), http.StatusBadRequest, tc.field)
 	}
 	assertROIField(t, roiCall(t, h.DecideContentSearchSuggestion, world.wsID, "POST", "/", `{"decision":"adopt","revision":9}`,
-		"suggestionId", id), http.StatusBadRequest, "decision")
+		"suggestionId", id), http.StatusConflict, "revision")
 
 	// 4. References: another brand's theme and version answer like missing ones.
 	for _, tc := range []struct{ field, own, foreign, missing string }{
@@ -400,6 +717,12 @@ func TestContentSearchSuggestionAdaptersAndEndpointsAfterWorkspaceDeletion(t *te
 	if _, err := works.VersionBody(ctx, world.wsID, testUserID, world.work, world.artifact, world.version); !errors.Is(err, topicplanning.ErrNotFound) || errors.Is(err, topicplanning.ErrStorage) {
 		t.Errorf("VersionBody after the deletion = %v, want ErrNotFound", err)
 	}
+	if _, err := works.Apply(ctx, world.wsID, testUserID, topicplanning.SearchApply{
+		Key: "deleted-workspace", WorkID: world.work, ArtifactID: world.artifact,
+		BaseVersionID: world.version, Body: "不得在已删除工作区写入",
+	}); !errors.Is(err, topicplanning.ErrNotFound) || errors.Is(err, topicplanning.ErrStorage) {
+		t.Errorf("Apply after the deletion = %v, want ErrNotFound", err)
+	}
 	for name, response := range map[string]*testutil.Response{
 		"create":   roiCall(t, h.CreateContentSearchSuggestion, world.wsID, "POST", "/", suggestionBody(world, "")),
 		"get":      roiCall(t, h.GetContentSearchSuggestion, world.wsID, "GET", "/", "", "suggestionId", id),
@@ -454,6 +777,10 @@ func TestContentSearchSuggestionWritesAreFencedByWorkspaceDeletion(t *testing.T)
 	if _, err := store.DecideSearchSuggestion(ctx, world.wsID, testUserID, id,
 		topicplanning.DecisionRequest{Decision: topicplanning.DecisionAbandon, Revision: 1}); !errors.Is(err, topicplanning.ErrNotFound) {
 		t.Fatalf("abandon after the delete committed = %v, want ErrNotFound", err)
+	}
+	if _, err := store.DecideSearchSuggestion(ctx, world.wsID, testUserID, id,
+		topicplanning.DecisionRequest{Decision: topicplanning.DecisionAdopt, Revision: 1}); !errors.Is(err, topicplanning.ErrNotFound) {
+		t.Fatalf("adopt after the delete committed = %v, want ErrNotFound", err)
 	}
 	if rows := suggestionRows(t, "content_search_suggestion_revision", world.wsID); rows != 1 {
 		t.Fatalf("%d suggestion rows after fenced writes, want the 1 from before", rows)

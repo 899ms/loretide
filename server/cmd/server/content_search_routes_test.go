@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -35,6 +36,7 @@ var contentSearchRoutes = []struct {
 	{http.MethodGet, "/api/content-search/suggestions/{suggestionId}", "/api/content-search/suggestions/sug-1"},
 	{http.MethodPost, "/api/content-search/suggestions/{suggestionId}/revisions", "/api/content-search/suggestions/sug-1/revisions"},
 	{http.MethodPost, "/api/content-search/suggestions/{suggestionId}/decisions", "/api/content-search/suggestions/sug-1/decisions"},
+	{http.MethodPost, "/api/content-search/decisions/{decisionId}/retry", "/api/content-search/decisions/decision-1/retry"},
 }
 
 // T026 / FR-107: every PR 1 endpoint is mounted, and - a theme changing only
@@ -156,12 +158,17 @@ func TestContentSearchThemePathIDsSurviveTheRealMiddleware(t *testing.T) {
 func TestContentSearchCompareIsNotASuggestionID(t *testing.T) {
 	router := NewRouter(nil, realtime.NewHub(), events.New(), analytics.NoopClient{}, nil)
 	for path, want := range map[string]string{
-		"/api/content-search/suggestions/compare": "/api/content-search/suggestions/compare",
-		"/api/content-search/suggestions/sug-1":   "/api/content-search/suggestions/{suggestionId}",
-		"/api/content-search/suggestions/compar":  "/api/content-search/suggestions/{suggestionId}",
+		"/api/content-search/suggestions/compare":        "/api/content-search/suggestions/compare",
+		"/api/content-search/suggestions/sug-1":          "/api/content-search/suggestions/{suggestionId}",
+		"/api/content-search/suggestions/compar":         "/api/content-search/suggestions/{suggestionId}",
+		"/api/content-search/decisions/decision-1/retry": "/api/content-search/decisions/{decisionId}/retry",
 	} {
-		if got := router.Find(chi.NewRouteContext(), http.MethodGet, path); got != want {
-			t.Errorf("GET %s matches %q, want %q", path, got, want)
+		method := http.MethodGet
+		if strings.HasSuffix(path, "/retry") {
+			method = http.MethodPost
+		}
+		if got := router.Find(chi.NewRouteContext(), method, path); got != want {
+			t.Errorf("%s %s matches %q, want %q", method, path, got, want)
 		}
 	}
 }
@@ -238,5 +245,89 @@ func TestContentSearchSuggestionPathIDsSurviveTheRealMiddleware(t *testing.T) {
 		}
 		missing.Body.Close()
 		other.Body.Close()
+	}
+}
+
+// T070: the retry route uses the decisionId in the URL through real auth and
+// workspace middleware. A real abandon decision is a 409 decision_id; an
+// unknown id is 404; a non-member sees the same 404 as the unknown id.
+func TestContentSearchSuggestionRetryPathAndPermissionOrder(t *testing.T) {
+	if testPool == nil || testServer == nil {
+		t.Skip("database not available")
+	}
+	fx := testutil.New(testPool, testWorkspaceID, testUserID)
+	fx.Cleanup(t, `DELETE FROM content_search_suggestion_effect WHERE workspace_id=$1`, testWorkspaceID)
+	fx.Cleanup(t, `DELETE FROM content_search_suggestion_decision WHERE workspace_id=$1`, testWorkspaceID)
+	fx.Cleanup(t, `DELETE FROM content_search_suggestion_revision WHERE workspace_id=$1`, testWorkspaceID)
+	fx.Cleanup(t, `DELETE FROM content_search_theme_revision WHERE workspace_id=$1`, testWorkspaceID)
+	fx.Cleanup(t, `DELETE FROM content_operation_audit WHERE workspace_id=$1`, testWorkspaceID)
+	suffix := fmt.Sprint(time.Now().UnixNano())
+	work, artifact, version := "work-retry-"+suffix, "artifact-retry-"+suffix, "version-retry-"+suffix
+	fx.Exec(t, `INSERT INTO content_work (work_id, workspace_id, topic_card_id, snapshot_id, title)
+		VALUES ($1,$2,'','','重试路由')`, work, testWorkspaceID)
+	fx.Exec(t, `INSERT INTO content_artifact (artifact_id, work_id, workspace_id, kind, title, position)
+		VALUES ($1,$2,$3,'channel_draft','稿',1)`, artifact, work, testWorkspaceID)
+	fx.Exec(t, `INSERT INTO content_artifact_version (version_id, artifact_id, work_id, workspace_id, revision,
+		source, action, body, actor_id) VALUES ($1,$2,$3,$4,1,'edited','saved','原稿',$5)`,
+		version, artifact, work, testWorkspaceID, testUserID)
+	fx.Cleanup(t, `DELETE FROM content_artifact_version WHERE version_id=$1`, version)
+	fx.Cleanup(t, `DELETE FROM content_artifact WHERE artifact_id=$1`, artifact)
+	fx.Cleanup(t, `DELETE FROM content_work WHERE work_id=$1`, work)
+	theme := roiString(t, roiAPI(t, http.MethodPost, "/api/content-search/themes",
+		`{"name":"路由测试","platform":"xiaohongshu","keywords":["测试"],"intent":"solve","origin":"manual_keyword"}`,
+		http.StatusCreated), "theme_id")
+	suggestionBody := fmt.Sprintf(`{"work_id":%q,"artifact_id":%q,"base_version_id":%q,"theme_id":%q,
+		"target_question":"测试问题","aspects":["body"],"rationale":"依据","proposed_body":"修改后的稿"}`,
+		work, artifact, version, theme)
+	suggestion := roiString(t, roiAPI(t, http.MethodPost, "/api/content-search/suggestions", suggestionBody, http.StatusCreated), "suggestion_id")
+	decision := roiAPI(t, http.MethodPost, "/api/content-search/suggestions/"+suggestion+"/decisions",
+		`{"decision":"abandon","revision":1}`, http.StatusCreated)
+	decisionRecord, ok := decision["decision"].(map[string]any)
+	if !ok {
+		t.Fatalf("abandon response has no decision object: %v", decision)
+	}
+	decisionID, ok := decisionRecord["decision_id"].(string)
+	if !ok || decisionID == "" {
+		t.Fatalf("abandon response has no decision_id: %v", decisionRecord)
+	}
+	if decisionID == testWorkspaceID {
+		t.Fatal("the path decision id equals the workspace id; they cannot be distinguished")
+	}
+	path := "/api/content-search/decisions/" + decisionID + "/retry"
+	valid := accountAPIRequest(t, http.MethodPost, path, `{}`)
+	var validBody map[string]any
+	if err := json.NewDecoder(valid.Body).Decode(&validBody); err != nil {
+		t.Fatal(err)
+	}
+	valid.Body.Close()
+	if valid.StatusCode != http.StatusConflict || validBody["field"] != "decision_id" {
+		t.Fatalf("retry of path decision = %d %v, want 409 decision_id", valid.StatusCode, validBody)
+	}
+
+	missing := accountAPIRequest(t, http.MethodPost, "/api/content-search/decisions/no-such-decision/retry", `{}`)
+	defer missing.Body.Close()
+	if missing.StatusCode != http.StatusNotFound {
+		t.Fatalf("retry of missing path decision = %d, want 404", missing.StatusCode)
+	}
+	email := fmt.Sprintf("content-search-retry-outsider-%s@multica.test", suffix)
+	outsider := fx.User(t, "Search Retry Outsider", email)
+	token, err := generateTestJWT(outsider, email, "Search Retry Outsider")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequest(http.MethodPost, testServer.URL+path, strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Workspace-ID", testWorkspaceID)
+	forbidden, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer forbidden.Body.Close()
+	if forbidden.StatusCode != http.StatusNotFound || !refusalsMatchApartFromTrace(t, forbidden, missing) {
+		t.Fatalf("non-member retry = %d; differs from missing decision or is not hidden", forbidden.StatusCode)
 	}
 }

@@ -149,12 +149,10 @@ func TestSearchStringsPromiseNoRanking(t *testing.T) {
 
 // FR-106: the suggestion tables are insert-only (the UPDATE / DELETE / DO
 // UPDATE scan above covers every content_search_ table), and each table a
-// path writes in this PR is written by an INSERT. The effect table has no
-// INSERT here on purpose: PR 2 writes no effect, and adoption - the only
-// writer - opens in PR 3, which moves the table into insertedTables.
+// path writes is written by an INSERT. Adoption is the only writer of the
+// effect table; it lands in PR 3 alongside this guard update.
 func TestSearchSuggestionTablesAreWrittenOnlyByInsert(t *testing.T) {
-	insertedTables := []string{"CONTENT_SEARCH_SUGGESTION_REVISION", "CONTENT_SEARCH_SUGGESTION_DECISION"}
-	notYetWritten := []string{"CONTENT_SEARCH_SUGGESTION_EFFECT"}
+	insertedTables := []string{"CONTENT_SEARCH_SUGGESTION_REVISION", "CONTENT_SEARCH_SUGGESTION_DECISION", "CONTENT_SEARCH_SUGGESTION_EFFECT"}
 	flat := ""
 	for _, source := range searchSources(t) {
 		flat += whitespace.ReplaceAllString(strings.ToUpper(source.text), " ") + "\n"
@@ -164,13 +162,8 @@ func TestSearchSuggestionTablesAreWrittenOnlyByInsert(t *testing.T) {
 			t.Errorf("no search file inserts into %s; the insert-only guard would pass on nothing", table)
 		}
 	}
-	for _, table := range notYetWritten {
-		if strings.Contains(flat, "INSERT INTO "+table) {
-			t.Errorf("a search file writes %s in PR 2; effects are written only by adoption (PR 3)", table)
-		}
-		if !strings.Contains(flat, "FROM "+table) {
-			t.Errorf("no search file reads %s; the derived state would ignore effects", table)
-		}
+	if !strings.Contains(flat, "FROM CONTENT_SEARCH_SUGGESTION_EFFECT") {
+		t.Error("no search file reads content_search_suggestion_effect; the derived state would ignore effects")
 	}
 }
 

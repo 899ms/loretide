@@ -664,7 +664,8 @@
       "saved": "버전으로 저장",
       "restored": "복원",
       "adopted": "기준으로 채택",
-      "imported": "과거 기록에서 가져옴"
+      "imported": "과거 기록에서 가져옴",
+      "suggestionApplied": "검색 제안에서 적용됨"
     },
     "fromLabel": "원본",
     "restore": "이 버전으로 복원",

@@ -414,8 +414,6 @@ func (s *SuggestionStore) ReviseSearchSuggestion(ctx context.Context, workspaceI
 }
 
 // DecideSearchSuggestion records the one decision on a suggestion (FR-050).
-// This version takes abandon only: adopt is refused by name, and opens in
-// PR 3 together with the document write it needs.
 func (s *SuggestionStore) DecideSearchSuggestion(ctx context.Context, workspaceID, actor, suggestionID string, req DecisionRequest) (SuggestionView, error) {
 	if !s.writable() {
 		return SuggestionView{}, ErrStorage
@@ -424,7 +422,178 @@ func (s *SuggestionStore) DecideSearchSuggestion(ctx context.Context, workspaceI
 		s.reportThemeFailure(ctx, workspaceID, actor, suggestionID, "decide-search-suggestion", err)
 		return SuggestionView{}, err
 	}
+	if req.Decision == DecisionAdopt {
+		return s.adoptSearchSuggestion(ctx, workspaceID, actor, suggestionID, req)
+	}
 	return s.abandonSearchSuggestion(ctx, workspaceID, actor, suggestionID, req)
+}
+
+// adoptSearchSuggestion performs all preflight checks before it writes the
+// irreversible decision. The version write is deliberately a separate,
+// idempotent work-editor transaction; retries resume that operation rather
+// than rechecking state which may have moved because the first attempt won.
+func (s *SuggestionStore) adoptSearchSuggestion(ctx context.Context, workspaceID, actor, suggestionID string, req DecisionRequest) (SuggestionView, error) {
+	const step = "adopt-search-suggestion"
+	if workspaceID == "" || actor == "" || suggestionID == "" || s.Works == nil {
+		return SuggestionView{}, ErrNotFound
+	}
+	tx, err := s.begin(ctx, workspaceID)
+	if err != nil {
+		return SuggestionView{}, err
+	}
+	defer tx.Rollback(ctx)
+	current, err := lockCurrentSuggestion(ctx, tx, workspaceID, suggestionID, "FOR SHARE")
+	if err != nil {
+		return SuggestionView{}, err
+	}
+	if req.Revision != current.Revision {
+		return SuggestionView{}, SearchConflict{Field: "revision"}
+	}
+	decided, err := hasDecision(ctx, tx, workspaceID, suggestionID)
+	if err != nil {
+		return SuggestionView{}, err
+	}
+	if decided {
+		return SuggestionView{}, SearchConflict{Field: "suggestion_id"}
+	}
+	document, err := s.Works.Document(ctx, workspaceID, actor, current.WorkID, current.ArtifactID)
+	if err != nil {
+		return SuggestionView{}, worksReadError(err)
+	}
+	if document.LatestVersionID != current.BaseVersionID {
+		return SuggestionView{}, SearchConflict{Field: "base_version_id"}
+	}
+	if !document.DraftSaved {
+		return SuggestionView{}, SearchConflict{Field: "draft_status"}
+	}
+	decision, err := scanDecision(tx.QueryRow(ctx, `INSERT INTO content_search_suggestion_decision (
+		workspace_id, decision_id, suggestion_id, suggestion_revision, decision, note, decided_by
+	) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING `+searchDecisionColumns,
+		workspaceID, s.newID(), suggestionID, current.Revision, string(DecisionAdopt), req.Note, actor))
+	if err != nil {
+		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == "23505" {
+			return SuggestionView{}, SearchConflict{Field: "suggestion_id"}
+		}
+		return SuggestionView{}, ErrStorage
+	}
+	if _, err = s.audit(ctx, tx, workspaceID, actor, suggestionID, step); err != nil {
+		return SuggestionView{}, ErrStorage
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return SuggestionView{}, ErrStorage
+	}
+	return s.completeSearchAdoption(ctx, workspaceID, actor, current, decision)
+}
+
+func adoptionFailure(err error) EffectFailure {
+	switch {
+	case errors.Is(err, ErrBaseMoved):
+		return FailureBaseMoved
+	case errors.Is(err, ErrDraftUnsaved):
+		return FailureDraftUnsaved
+	case errors.Is(err, ErrNoChange):
+		return FailureNoChange
+	case errors.Is(err, ErrNotFound):
+		return FailureTargetNotFound
+	default:
+		return FailureStorage
+	}
+}
+
+// recordSearchEffect serializes retries on the decision row, so at most one
+// done row is inserted. A retry that reaches this transaction after another
+// request has recorded the effect gets decision_id conflict; an in-flight
+// completion may reload and return the now-adopted view to its caller.
+func (s *SuggestionStore) recordSearchEffect(ctx context.Context, workspaceID, actor string, decision SuggestionDecisionRecord,
+	outcome EffectOutcome, versionID string, failure EffectFailure) error {
+	tx, err := s.begin(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	stored, err := scanDecision(tx.QueryRow(ctx, `SELECT `+searchDecisionColumns+` FROM content_search_suggestion_decision
+		WHERE workspace_id=$1 AND decision_id=$2 FOR UPDATE`, workspaceID, decision.DecisionID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil || stored.Decision != DecisionAdopt {
+		return ErrStorage
+	}
+	var done bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM content_search_suggestion_effect
+		WHERE workspace_id=$1 AND decision_id=$2 AND outcome='done')`, workspaceID, decision.DecisionID).Scan(&done); err != nil {
+		return ErrStorage
+	}
+	if done {
+		return SearchConflict{Field: "decision_id"}
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO content_search_suggestion_effect
+		(workspace_id, effect_id, decision_id, outcome, version_id, failure_code)
+		VALUES ($1,$2,$3,$4,$5,$6)`, workspaceID, s.newID(), decision.DecisionID, outcome, versionID, failure); err != nil {
+		return ErrStorage
+	}
+	if _, err = s.audit(ctx, tx, workspaceID, actor, decision.SuggestionID, "record-search-suggestion-effect"); err != nil {
+		return ErrStorage
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return ErrStorage
+	}
+	return nil
+}
+
+func (s *SuggestionStore) completeSearchAdoption(ctx context.Context, workspaceID, actor string,
+	suggestion SearchSuggestion, decision SuggestionDecisionRecord) (SuggestionView, error) {
+	versionID, applyErr := s.Works.Apply(ctx, workspaceID, actor, SearchApply{
+		Key: "search-suggestion:" + suggestion.SuggestionID, WorkID: suggestion.WorkID,
+		ArtifactID: suggestion.ArtifactID, BaseVersionID: suggestion.BaseVersionID, Body: suggestion.ProposedBody,
+	})
+	if applyErr != nil {
+		if err := s.recordSearchEffect(ctx, workspaceID, actor, decision, EffectFailed, "", adoptionFailure(applyErr)); err != nil {
+			return SuggestionView{}, err
+		}
+		return s.GetSearchSuggestion(ctx, workspaceID, actor, suggestion.SuggestionID)
+	}
+	if err := s.recordSearchEffect(ctx, workspaceID, actor, decision, EffectDone, versionID, ""); err != nil {
+		// The version transaction has already committed. Returning the derived
+		// view exposes adopt_unrecorded so a retry can finish recording it.
+		return s.GetSearchSuggestion(ctx, workspaceID, actor, suggestion.SuggestionID)
+	}
+	return s.GetSearchSuggestion(ctx, workspaceID, actor, suggestion.SuggestionID)
+}
+
+// RetrySearchSuggestionDecision retries only an adopted decision that has no
+// done effect. It intentionally skips the original preflight: ApplyBody's
+// idempotency claim returns the version the first attempt already wrote.
+func (s *SuggestionStore) RetrySearchSuggestionDecision(ctx context.Context, workspaceID, actor, decisionID string) (SuggestionView, error) {
+	if !s.writable() || workspaceID == "" || actor == "" || decisionID == "" {
+		return SuggestionView{}, ErrNotFound
+	}
+	decision, err := scanDecision(s.DB.QueryRow(ctx, `SELECT `+searchDecisionColumns+` FROM content_search_suggestion_decision
+		WHERE workspace_id=$1 AND decision_id=$2`, workspaceID, decisionID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SuggestionView{}, ErrNotFound
+	}
+	if err != nil {
+		return SuggestionView{}, ErrStorage
+	}
+	if decision.Decision != DecisionAdopt {
+		return SuggestionView{}, SearchConflict{Field: "decision_id"}
+	}
+	suggestions, err := s.currentSuggestions(ctx, workspaceID, []string{decision.SuggestionID}, SuggestionFilter{})
+	if err != nil {
+		return SuggestionView{}, ErrStorage
+	}
+	if len(suggestions) != 1 {
+		return SuggestionView{}, ErrNotFound
+	}
+	view, err := s.GetSearchSuggestion(ctx, workspaceID, actor, decision.SuggestionID)
+	if err != nil {
+		return SuggestionView{}, err
+	}
+	if view.State == StateAdopted {
+		return SuggestionView{}, SearchConflict{Field: "decision_id"}
+	}
+	return s.completeSearchAdoption(ctx, workspaceID, actor, suggestions[0], decision)
 }
 
 // abandonSearchSuggestion writes the abandon decision and its audit row, and

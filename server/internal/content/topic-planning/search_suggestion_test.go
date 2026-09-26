@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -150,14 +151,23 @@ func (r *scriptedRowSet) Err() error { return nil }
 // here so that a path reaching for a write - by a type assertion, say - is
 // counted.
 type fakeWorks struct {
-	bodies map[string]string
-	latest map[string]string
-	err    error
-	calls  []string
+	bodies   map[string]string
+	latest   map[string]string
+	err      error
+	applyID  string
+	applyErr error
+	mu       sync.Mutex
+	calls    []string
+}
+
+func (f *fakeWorks) called(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, name)
 }
 
 func (f *fakeWorks) Document(_ context.Context, workspaceID, _, workID, artifactID string) (SearchDocument, error) {
-	f.calls = append(f.calls, "Document")
+	f.called("Document")
 	if f.err != nil {
 		return SearchDocument{}, f.err
 	}
@@ -169,7 +179,7 @@ func (f *fakeWorks) Document(_ context.Context, workspaceID, _, workID, artifact
 }
 
 func (f *fakeWorks) VersionBody(_ context.Context, workspaceID, _, workID, artifactID, versionID string) (string, error) {
-	f.calls = append(f.calls, "VersionBody")
+	f.called("VersionBody")
 	if f.err != nil {
 		return "", f.err
 	}
@@ -180,12 +190,16 @@ func (f *fakeWorks) VersionBody(_ context.Context, workspaceID, _, workID, artif
 	return body, nil
 }
 
-func (f *fakeWorks) Apply(context.Context, string, string, any) (string, error) {
-	f.calls = append(f.calls, "Apply")
-	return "", nil
+func (f *fakeWorks) Apply(context.Context, string, string, SearchApply) (string, error) {
+	f.called("Apply")
+	return f.applyID, f.applyErr
 }
 
-func (f *fakeWorks) wrote() bool { return slices.Contains(f.calls, "Apply") }
+func (f *fakeWorks) wrote() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Contains(f.calls, "Apply")
+}
 
 const scriptBaseBody = "羊绒大衣不建议机洗。\n平铺晾干。"
 
@@ -458,11 +472,10 @@ func TestSuggestionStrictDecoding(t *testing.T) {
 	}
 }
 
-// T045 / FR-050: adopt is refused by name in this version; so is anything
-// outside the set, a missing revision and a long note. Abandon passes.
+// T045 / FR-050: both controlled decisions decode; anything outside the set,
+// a missing revision and a long note are refused by name.
 func TestSuggestionDecisionDecoding(t *testing.T) {
 	for _, tc := range []struct{ body, field string }{
-		{`{"decision":"adopt","revision":1}`, "decision"},
 		{`{"decision":"","revision":1}`, "decision"},
 		{`{"decision":"accept","revision":1}`, "decision"},
 		{`{"decision":"abandon"}`, "revision"},
@@ -477,10 +490,12 @@ func TestSuggestionDecisionDecoding(t *testing.T) {
 	if err != nil || req.Decision != DecisionAbandon || req.Revision != 2 || req.Note != "同事已经改过" {
 		t.Fatalf("abandon = %+v, %v", req, err)
 	}
-	if err := ValidateDecisionRequest(DecisionRequest{Decision: DecisionAdopt, Revision: 1}); err == nil {
-		t.Fatal("adopt was accepted in PR 2")
-	} else if fieldErr, _ := errors.AsType[FieldError](err); fieldErr.Reason != "not available in this version" {
-		t.Fatalf("adopt refused as %+v", fieldErr)
+	adopt, err := DecodeSuggestionDecision([]byte(`{"decision":"adopt","revision":1}`))
+	if err != nil || adopt.Decision != DecisionAdopt || adopt.Revision != 1 {
+		t.Fatalf("adopt = %+v, %v", adopt, err)
+	}
+	if err := ValidateDecisionRequest(adopt); err != nil {
+		t.Fatalf("adopt validation = %v", err)
 	}
 }
 
@@ -689,6 +704,11 @@ func TestSuggestionWritesAfterWorkspaceDeletionAreNotFound(t *testing.T) {
 				DecisionRequest{Decision: DecisionAbandon, Revision: 1})
 			return err
 		},
+		"adopt": func() error {
+			_, err := store.DecideSearchSuggestion(t.Context(), "ws-a", "actor-a", "sug-1",
+				DecisionRequest{Decision: DecisionAdopt, Revision: 1})
+			return err
+		},
 	} {
 		if err := write(); !errors.Is(err, ErrNotFound) || errors.Is(err, ErrStorage) {
 			t.Errorf("%s after the deletion = %v, want ErrNotFound", name, err)
@@ -783,8 +803,8 @@ func TestAbandonWritesOnlyTheDecision(t *testing.T) {
 }
 
 // T045 / FR-050 / contract §7.2: the revision the person saw must be the
-// current one; a suggestion takes one decision; adopt is refused before any
-// transaction opens; a suggestion that is not here is not found.
+// current one; a suggestion takes one decision; a suggestion that is not here
+// is not found.
 func TestAbandonRefusals(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -802,17 +822,27 @@ func TestAbandonRefusals(t *testing.T) {
 			t.Fatalf("%s: %v, inserts %v", tc.name, err, database.tx.inserts())
 		}
 	}
-	store, database, works, _ := scriptedSuggestionStore(scriptState{themeRevision: 2, current: 2}, false)
-	_, err := store.DecideSearchSuggestion(t.Context(), "ws-a", "actor-a", "sug-1",
-		DecisionRequest{Decision: DecisionAdopt, Revision: 2})
-	wantSearchField(t, err, "decision")
-	if database.begins != 0 || len(works.calls) != 0 {
-		t.Fatalf("adopt opened %d transactions and called %v", database.begins, works.calls)
-	}
-	store, _, _, _ = scriptedSuggestionStore(scriptState{themeRevision: 2}, false)
-	if _, err = store.DecideSearchSuggestion(t.Context(), "ws-a", "actor-a", "no-such",
+	store, _, _, _ := scriptedSuggestionStore(scriptState{themeRevision: 2}, false)
+	if _, err := store.DecideSearchSuggestion(t.Context(), "ws-a", "actor-a", "no-such",
 		DecisionRequest{Decision: DecisionAbandon, Revision: 1}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("abandoning a missing suggestion = %v, want ErrNotFound", err)
+	}
+}
+
+// T064: adoption checks the revision and the existing decision before it
+// reads a document. Otherwise a second adoption after another writer moved
+// the base would misleadingly answer base_version_id instead of suggestion_id.
+func TestAdoptPreflightChecksDecisionBeforeDocument(t *testing.T) {
+	store, database, works, _ := scriptedSuggestionStore(scriptState{themeRevision: 2, current: 2, decided: true}, false)
+	works.latest["ws-a/work-1/doc-1"] = "v-newer"
+	_, err := store.DecideSearchSuggestion(t.Context(), "ws-a", "actor-a", "sug-1",
+		DecisionRequest{Decision: DecisionAdopt, Revision: 2})
+	conflict, ok := errors.AsType[SearchConflict](err)
+	if !ok || conflict.Field != "suggestion_id" {
+		t.Fatalf("repeat adopt = %v, want 409 suggestion_id", err)
+	}
+	if len(works.calls) != 0 || len(database.tx.inserts()) != 0 {
+		t.Fatalf("repeat adopt read work %v or wrote %v", works.calls, database.tx.inserts())
 	}
 }
 

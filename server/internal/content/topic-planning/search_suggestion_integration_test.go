@@ -359,8 +359,9 @@ func TestConcurrentAbandonsLeaveExactlyOneDecision(t *testing.T) {
 	}
 }
 
-// T045 / FR-039 / FR-050: after a decision a suggestion takes no revision
-// and no second decision; adopt is 400 naming decision in this version.
+// T045 / FR-039 / FR-050: after either decision a suggestion takes no
+// revision or second decision. Adoption records its effect before these
+// general state checks run.
 func TestDecidedSuggestionTakesNoRevisionOrSecondDecision(t *testing.T) {
 	fx := newSuggestionFixture(t)
 	ctx := t.Context()
@@ -368,17 +369,15 @@ func TestDecidedSuggestionTakesNoRevisionOrSecondDecision(t *testing.T) {
 	fx.document(workspace, "work-1", "doc-1", "v3", scriptBaseBody)
 	created := fx.suggestion(t, workspace, fx.theme(t, workspace), "改过的正文")
 
-	_, err := fx.suggestions.DecideSearchSuggestion(ctx, workspace, "actor-a", created.SuggestionID,
+	adopted, err := fx.suggestions.DecideSearchSuggestion(ctx, workspace, "actor-a", created.SuggestionID,
 		DecisionRequest{Decision: DecisionAdopt, Revision: 1})
-	wantSearchField(t, err, "decision")
+	if err != nil || adopted.State != StateAdopted || adopted.Decision == nil {
+		t.Fatalf("adoption = %+v, %v", adopted, err)
+	}
 	_, err = fx.suggestions.DecideSearchSuggestion(ctx, workspace, "actor-a", created.SuggestionID,
 		DecisionRequest{Decision: DecisionAbandon, Revision: 2})
 	if conflict, ok := errors.AsType[SearchConflict](err); !ok || conflict.Field != "revision" {
 		t.Fatalf("a stale revision = %v, want 409 revision", err)
-	}
-	if _, err = fx.suggestions.DecideSearchSuggestion(ctx, workspace, "actor-a", created.SuggestionID,
-		DecisionRequest{Decision: DecisionAbandon, Revision: 1}); err != nil {
-		t.Fatal(err)
 	}
 	_, err = fx.suggestions.ReviseSearchSuggestion(ctx, workspace, "actor-a", created.SuggestionID,
 		SuggestionRevisionRequest{BaseRevision: 1, Content: validSuggestion().Content})
@@ -396,6 +395,38 @@ func TestDecidedSuggestionTakesNoRevisionOrSecondDecision(t *testing.T) {
 	if n := fx.db.Count(t, `SELECT count(*) FROM content_search_suggestion_revision`); n != 1 {
 		t.Fatalf("%d suggestion revisions, want 1", n)
 	}
+	if n := fx.db.Count(t, `SELECT count(*) FROM content_search_suggestion_effect`); n != 1 {
+		t.Fatalf("%d effects, want 1", n)
+	}
+}
+
+// T066: a failed apply records the failure and a retry can finish it. The
+// handler integration suite separately proves the real work-editor replay.
+func TestSearchSuggestionAdoptionRetriesConverge(t *testing.T) {
+	fx := newSuggestionFixture(t)
+	ctx := t.Context()
+	const workspace = "ws-adoption-retry"
+	fx.document(workspace, "work-1", "doc-1", "v3", scriptBaseBody)
+	themeID := fx.theme(t, workspace)
+
+	failed := fx.suggestion(t, workspace, themeID, "先失败再重试")
+	fx.works.applyErr = ErrBaseMoved
+	first, err := fx.suggestions.DecideSearchSuggestion(ctx, workspace, "actor-a", failed.SuggestionID,
+		DecisionRequest{Decision: DecisionAdopt, Revision: 1})
+	if err != nil || first.State != StateAdoptFailed || first.FailureCode != FailureBaseMoved {
+		t.Fatalf("failed adoption = %+v, %v", first, err)
+	}
+	fx.works.applyErr, fx.works.applyID = nil, "version-replayed"
+	recovered, err := fx.suggestions.RetrySearchSuggestionDecision(ctx, workspace, "actor-a", first.Decision.DecisionID)
+	if err != nil || recovered.State != StateAdopted || len(recovered.Effects) != 2 || recovered.Effects[1].VersionID != "version-replayed" {
+		t.Fatalf("recovered adoption = %+v, %v", recovered, err)
+	}
+	if _, err = fx.suggestions.RetrySearchSuggestionDecision(ctx, workspace, "actor-a", first.Decision.DecisionID); err == nil {
+		t.Fatal("retry after done unexpectedly succeeded")
+	} else if conflict, ok := errors.AsType[SearchConflict](err); !ok || conflict.Field != "decision_id" {
+		t.Fatalf("retry after done = %v, want decision_id conflict", err)
+	}
+
 }
 
 // T039 / FR-038 / contract §5: the five states, with the adoption states

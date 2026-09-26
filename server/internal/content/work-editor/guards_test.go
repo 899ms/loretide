@@ -155,6 +155,7 @@ func TestSourceAndActionAreNeverReadFromInput(t *testing.T) {
 		"source: SourceEdited, action: ActionRestored",
 		"source: SourceAdopted, action: ActionAdopted",
 		"source: SourceEdited, action: ActionImported",
+		"source: SourceEdited, action: ActionSuggestionApplied",
 	} {
 		if !strings.Contains(sources, required) {
 			t.Fatalf("no entry point hard-codes %q; this guard would pass vacuously", required)

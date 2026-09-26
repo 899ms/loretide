@@ -689,6 +689,8 @@ function actionLabel(t: Translate, action: string): string {
       return t(($) => $.contentWorks.actions.adopted);
     case "imported":
       return t(($) => $.contentWorks.actions.imported);
+    case "suggestion_applied":
+      return t(($) => $.contentWorks.actions.suggestionApplied);
     default:
       return action;
   }

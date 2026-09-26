@@ -2147,7 +2147,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Get("/rank-observations", h.ListContentSearchRankObservations)
 			r.Post("/rank-observations", h.RecordContentSearchRankObservation)
 			r.Post("/rank-observations/{observationId}/revisions", h.ReviseContentSearchRankObservation)
-			// specs/036 PR 2: suggestions, comparison and abandoning. The
+			// specs/036 PR 3: suggestions, comparison and adoption. The
 			// static /suggestions/compare is registered before {suggestionId}.
 			r.Get("/suggestions", h.ListContentSearchSuggestions)
 			r.Post("/suggestions", h.CreateContentSearchSuggestion)
@@ -2155,6 +2155,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Get("/suggestions/{suggestionId}", h.GetContentSearchSuggestion)
 			r.Post("/suggestions/{suggestionId}/revisions", h.ReviseContentSearchSuggestion)
 			r.Post("/suggestions/{suggestionId}/decisions", h.DecideContentSearchSuggestion)
+			r.Post("/decisions/{decisionId}/retry", h.RetryContentSearchSuggestionDecision)
 		})
 
 		// --- Workspace-scoped routes (all require workspace membership) ---

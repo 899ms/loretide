@@ -22,8 +22,15 @@ type SearchDocument struct {
 	DraftSaved      bool
 }
 
+// SearchApply is the only cross-module write needed by search adoption.
+// Its values are plain strings so topic-planning never imports work-editor.
+type SearchApply struct {
+	Key, WorkID, ArtifactID, BaseVersionID, Body string
+}
+
 // SearchWorks is implemented by handler/content_search_suggestions.go.
 type SearchWorks interface {
 	Document(ctx context.Context, workspaceID, actor, workID, artifactID string) (SearchDocument, error)
 	VersionBody(ctx context.Context, workspaceID, actor, workID, artifactID, versionID string) (string, error)
+	Apply(ctx context.Context, workspaceID, actor string, apply SearchApply) (versionID string, err error)
 }

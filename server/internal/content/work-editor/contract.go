@@ -29,6 +29,14 @@ var (
 	// ErrConflict is two writers racing for one revision number. The loser
 	// retries; it is not the caller's mistake.
 	ErrConflict = errors.New("version number taken")
+	// ErrBaseMoved means the document has a newer version than the one the
+	// caller reviewed.
+	ErrBaseMoved = errors.New("document has a newer version than the base")
+	// ErrDraftUnsaved means applying an external body would overwrite a
+	// person's unsaved edit.
+	ErrDraftUnsaved = errors.New("document has unsaved edits")
+	// ErrNoChange means the supplied body is byte-for-byte the base version.
+	ErrNoChange = errors.New("body equals the base version")
 )
 
 // Kind is what sort of document this is. The Go enum is authoritative and
@@ -105,9 +113,13 @@ const (
 	// Only the action set grows. Sources stays at exactly SOP 7.1's three -
 	// see its comment, which says so on purpose.
 	ActionImported Action = "imported"
+	// ActionSuggestionApplied records a body written after a person adopted a
+	// search suggestion. The source remains edited because the suggestion is
+	// human-authored input, not generated output.
+	ActionSuggestionApplied Action = "suggestion_applied"
 )
 
-var Actions = []Action{ActionSaved, ActionRestored, ActionAdopted, ActionImported}
+var Actions = []Action{ActionSaved, ActionRestored, ActionAdopted, ActionImported, ActionSuggestionApplied}
 
 // MaxBodyRunes bounds one document. Counted in runes for the same reason the
 // persona prompt is: a byte limit gives a Chinese draft a third of the room an
