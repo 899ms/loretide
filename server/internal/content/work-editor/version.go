@@ -77,6 +77,30 @@ func (s *Store) ImportVersion(ctx context.Context, workspaceID, actor, workID, a
 	}, requests...)
 }
 
+// BodyApplication is a whole new body for one document, written only when
+// the document still stands where its caller last saw it.
+type BodyApplication struct {
+	BaseVersionID string
+	Body          string
+}
+
+// ApplyBody appends an edited version after a person adopts a search
+// suggestion. A replay by the supplied idempotency request returns the first
+// version before checking whether the document has moved.
+func (s *Store) ApplyBody(ctx context.Context, workspaceID, actor, workID, artifactID string,
+	application BodyApplication, requests ...idempotency.Request) (ArtifactVersion, error) {
+	if application.BaseVersionID == "" {
+		return ArtifactVersion{}, ErrInvalid
+	}
+	if err := ValidateBody(application.Body); err != nil {
+		return ArtifactVersion{}, err
+	}
+	return s.appendVersion(ctx, workspaceID, actor, workID, artifactID, versionIntent{
+		step: "apply-search-suggestion", source: SourceEdited, action: ActionSuggestionApplied,
+		baseVersionID: application.BaseVersionID, body: application.Body,
+	}, requests...)
+}
+
 type versionIntent struct {
 	step   string
 	source Source
@@ -84,6 +108,10 @@ type versionIntent struct {
 	// fromVersionID is set for restore and adopt. Empty means the content comes
 	// from the editing copy.
 	fromVersionID string
+	// baseVersionID and body are set only by ApplyBody. They make a new version
+	// conditional on the version the suggestion was authored against.
+	baseVersionID string
+	body          string
 }
 
 // appendVersion is the only path that writes a version.
@@ -165,6 +193,37 @@ func (s *Store) appendVersion(ctx context.Context, workspaceID, actor, workID, a
 	}
 
 	body := artifact.DraftBody
+	if intent.baseVersionID != "" {
+		latest, latestErr := scanVersion(tx.QueryRow(ctx, versionSelect+
+			` WHERE workspace_id=$1 AND work_id=$2 AND artifact_id=$3 ORDER BY revision DESC LIMIT 1`,
+			workspaceID, workID, artifactID))
+		if errors.Is(latestErr, pgx.ErrNoRows) {
+			_ = tx.Rollback(ctx)
+			s.reportFailure(ctx, workspaceID, actor, artifactID, intent.step, ErrBaseMoved)
+			return ArtifactVersion{}, ErrBaseMoved
+		}
+		if latestErr != nil {
+			_ = tx.Rollback(ctx)
+			s.reportFailure(ctx, workspaceID, actor, artifactID, intent.step, latestErr)
+			return ArtifactVersion{}, ErrStorage
+		}
+		if latest.VersionID != intent.baseVersionID {
+			_ = tx.Rollback(ctx)
+			s.reportFailure(ctx, workspaceID, actor, artifactID, intent.step, ErrBaseMoved)
+			return ArtifactVersion{}, ErrBaseMoved
+		}
+		if artifact.DraftStatus != DraftSaved {
+			_ = tx.Rollback(ctx)
+			s.reportFailure(ctx, workspaceID, actor, artifactID, intent.step, ErrDraftUnsaved)
+			return ArtifactVersion{}, ErrDraftUnsaved
+		}
+		if intent.body == latest.Body {
+			_ = tx.Rollback(ctx)
+			s.reportFailure(ctx, workspaceID, actor, artifactID, intent.step, ErrNoChange)
+			return ArtifactVersion{}, ErrNoChange
+		}
+		body = intent.body
+	}
 	if intent.fromVersionID != "" {
 		source, sourceErr := scanVersion(tx.QueryRow(ctx, versionSelect+
 			` WHERE workspace_id=$1 AND artifact_id=$2 AND version_id=$3`,

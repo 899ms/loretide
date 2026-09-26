@@ -2,12 +2,15 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
+	"github.com/multica-ai/multica/server/internal/content/idempotency"
 	topicplanning "github.com/multica-ai/multica/server/internal/content/topic-planning"
 	workeditor "github.com/multica-ai/multica/server/internal/content/work-editor"
 	workspacecore "github.com/multica-ai/multica/server/internal/content/workspace-core"
@@ -48,13 +51,19 @@ func searchSuggestionsReadError(err error) error {
 	case errors.Is(err, workspacecore.ErrNotFound), errors.Is(err, workeditor.ErrNotFound),
 		errors.Is(err, workeditor.ErrInvalid), errors.Is(err, topicplanning.ErrNotFound):
 		return topicplanning.ErrNotFound
+	case errors.Is(err, workeditor.ErrBaseMoved):
+		return topicplanning.ErrBaseMoved
+	case errors.Is(err, workeditor.ErrDraftUnsaved):
+		return topicplanning.ErrDraftUnsaved
+	case errors.Is(err, workeditor.ErrNoChange):
+		return topicplanning.ErrNoChange
 	default:
 		return topicplanning.ErrStorage
 	}
 }
 
 // searchWorks answers topicplanning.SearchWorks from work-editor's public
-// reads. It writes nothing.
+// Store.
 type searchWorks struct{ store *workeditor.Store }
 
 // Document is the document's latest version and whether its editing copy is
@@ -94,6 +103,29 @@ func (w searchWorks) VersionBody(ctx context.Context, workspaceID, actor, workID
 	return version.Body, nil
 }
 
+// Apply turns a stable suggestion key and body into work-editor's public
+// ApplyBody contract. The idempotency claim is deliberately owned by the
+// version write, before that write checks whether the base has moved.
+func (w searchWorks) Apply(ctx context.Context, workspaceID, actor string, apply topicplanning.SearchApply) (string, error) {
+	if w.store == nil {
+		return "", topicplanning.ErrStorage
+	}
+	bodyHash := sha256.Sum256([]byte(apply.Body))
+	request, err := idempotency.NewRequest("apply-search-suggestion", apply.ArtifactID, apply.Key, struct {
+		BaseVersionID string `json:"base_version_id"`
+		BodySHA256    string `json:"body_sha256"`
+	}{BaseVersionID: apply.BaseVersionID, BodySHA256: hex.EncodeToString(bodyHash[:])})
+	if err != nil {
+		return "", topicplanning.ErrStorage
+	}
+	version, err := w.store.ApplyBody(ctx, workspaceID, actor, apply.WorkID, apply.ArtifactID,
+		workeditor.BodyApplication{BaseVersionID: apply.BaseVersionID, Body: apply.Body}, request)
+	if err != nil {
+		return "", searchSuggestionsReadError(err)
+	}
+	return version.VersionID, nil
+}
+
 // searchSuggestionsStore is the topic planning store with the theme adapters
 // and the document reads.
 func (h *Handler) searchSuggestionsStore() *topicplanning.SuggestionStore {
@@ -114,9 +146,12 @@ func readSearchSuggestionBody(w http.ResponseWriter, r *http.Request) ([]byte, b
 
 // searchSuggestionConflictReasons says, per field a 409 names, what moved.
 var searchSuggestionConflictReasons = map[string]string{
-	"base_revision": "the suggestion changed since this revision was read",
-	"revision":      "the suggestion changed since this revision was read",
-	"suggestion_id": "this suggestion already has a decision",
+	"base_revision":   "the suggestion changed since this revision was read",
+	"revision":        "the suggestion changed since this revision was read",
+	"suggestion_id":   "this suggestion already has a decision",
+	"decision_id":     "this adoption is already complete",
+	"base_version_id": "the document has a newer version than the suggestion base",
+	"draft_status":    "the document has unsaved edits",
 }
 
 // searchSuggestionError adds 409 to the topic answers: 400 naming the field,
@@ -282,4 +317,19 @@ func (h *Handler) DecideContentSearchSuggestion(w http.ResponseWriter, r *http.R
 		return
 	}
 	writeJSON(w, http.StatusCreated, suggestion)
+}
+
+// RetryContentSearchSuggestionDecision retries a decided adoption from its
+// stored proposal; no new body or revision is accepted on this route.
+func (h *Handler) RetryContentSearchSuggestionDecision(w http.ResponseWriter, r *http.Request) {
+	workspace, actor, ok := h.searchScope(w, r)
+	if !ok {
+		return
+	}
+	view, err := h.searchSuggestionsStore().RetrySearchSuggestionDecision(r.Context(), workspace, actor, chi.URLParam(r, "decisionId"))
+	if err != nil {
+		h.searchSuggestionError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, view)
 }

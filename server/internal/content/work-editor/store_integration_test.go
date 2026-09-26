@@ -97,6 +97,7 @@ func newWorkFixture(t *testing.T) workFixture {
 		"535_content_artifact_version_action_imported.up.sql",
 		"538_content_import_idempotency.up.sql",
 		"539_content_import_idempotency_scope_key_idx.up.sql",
+		"627_content_artifact_version_action_suggestion_applied.up.sql",
 	} {
 		sql, readErr := os.ReadFile(filepath.Join(migrations, name))
 		if readErr != nil {

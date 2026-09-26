@@ -463,8 +463,7 @@ const (
 	DecisionAbandon SuggestionDecision = "abandon"
 )
 
-// SuggestionDecisions is the controlled set, exactly two. PR 2 accepts
-// abandon only; adopt is refused by name until PR 3 opens it.
+// SuggestionDecisions is the controlled set, exactly two.
 var SuggestionDecisions = []SuggestionDecision{DecisionAdopt, DecisionAbandon}
 
 // EffectOutcome is what one attempt at adopting did.
@@ -712,15 +711,10 @@ func DecodeSuggestionDecision(data []byte) (DecisionRequest, error) {
 	return req, ValidateDecisionRequest(req)
 }
 
-// ValidateDecisionRequest checks a decision's shape. adopt is a real value of
-// the set, and is refused by name in this version: the adoption path - the
-// document write and its effects - opens in PR 3, and a decision that says
-// "adopt" with nothing behind it would read as adopt_unrecorded forever.
+// ValidateDecisionRequest checks a decision's shape.
 func ValidateDecisionRequest(req DecisionRequest) error {
 	switch req.Decision {
-	case DecisionAbandon:
-	case DecisionAdopt:
-		return FieldError{Field: "decision", Reason: "not available in this version"}
+	case DecisionAbandon, DecisionAdopt:
 	default:
 		return FieldError{Field: "decision", Reason: "unknown decision"}
 	}

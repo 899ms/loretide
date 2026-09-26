@@ -180,7 +180,7 @@ func (f *fakeWorks) VersionBody(_ context.Context, workspaceID, _, workID, artif
 	return body, nil
 }
 
-func (f *fakeWorks) Apply(context.Context, string, string, any) (string, error) {
+func (f *fakeWorks) Apply(context.Context, string, string, SearchApply) (string, error) {
 	f.calls = append(f.calls, "Apply")
 	return "", nil
 }

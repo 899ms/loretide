@@ -11,9 +11,12 @@ import (
 )
 
 var (
-	ErrInvalid  = errors.New("invalid topic planning input")
-	ErrNotFound = errors.New("topic card or brief revision not found")
-	ErrStorage  = errors.New("topic planning storage unavailable")
+	ErrInvalid      = errors.New("invalid topic planning input")
+	ErrNotFound     = errors.New("topic card or brief revision not found")
+	ErrStorage      = errors.New("topic planning storage unavailable")
+	ErrBaseMoved    = errors.New("search suggestion base version moved")
+	ErrDraftUnsaved = errors.New("search suggestion target has unsaved edits")
+	ErrNoChange     = errors.New("search suggestion body has no change")
 )
 
 // FieldError names the field that was wrong, so a 400 can say which one.
@@ -67,26 +70,26 @@ func (a Action) Status() (Status, bool) {
 const AccountFilterNone = "none"
 
 type TopicCard struct {
-	TopicCardID               string    `json:"topic_card_id"`
-	WorkspaceID               string    `json:"workspace_id"`
-	AccountID                 *string   `json:"account_id"`
-	AudienceProblemJudgment   string    `json:"audience_problem_judgment"`
-	IPFit                     string    `json:"ip_fit"`
-	Timing                    string    `json:"timing"`
-	ExistingContentRelation   string    `json:"existing_content_relation"`
-	EvidenceGapsAndInvestment string    `json:"evidence_gaps_and_investment"`
-	Channels                  []string  `json:"channels"`
+	TopicCardID               string   `json:"topic_card_id"`
+	WorkspaceID               string   `json:"workspace_id"`
+	AccountID                 *string  `json:"account_id"`
+	AudienceProblemJudgment   string   `json:"audience_problem_judgment"`
+	IPFit                     string   `json:"ip_fit"`
+	Timing                    string   `json:"timing"`
+	ExistingContentRelation   string   `json:"existing_content_relation"`
+	EvidenceGapsAndInvestment string   `json:"evidence_gaps_and_investment"`
+	Channels                  []string `json:"channels"`
 	// SOP 5.2 item 2: "为什么适合这个 IP，引用哪些素材和过去的经营结论".
-	FitSourceIDs              []string  `json:"fit_source_ids"`
+	FitSourceIDs []string `json:"fit_source_ids"`
 	// SOP 5.2 item 5: "证据是否充分，存在什么缺口，需要多少研究或制作投入".
-	EvidenceSourceIDs         []string  `json:"evidence_source_ids"`
-	RecommendedAction         string    `json:"recommended_action"`
-	Status                    Status    `json:"status"`
-	DecisionReason            string    `json:"decision_reason"`
-	DecisionNote              string    `json:"decision_note"`
-	StartedBriefRevisionID    *string   `json:"started_brief_revision_id"`
-	CreatedAt                 time.Time `json:"created_at"`
-	UpdatedAt                 time.Time `json:"updated_at"`
+	EvidenceSourceIDs      []string  `json:"evidence_source_ids"`
+	RecommendedAction      string    `json:"recommended_action"`
+	Status                 Status    `json:"status"`
+	DecisionReason         string    `json:"decision_reason"`
+	DecisionNote           string    `json:"decision_note"`
+	StartedBriefRevisionID *string   `json:"started_brief_revision_id"`
+	CreatedAt              time.Time `json:"created_at"`
+	UpdatedAt              time.Time `json:"updated_at"`
 }
 
 // PatchString distinguishes a missing field from an explicitly empty string.
