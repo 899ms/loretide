@@ -20,7 +20,7 @@ export function buildSearchMetricRequest(input: {
   if (!input.publication) return { ok: false, reason: "missing_target" };
   if (!isObservationChannel(input.publication.channel)) return { ok: false, reason: "unsupported_channel" };
   if (!isIn(SEARCH_METRICS, input.metric)) return { ok: false, reason: "invalid_fields" };
-  const account = resolveAccount(input.accountId, input.accounts, input.publication.channel, input.publication.platformAccount);
+  const account = resolveAccount(input.accountId, input.accounts, input.publication.channel);
   if (account.reason) return { ok: false, reason: account.reason };
   const value = input.value.trim() === "" ? null : Number(input.value);
   if ((value !== null && (!Number.isInteger(value) || value < 0)) || !input.statWindow.trim() || !input.sampledAt || !validDate(input.sampledAt) || !input.evidenceNote.trim()) {
@@ -51,8 +51,7 @@ export function buildRankObservationRequest(input: {
   if (input.theme && input.publication && input.theme.platform !== input.publication.channel) return { ok: false, reason: "platform_mismatch" };
   const platform = input.publication?.channel || input.theme?.platform || "";
   if (!isObservationChannel(platform)) return { ok: false, reason: "unsupported_channel" };
-  if (input.theme?.accountId && input.accountId !== input.theme.accountId) return { ok: false, reason: "account_mismatch" };
-  const account = resolveAccount(input.accountId, input.accounts, platform, input.publication?.platformAccount ?? "");
+  const account = resolveAccount(input.accountId, input.accounts, platform);
   if (account.reason) return { ok: false, reason: account.reason };
   if (!input.query.trim() || !input.conditions.trim() || !input.evidenceNote.trim() || !input.observedAt || !validDate(input.observedAt) || !isIn(RANK_RESULT_KINDS, input.resultKind)) {
     return { ok: false, reason: "invalid_fields" };
@@ -69,10 +68,10 @@ export function buildRankObservationRequest(input: {
   } };
 }
 
-function resolveAccount(accountId: string, accounts: readonly SearchAccountOption[], platform: string, publicationAccount: string) {
-  if (!accountId) return publicationAccount ? { reason: "account_mismatch" as const, accountId: "" } : { reason: null, accountId: "" };
+function resolveAccount(accountId: string, accounts: readonly SearchAccountOption[], platform: string) {
+  if (!accountId) return { reason: null, accountId: "" };
   const account = accounts.find((item) => item.id === accountId);
-  if (!account || account.platform !== platform || (publicationAccount !== "" && account.id !== publicationAccount && account.label !== publicationAccount)) {
+  if (!account || account.platform !== platform) {
     return { reason: "account_mismatch" as const, accountId: "" };
   }
   return { reason: null, accountId: account.id };

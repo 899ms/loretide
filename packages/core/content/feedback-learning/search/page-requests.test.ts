@@ -3,9 +3,11 @@ import { buildRankObservationRequest, buildSearchMetricRequest, type SearchAccou
 
 const accounts: SearchAccountOption[] = [
   { id: "account-xhs", label: "XHS brand", platform: "xiaohongshu" },
+  { id: "account-xhs-2", label: "Other XHS account", platform: "xiaohongshu" },
   { id: "account-douyin", label: "Douyin brand", platform: "douyin" },
 ];
 const publicationA: SearchPublicationOption = { publicationRecordId: "publication-a", channel: "xiaohongshu", platformAccount: "XHS brand" };
+const freeTextPublication: SearchPublicationOption = { publicationRecordId: "publication-free-text", channel: "xiaohongshu", platformAccount: "运营同事的小红书号" };
 const publicationB: SearchPublicationOption = { publicationRecordId: "publication-b", channel: "douyin", platformAccount: "Douyin brand" };
 const themeB: SearchThemeOption = { themeId: "theme-b", platform: "douyin", accountId: "account-douyin", voided: false };
 
@@ -17,6 +19,19 @@ describe("search performance request contracts", () => {
       evidenceNote: "Platform dashboard",
     });
     expect(result.ok && result.input).toMatchObject({ publication_record_id: "publication-a", platform: "xiaohongshu", account_id: "account-xhs", value: 0 });
+  });
+
+  it("treats publication platform_account as free text and permits a brand-level empty account", () => {
+    const withKnownAccount = buildSearchMetricRequest({
+      publication: freeTextPublication, accountId: "account-xhs", accounts, metric: "search_impression",
+      value: "1", unit: "count", statWindow: "7 days", sampledAt: "2026-09-27T12:00", evidenceNote: "Dashboard",
+    });
+    const atBrandLevel = buildSearchMetricRequest({
+      publication: freeTextPublication, accountId: "", accounts, metric: "search_impression",
+      value: "1", unit: "count", statWindow: "7 days", sampledAt: "2026-09-27T12:00", evidenceNote: "Dashboard",
+    });
+    expect(withKnownAccount).toMatchObject({ ok: true, input: { publication_record_id: "publication-free-text", account_id: "account-xhs" } });
+    expect(atBrandLevel).toMatchObject({ ok: true, input: { publication_record_id: "publication-free-text", account_id: "" } });
   });
 
   it("derives observation platform and target from the observation publication, not the metric selection", () => {
@@ -48,5 +63,13 @@ describe("search performance request contracts", () => {
       theme: null, publication: publicationA, accountId: "account-xhs", accounts,
       query: "q", observedAt: "2026-09-27T12:00", conditions: "c", resultKind: "not_found", position: "", scannedDepth: "0", evidenceNote: "e",
     })).toEqual({ ok: false, reason: "invalid_fields" });
+  });
+
+  it("does not force an observation account to match a free-text publication or theme default", () => {
+    const result = buildRankObservationRequest({
+      theme: { ...themeB, platform: "xiaohongshu", accountId: "account-xhs" }, publication: freeTextPublication, accountId: "account-xhs-2", accounts,
+      query: "q", observedAt: "2026-09-27T12:00", conditions: "c", resultKind: "position", position: "2", scannedDepth: "", evidenceNote: "e",
+    });
+    expect(result).toMatchObject({ ok: true, input: { publication_record_id: "publication-free-text", account_id: "account-xhs-2", theme_id: "theme-b" } });
   });
 });

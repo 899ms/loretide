@@ -5,8 +5,9 @@ import { useT } from "@multica/views/i18n";
 import {
   SEARCH_INTENTS, THEME_ORIGINS,
   useCreateSearchTheme, useReviseSearchTheme, useSearchTheme, useSearchThemeRevisions, useSearchThemes,
-  searchIntentDisplay, searchOriginDisplay, themeUnknownReasonDisplay,
+  searchDataOriginDisplay, searchIntentDisplay, searchOriginDisplay, themeUnknownReasonDisplay,
   themeAccountMatchesPlatform, themeHasQuestionOrKeyword,
+  validateSearchThemeReferences,
   type SearchTheme, type SearchThemeInput,
 } from "@multica/core/content/topic-planning";
 import { useContentBriefsForTopics, type TopicCard } from "@multica/core/content/topic-planning";
@@ -87,7 +88,19 @@ export function SearchThemesSection({
   const selected = selectedThemeQuery.data ?? list.find((item) => item.themeId === selectedId) ?? null;
   const selectedAccount = accounts.find((item) => item.id === draft.account_id) ?? null;
   const accountCompatible = !draft.account_id || Boolean(selectedAccount && themeAccountMatchesPlatform(draft.platform, selectedAccount.platform));
-  const briefItems = briefs.data.map((item) => ({ id: item.briefRevisionId, label: `${topicCards.find((card) => card.topicCardId === item.topicCardId)?.audienceProblemJudgment || item.topicCardId} · #${item.revision} · ${item.coreProblem}` }));
+  const referenceValidation = validateSearchThemeReferences({
+    sourceIds: draft.source_ids, availableSourceIds: sources.map((item) => item.id),
+    topicCardIds: draft.topic_card_ids, availableTopicCardIds: topicCards.map((item) => item.topicCardId),
+    briefRevisionIds: draft.brief_revision_ids, availableBriefs: briefs.data,
+  });
+  const referenceCandidatesReady = !sourcesLoading && !sourcesError && !topicCardsLoading && !topicCardsError && !briefs.isPending && !briefs.isError;
+  const staleSourceIds = referenceCandidatesReady ? referenceValidation.missingSourceIds : [];
+  const staleTopicIds = referenceCandidatesReady ? referenceValidation.missingTopicCardIds : [];
+  const staleBriefIds = referenceCandidatesReady ? referenceValidation.missingBriefRevisionIds : [];
+  const briefItems = [
+    ...briefs.data.map((item) => ({ id: item.briefRevisionId, label: `${topicCards.find((card) => card.topicCardId === item.topicCardId)?.audienceProblemJudgment || item.topicCardId} · #${item.revision} · ${item.coreProblem}` })),
+    ...staleBriefIds.map((id) => ({ id, label: `${id} · ${t(($) => $.search_optimization.themes.unavailableReference)}` })),
+  ];
 
   function update(patch: Partial<ThemeDraft>) { setDraft((current) => ({ ...current, ...patch })); }
   function toInput(): SearchThemeInput {
@@ -112,6 +125,7 @@ export function SearchThemesSection({
     });
   }
   function save() {
+    if (!referenceCandidatesReady || !referenceValidation.valid) return;
     const input = toInput();
     if (selectedId) {
       if (!selected || selectedBaseRevision === null) return;
@@ -124,6 +138,7 @@ export function SearchThemesSection({
     create.mutate(input, { onError: refreshOnConflict, onSuccess: (result) => { if (result) loadTheme(result); } });
   }
   function archive() {
+    if (!referenceCandidatesReady || !referenceValidation.valid) return;
     if (!selectedId || !selected || selectedBaseRevision === null) return;
     revise.mutate({ themeId: selectedId, input: { ...toInput(), base_revision: selectedBaseRevision, voided: true } }, {
       onError: refreshOnConflict,
@@ -138,8 +153,14 @@ export function SearchThemesSection({
   const error = create.error ?? revise.error;
   const selectItems = [{ value: "", label: t(($) => $.search_optimization.themes.allPlatforms) }, ...platforms.map((value) => ({ value, label: value }))];
   const selectedThemeRevisions = revisions.data?.revisions ?? [];
-  const optionsForSources = sources;
-  const optionsForTopics = topicCards.map((topic) => ({ id: topic.topicCardId, label: topic.audienceProblemJudgment || topic.topicCardId }));
+  const optionsForSources = [
+    ...sources,
+    ...staleSourceIds.map((id) => ({ id, label: `${id} · ${t(($) => $.search_optimization.themes.unavailableReference)}` })),
+  ];
+  const optionsForTopics = [
+    ...topicCards.map((topic) => ({ id: topic.topicCardId, label: topic.audienceProblemJudgment || topic.topicCardId })),
+    ...staleTopicIds.map((id) => ({ id, label: `${id} · ${t(($) => $.search_optimization.themes.unavailableReference)}` })),
+  ];
   const unknownReason = selected ? themeUnknownReasonDisplay(selected) : "no_data_source";
 
   return (
@@ -204,7 +225,7 @@ export function SearchThemesSection({
         </SettingsRow>
         <SettingsRow label={t(($) => $.search_optimization.themes.originNote)} size="text"><Textarea rows={2} value={draft.origin_note} onChange={(event) => update({ origin_note: event.target.value })} /></SettingsRow>
         <SettingsRow label={t(($) => $.search_optimization.themes.sources)} size="text">{sourcesLoading ? <span className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loading)}</span> : sourcesError ? <span role="alert" className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loadFailed)}</span> : <CheckboxOptions items={optionsForSources} selected={draft.source_ids} onChange={(value) => update({ source_ids: value })} />}</SettingsRow>
-        <SettingsRow label={t(($) => $.search_optimization.themes.topicCards)} size="text">{topicCardsLoading ? <span className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loading)}</span> : topicCardsError ? <span role="alert" className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loadFailed)}</span> : <CheckboxOptions items={optionsForTopics} selected={draft.topic_card_ids} onChange={(value) => update({ topic_card_ids: value, brief_revision_ids: [] })} />}</SettingsRow>
+        <SettingsRow label={t(($) => $.search_optimization.themes.topicCards)} size="text">{topicCardsLoading ? <span className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loading)}</span> : topicCardsError ? <span role="alert" className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loadFailed)}</span> : <CheckboxOptions items={optionsForTopics} selected={draft.topic_card_ids} onChange={(value) => update({ topic_card_ids: value })} />}</SettingsRow>
         <SettingsRow label={t(($) => $.search_optimization.themes.briefs)} size="text">{briefs.isPending ? <span className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loading)}</span> : briefs.isError ? <span role="alert" className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loadFailed)}</span> : <CheckboxOptions items={briefItems} selected={draft.brief_revision_ids} onChange={(value) => update({ brief_revision_ids: value })} />}</SettingsRow>
         <SettingsRow label={t(($) => $.search_optimization.themes.note)} size="text"><Textarea rows={2} value={draft.note} onChange={(event) => update({ note: event.target.value })} /></SettingsRow>
         <SettingsRow label={t(($) => $.search_optimization.themes.volume)} description={t(($) => $.search_optimization.themes.unknown)}><span className="text-caption text-muted-foreground">{unknownReason === "no_data_source" ? t(($) => $.search_optimization.values.no_data_source) : t(($) => $.search_optimization.unknown)}</span></SettingsRow>
@@ -213,13 +234,36 @@ export function SearchThemesSection({
           {rankObservationsLoading ? <span className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loading)}</span> : rankObservationsError ? <span role="alert" className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loadFailed)}</span> : rankObservations.length ? <div className="space-y-1">{rankObservations.map((item) => <div key={`${item.observationId}-${item.revision}`} className="text-caption text-muted-foreground">{item.query} · {item.resultKind === "position" ? `${t(($) => $.search_optimization.observations.position)} ${item.position ?? t(($) => $.search_optimization.unknown)}` : t(($) => $.search_optimization.values.resultKind[item.resultKind === "not_found" ? "not_found" : "unknown"])} · {item.observedAt}</div>)}</div> : <span className="text-caption text-muted-foreground">{t(($) => $.search_optimization.themes.noObservations)}</span>}
         </SettingsRow>
         <SettingsRow label={selected ? `${t(($) => $.search_optimization.themes.history)} · ${selected.revision}` : t(($) => $.search_optimization.themes.history)} size="text">
-          {revisions.isPending ? <span className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loading)}</span> : revisions.isError ? <span role="alert" className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loadFailed)}</span> : selectedThemeRevisions.length ? <div className="space-y-2">{selectedThemeRevisions.map((revision) => <div key={`${revision.themeId}-${revision.revision}`} className="text-caption text-muted-foreground">#{revision.revision} · {revision.createdAt} · {revision.voided ? t(($) => $.search_optimization.themes.includeArchived) : ""}</div>)}</div> : <span className="text-caption text-muted-foreground">{t(($) => $.search_optimization.empty)}</span>}
+          {revisions.isPending ? <span className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loading)}</span> : revisions.isError ? <span role="alert" className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loadFailed)}</span> : selectedThemeRevisions.length ? <div className="space-y-2">{selectedThemeRevisions.map((revision) => (
+            <details key={`${revision.themeId}-${revision.revision}`} className="rounded border p-3">
+              <summary className="cursor-pointer text-caption">#{revision.revision} · {revision.createdAt} · {t(($) => $.search_optimization.themes.recordedBy)}: {revision.recordedBy || t(($) => $.search_optimization.unknown)}{revision.voided ? ` · ${t(($) => $.search_optimization.themes.includeArchived)}` : ""}</summary>
+              <dl className="mt-3 grid gap-2 text-caption md:grid-cols-2">
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.name)}</dt><dd>{revision.name}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.platform)}</dt><dd>{revision.platform}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.account)}</dt><dd>{revision.accountId || t(($) => $.search_optimization.themes.brandAccount)}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.goal)}</dt><dd>{revision.businessGoal || t(($) => $.search_optimization.none)}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.questions)}</dt><dd>{revision.questions.join(" · ") || t(($) => $.search_optimization.none)}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.keywords)}</dt><dd>{revision.keywords.join(" · ") || t(($) => $.search_optimization.none)}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.intent)} · {t(($) => $.search_optimization.themes.origin)}</dt><dd>{displayIntent(t, revision.intent)} · {displayOrigin(t, revision.origin)}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.originNote)}</dt><dd>{revision.originNote || t(($) => $.search_optimization.none)}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.sources)}</dt><dd>{revision.sourceIds.join(" · ") || t(($) => $.search_optimization.none)}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.topicCards)}</dt><dd>{revision.topicCardIds.join(" · ") || t(($) => $.search_optimization.none)}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.briefs)}</dt><dd>{revision.briefRevisionIds.join(" · ") || t(($) => $.search_optimization.none)}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.note)}</dt><dd>{revision.note || t(($) => $.search_optimization.none)}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.themeId)}</dt><dd>{revision.themeId}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.volume)}</dt><dd>{revision.searchVolume.reason === "no_data_source" ? t(($) => $.search_optimization.values.no_data_source) : t(($) => $.search_optimization.unknown)}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.competition)}</dt><dd>{revision.competition.reason === "no_data_source" ? t(($) => $.search_optimization.values.no_data_source) : t(($) => $.search_optimization.unknown)}</dd></div>
+                <div><dt className="font-medium">{t(($) => $.search_optimization.themes.dataOrigin)}</dt><dd>{t(($) => $.search_optimization.values.dataOrigin[searchDataOriginDisplay(revision.dataOrigin)])}</dd></div>
+              </dl>
+            </details>
+          ))}</div> : <span className="text-caption text-muted-foreground">{t(($) => $.search_optimization.empty)}</span>}
         </SettingsRow>
         <SettingsRow label={selected?.voided ? t(($) => $.search_optimization.themes.includeArchived) : t(($) => $.search_optimization.save)}>
           <div className="flex flex-wrap items-center gap-3">
             {error ? <span role="alert" className="text-caption text-muted-foreground">{String(error.message).includes("409") ? t(($) => $.search_optimization.suggestions.errorConflict) : t(($) => $.search_optimization.saveFailed)}</span> : null}
-            <Button disabled={pending || !draft.name.trim() || !themeHasQuestionOrKeyword(lines(draft.questionsText), lines(draft.keywordsText)) || !accountCompatible || (selectedId !== "" && (!selected || selectedBaseRevision === null)) || themes.isError || accountsLoading || accountsError || briefs.isError} onClick={save}>{selectedId ? t(($) => $.search_optimization.themes.revise) : t(($) => $.search_optimization.themes.create)}</Button>
-            {selected && !selected.voided ? <Button variant="outline" disabled={pending} onClick={archive}>{t(($) => $.search_optimization.themes.archive)}</Button> : null}
+            {referenceCandidatesReady && !referenceValidation.valid ? <span role="alert" className="text-caption text-muted-foreground">{t(($) => $.search_optimization.themes.unavailableReference)} · {[...staleSourceIds, ...staleTopicIds, ...staleBriefIds].join(", ")}</span> : null}
+            <Button disabled={pending || !draft.name.trim() || !themeHasQuestionOrKeyword(lines(draft.questionsText), lines(draft.keywordsText)) || !accountCompatible || (selectedId !== "" && (!selected || selectedBaseRevision === null)) || themes.isError || accountsLoading || accountsError || !referenceCandidatesReady || !referenceValidation.valid} onClick={save}>{selectedId ? t(($) => $.search_optimization.themes.revise) : t(($) => $.search_optimization.themes.create)}</Button>
+            {selected && !selected.voided ? <Button variant="outline" disabled={pending || !referenceCandidatesReady || !referenceValidation.valid} onClick={archive}>{t(($) => $.search_optimization.themes.archive)}</Button> : null}
           </div>
         </SettingsRow>
       </SettingsCard>

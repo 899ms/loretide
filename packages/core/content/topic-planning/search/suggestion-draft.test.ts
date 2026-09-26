@@ -19,6 +19,8 @@ describe("search suggestion edit session", () => {
     const session = beginSuggestionCreate({ workspaceId: "ws-1", workId: "work-1", artifactId: "artifact-1" }, "theme-1", "version-7", draft);
     expect(suggestionCreateRequest(session)).toEqual({ ...draft, work_id: "work-1", artifact_id: "artifact-1", theme_id: "theme-1", base_version_id: "version-7" });
     expect(suggestionDraftContextMatches(session, { workspaceId: "ws-1", workId: "work-1", artifactId: "artifact-2" })).toBe(false);
+    const edited = updateSuggestionDraft(session, { ...draft, proposed_body: "Edited after opening" });
+    expect(suggestionCreateRequest(edited)?.base_version_id).toBe("version-7");
   });
 
   it("pins a selected suggestion revision and preserves edits across refreshed server objects", () => {

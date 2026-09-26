@@ -163,8 +163,7 @@ export function SearchPerformanceSections({ wsId, publications: publicationRecor
               const id = next === ALL ? "" : next ?? "";
               setPublicationId(id);
               const publication = records.find((item) => item.publicationRecordId === id);
-              const account = accounts.find((item) => item.platform === publication?.channel && (item.id === publication?.platformAccount || item.label === publication?.platformAccount));
-              setMetricAccountId(account?.id ?? "");
+              setMetricAccountId((current) => accounts.some((item) => item.id === current && item.platform === publication?.channel) ? current : "");
             }}><SelectTrigger aria-label={t(($) => $.search_optimization.metrics.publication)}><SelectValue /></SelectTrigger><SelectContent>{recordItems.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select>
           </SettingsRow>
           <SettingsRow label={t(($) => $.search_optimization.metrics.account)}>
@@ -195,7 +194,8 @@ export function SearchPerformanceSections({ wsId, publications: publicationRecor
               <Select disabled={themesLoading || themesError} items={themeItems} value={themeId || ALL} onValueChange={(next) => {
               const id = next === ALL ? "" : next ?? "";
               setThemeId(id);
-              setObservationAccountId(themeList.find((item) => item.themeId === id)?.accountId ?? "");
+              const platform = themeList.find((item) => item.themeId === id)?.platform || selectedObservationPublication?.channel || "";
+              setObservationAccountId((current) => accounts.some((item) => item.id === current && item.platform === platform) ? current : "");
             }}><SelectTrigger aria-label={t(($) => $.search_optimization.themes.selectTopic)}><SelectValue /></SelectTrigger><SelectContent>{themeItems.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select>
           </SettingsRow>
           <SettingsRow label={t(($) => $.search_optimization.observations.publication)}>
@@ -203,8 +203,8 @@ export function SearchPerformanceSections({ wsId, publications: publicationRecor
               const id = next === ALL ? "" : next ?? "";
               setObservationPublication(id);
               const publication = records.find((item) => item.publicationRecordId === id);
-              const account = accounts.find((item) => item.platform === publication?.channel && (item.id === publication?.platformAccount || item.label === publication?.platformAccount));
-              setObservationAccountId(account?.id ?? selectedTheme?.accountId ?? "");
+              const platform = publication?.channel || selectedTheme?.platform || "";
+              setObservationAccountId((current) => accounts.some((item) => item.id === current && item.platform === platform) ? current : "");
             }}><SelectTrigger aria-label={t(($) => $.search_optimization.observations.publication)}><SelectValue /></SelectTrigger><SelectContent>{recordItems.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select>
           </SettingsRow>
           <SettingsRow label={t(($) => $.search_optimization.observations.account)}>

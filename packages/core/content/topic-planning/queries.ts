@@ -172,7 +172,10 @@ export function useContentBriefsForTopics(workspaceId: string, topicCardIds: rea
     })),
   });
   return {
-    data: results.flatMap((result, index) => (result.data ?? []).map((brief) => ({ ...brief, topicCardId: uniqueIds[index] }))),
+    data: results.flatMap((result, index) => {
+      const topicCardId = uniqueIds[index];
+      return topicCardId ? (result.data ?? []).map((brief) => ({ ...brief, topicCardId })) : [];
+    }),
     isPending: results.some((result) => result.isPending),
     isError: results.some((result) => result.isError),
     error: results.find((result) => result.isError)?.error ?? null,

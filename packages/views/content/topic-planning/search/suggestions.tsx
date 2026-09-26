@@ -7,6 +7,7 @@ import {
   useCompareSearchSuggestions, useCreateSearchSuggestion, useReviseSearchSuggestion,
   useRetrySearchSuggestionDecision, useSearchSuggestion, useSearchSuggestions,
   authorKindDisplay, suggestionAspectDisplay, suggestionFailureDisplay, suggestionStateDisplay,
+  validateSearchSuggestionEvidence,
   type SearchSuggestion, type SearchSuggestionContentInput,
 } from "@multica/core/content/topic-planning";
 import { IDLE_SUGGESTION_DRAFT, beginSuggestionCreate, beginSuggestionRevision, suggestionCreateRequest, suggestionDraftContextMatches, suggestionRevisionRequest, updateSuggestionDraft, type SuggestionDraftSession } from "@multica/core/content/topic-planning";
@@ -47,6 +48,15 @@ function versionLabel(version: VersionOption) {
   return `#${version.revision} · ${version.createdAt || version.versionId}`;
 }
 
+function SuggestionDiff({ suggestion, t }: { suggestion: SearchSuggestion; t: Translate }) {
+  if (!suggestion.diff) return <span className="text-caption text-muted-foreground">{t(($) => $.search_optimization.unknown)}</span>;
+  return <div className="space-y-1 whitespace-pre-wrap text-caption">{suggestion.diff.ops.map((op, index) => (
+    <div key={`${op.op}-${index}`}>
+      {op.op === "equal" ? <span>{op.text}</span> : op.op === "insert" ? <ins className="underline decoration-current">+ {op.text}</ins> : <del className="line-through">− {op.text}</del>}
+    </div>
+  ))}</div>;
+}
+
 function draftFromSuggestion(item: SearchSuggestion): Draft {
   return {
     target_question: item.targetQuestion,
@@ -73,6 +83,8 @@ export function SearchSuggestionsSection({
   const artifact = artifacts.find((item) => item.workId === workId && item.artifactId === artifactId) ?? null;
   const versionList = versions.filter((item) => item.workId === workId && item.artifactId === artifactId);
   const latest = versionList[0] ?? null;
+  const creating = session.mode === "create";
+  const pinnedCreateBase = creating ? versions.find((item) => item.workId === session.workId && item.artifactId === session.artifactId && item.versionId === session.baseVersionId) ?? null : null;
   const suggestions = useSearchSuggestions(wsId, { workId, artifactId, themeId, state: state || undefined });
   const selectedList = (suggestions.data ?? []).find((item) => item.suggestionId === selectedId) ?? null;
   const detail = useSearchSuggestion(wsId, selectedId);
@@ -121,6 +133,7 @@ export function SearchSuggestionsSection({
   function updateDraft(next: Draft) { setSession((current) => updateSuggestionDraft(current, next)); }
   function onSave() {
     if (!suggestionDraftContextMatches(session, { workspaceId: wsId, workId, artifactId })) return;
+    if (sourcesLoading || sourcesError || !evidenceValidation.valid) return;
     if (session.mode === "revise") {
       const request = suggestionRevisionRequest(session);
       if (!request) return;
@@ -148,7 +161,12 @@ export function SearchSuggestionsSection({
   const artifactItems = artifacts.filter((item) => item.workId === workId).map((item) => ({ value: item.artifactId, label: item.title || item.artifactId }));
   const themeItems = themes.filter((item) => !item.voided).map((item) => ({ value: item.themeId, label: item.name }));
   const stateItems = ["", "open", "adopted", "adopt_failed", "adopt_unrecorded", "abandoned"].map((value) => ({ value, label: value ? stateText(t, value) : t(($) => $.search_optimization.all) }));
-  const sourceItems = sources;
+  const evidenceValidation = validateSearchSuggestionEvidence(draft.evidence_source_ids, sources.map((item) => item.id));
+  const staleEvidenceIds = !sourcesLoading && !sourcesError ? evidenceValidation.missingEvidenceSourceIds : [];
+  const sourceItems = [
+    ...sources,
+    ...staleEvidenceIds.map((id) => ({ id, label: `${id} · ${t(($) => $.search_optimization.themes.unavailableReference)}` })),
+  ];
   const dependencyError = worksError || artifactsError || versionsError || themesError || sourcesError;
   const selectedForCompare = compareIds.length >= 2 && compareIds.length <= 4;
   const editing = session.mode !== "idle";
@@ -190,13 +208,15 @@ export function SearchSuggestionsSection({
         <SettingsRow label={t(($) => $.search_optimization.suggestions.history)} description={selected ? `#${selected.revision} · ${selected.createdAt} · ${t(($) => $.search_optimization.suggestions.historyCurrentOnly)}` : t(($) => $.search_optimization.empty)}>
           <div className="flex flex-wrap items-center gap-3">
             {selected ? <><span className="text-caption text-muted-foreground">{t(($) => $.search_optimization.values.author[authorKindDisplay(selected.authorKind)])}</span>{session.mode === "idle" ? <Button variant="outline" disabled={!selected.state || selected.state !== "open"} onClick={beginRevision}>{t(($) => $.search_optimization.suggestions.revise)}</Button> : null}</> : null}
-            {session.mode === "idle" ? <Button variant="outline" disabled={pending || !work || !artifact || !latest || !themeId || themesLoading || themesError} onClick={beginCreate}>{t(($) => $.search_optimization.suggestions.create)}</Button> : <><Button variant="outline" disabled={pending} onClick={() => setSession(IDLE_SUGGESTION_DRAFT)}>{t(($) => $.cancel)}</Button><Button disabled={pending || !draft.target_question.trim() || draft.aspects.length === 0 || !draft.proposed_body.trim() || themesLoading || themesError || (session.mode === "create" && !themes.some((item) => item.themeId === session.themeId && !item.voided))} onClick={onSave}>{t(($) => $.search_optimization.save)}</Button></>}
+            {session.mode === "idle" ? <Button variant="outline" disabled={pending || !work || !artifact || !latest || !themeId || themesLoading || themesError} onClick={beginCreate}>{t(($) => $.search_optimization.suggestions.create)}</Button> : <><Button variant="outline" disabled={pending} onClick={() => setSession(IDLE_SUGGESTION_DRAFT)}>{t(($) => $.cancel)}</Button><Button disabled={pending || !draft.target_question.trim() || draft.aspects.length === 0 || !draft.proposed_body.trim() || themesLoading || themesError || sourcesLoading || sourcesError || !evidenceValidation.valid || (session.mode === "create" && !themes.some((item) => item.themeId === session.themeId && !item.voided))} onClick={onSave}>{t(($) => $.search_optimization.save)}</Button></>}
           </div>
         </SettingsRow>
+        {sourcesError ? <SettingsRow label={t(($) => $.search_optimization.suggestions.evidence)}><span role="alert" className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loadFailed)}</span></SettingsRow> : !sourcesLoading && !evidenceValidation.valid ? <SettingsRow label={t(($) => $.search_optimization.suggestions.evidence)}><span role="alert" className="text-caption text-muted-foreground">{t(($) => $.search_optimization.themes.unavailableReference)} · {staleEvidenceIds.join(", ")}</span></SettingsRow> : null}
+        {session.mode === "create" ? <SettingsRow label={t(($) => $.search_optimization.suggestions.baseVersion)} description={session.baseVersionId}><div className="max-h-56 overflow-auto whitespace-pre-wrap text-caption text-muted-foreground">{versionsLoading ? t(($) => $.search_optimization.loading) : versionsError ? t(($) => $.search_optimization.loadFailed) : pinnedCreateBase?.body ?? t(($) => $.search_optimization.unknown)}</div></SettingsRow> : null}
         {selected ? <>
           <SettingsRow label={t(($) => $.search_optimization.suggestions.state)} description={stateText(t, selected.state)}><span className="text-caption text-muted-foreground">{selected.failureCode ? t(($) => $.search_optimization.values.failure[suggestionFailureDisplay(selected.failureCode)]) : ""}</span></SettingsRow>
           <SettingsRow label={t(($) => $.search_optimization.suggestions.baseVersion)} description={selected.baseVersionId}><div className="max-h-56 overflow-auto whitespace-pre-wrap text-caption text-muted-foreground">{versionsLoading ? t(($) => $.search_optimization.loading) : versionsError ? t(($) => $.search_optimization.loadFailed) : baseVersion?.body ?? t(($) => $.search_optimization.unknown)}</div></SettingsRow>
-          <SettingsRow label={t(($) => $.search_optimization.suggestions.diff)}><div className="space-y-2">{selected.diff?.ops.map((op, index) => <div key={`${op.op}-${index}`} className="whitespace-pre-wrap text-caption text-muted-foreground">{op.op === "equal" ? "  " : op.op === "insert" ? "+ " : "− "}{op.text}</div>) ?? <span className="text-caption text-muted-foreground">{t(($) => $.search_optimization.unknown)}</span>}</div></SettingsRow>
+          <SettingsRow label={t(($) => $.search_optimization.suggestions.diff)}><SuggestionDiff suggestion={selected} t={t} /></SettingsRow>
           <SettingsRow label={t(($) => $.search_optimization.suggestions.diff)} description={`${t(($) => $.search_optimization.suggestions.inserted, { count: selected.diff?.insertedLines ?? 0 })} · ${t(($) => $.search_optimization.suggestions.deleted, { count: selected.diff?.deletedLines ?? 0 })}`}><span className="text-caption text-muted-foreground">{selected.themeChanged ? t(($) => $.search_optimization.suggestions.themeChanged) : ""}</span></SettingsRow>
           <SettingsRow label={t(($) => $.search_optimization.suggestions.decisionNote)} size="text"><Textarea rows={2} value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} /></SettingsRow>
           {selected.state === "adopt_unrecorded" ? <SettingsRow label={t(($) => $.search_optimization.suggestions.adoptUnrecorded)}><Button disabled={pending || !selected.decision?.decisionId} onClick={onRetry}>{t(($) => $.search_optimization.suggestions.retry)}</Button></SettingsRow> : null}
@@ -209,7 +229,15 @@ export function SearchSuggestionsSection({
           <Button variant="outline" disabled={!selectedForCompare} onClick={() => void comparison.refetch()}>{t(($) => $.search_optimization.suggestions.compare)}</Button>
         </SettingsRow>
         {comparison.isError ? <SettingsRow label={t(($) => $.search_optimization.suggestions.compare)}><span role="alert" className="text-caption text-muted-foreground">{t(($) => $.search_optimization.loadFailed)}</span></SettingsRow> : comparison.isPending && selectedForCompare ? <SettingsRow label={t(($) => $.search_optimization.loading)}><span className="text-caption text-muted-foreground" /></SettingsRow> : comparison.data ? <SettingsRow label={comparison.data.sameBase ? t(($) => $.search_optimization.suggestions.sameBase) : t(($) => $.search_optimization.suggestions.differentBase)}>
-          <div className="space-y-4">{comparison.data.suggestions.map((item) => <div key={item.suggestionId} className="space-y-2"><div className="text-body">{item.targetQuestion} · {item.baseVersionId} · {stateText(t, item.state)}</div><div className="max-h-48 overflow-auto whitespace-pre-wrap text-caption text-muted-foreground">{item.proposedBody}</div></div>)}</div>
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">{comparison.data.suggestions.map((item) => <article key={item.suggestionId} className="min-w-0 space-y-3 rounded border p-3">
+            <h3 className="text-body">{item.targetQuestion}</h3>
+            <p className="text-caption text-muted-foreground">{item.baseVersionId} · {stateText(t, item.state)}</p>
+            <div><div className="font-medium text-caption">{t(($) => $.search_optimization.suggestions.aspects)}</div><div className="text-caption text-muted-foreground">{item.aspects.map((aspect) => aspectText(t, aspect)).join(" · ")}</div></div>
+            <div><div className="font-medium text-caption">{t(($) => $.search_optimization.suggestions.rationale)}</div><p className="whitespace-pre-wrap text-caption text-muted-foreground">{item.rationale}</p></div>
+            <div><div className="font-medium text-caption">{t(($) => $.search_optimization.suggestions.evidence)}</div><p className="break-all text-caption text-muted-foreground">{item.evidenceSourceIds.map((id) => sources.find((source) => source.id === id)?.label ?? id).join(" · ") || t(($) => $.search_optimization.none)}</p></div>
+            <div><div className="font-medium text-caption">{t(($) => $.search_optimization.suggestions.body)}</div><div className="max-h-48 overflow-auto whitespace-pre-wrap text-caption text-muted-foreground">{item.proposedBody}</div></div>
+            <div><div className="font-medium text-caption">{t(($) => $.search_optimization.suggestions.diff)} · {item.baseVersionId}</div><SuggestionDiff suggestion={item} t={t} /></div>
+          </article>)}</div>
         </SettingsRow> : null}
         {mutationError ? <SettingsRow label={t(($) => $.search_optimization.saveFailed)}><span role="alert" className="text-caption text-muted-foreground">{showConflict ? t(($) => $.search_optimization.suggestions.errorConflict) : t(($) => $.search_optimization.saveFailed)}</span></SettingsRow> : null}
         <SettingsRow label={t(($) => $.search_optimization.noAi)}><span className="text-caption text-muted-foreground">{t(($) => $.search_optimization.fixedGuidance)} {t(($) => $.search_optimization["optimization.no_ranking_promise"])}</span></SettingsRow>
