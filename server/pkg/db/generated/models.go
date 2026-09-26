@@ -1173,6 +1173,47 @@ type ContentSearchRankObservationRevision struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentSearchSuggestionDecision struct {
+	WorkspaceID        string             `json:"workspace_id"`
+	DecisionID         string             `json:"decision_id"`
+	SuggestionID       string             `json:"suggestion_id"`
+	SuggestionRevision int32              `json:"suggestion_revision"`
+	Decision           string             `json:"decision"`
+	Note               string             `json:"note"`
+	DecidedBy          string             `json:"decided_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentSearchSuggestionEffect struct {
+	WorkspaceID string             `json:"workspace_id"`
+	EffectID    string             `json:"effect_id"`
+	DecisionID  string             `json:"decision_id"`
+	Outcome     string             `json:"outcome"`
+	VersionID   string             `json:"version_id"`
+	FailureCode string             `json:"failure_code"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentSearchSuggestionRevision struct {
+	WorkspaceID       string             `json:"workspace_id"`
+	SuggestionID      string             `json:"suggestion_id"`
+	Revision          int32              `json:"revision"`
+	Voided            bool               `json:"voided"`
+	WorkID            string             `json:"work_id"`
+	ArtifactID        string             `json:"artifact_id"`
+	BaseVersionID     string             `json:"base_version_id"`
+	ThemeID           string             `json:"theme_id"`
+	ThemeRevision     int32              `json:"theme_revision"`
+	TargetQuestion    string             `json:"target_question"`
+	Aspects           []string           `json:"aspects"`
+	Rationale         string             `json:"rationale"`
+	EvidenceSourceIds []byte             `json:"evidence_source_ids"`
+	ProposedBody      string             `json:"proposed_body"`
+	AuthorKind        string             `json:"author_kind"`
+	RecordedBy        string             `json:"recorded_by"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContentSearchThemeRevision struct {
 	WorkspaceID      string             `json:"workspace_id"`
 	ThemeID          string             `json:"theme_id"`
