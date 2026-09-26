@@ -1,9 +1,12 @@
 # Issue #288 · 036 T091 搜索主题至发布观测服务端闭环
 
-日期：2026-09-27  
-仓库：`https://github.com/899ms/loretide`  
-基线：`18882b61f9ae940aff4f2df44b3085b4f00af6c0`（`app-main`）  
-分支：`codex/036-search-lifecycle`  
+日期：2026-09-27
+
+仓库：`https://github.com/899ms/loretide`
+
+基线：`18882b61f9ae940aff4f2df44b3085b4f00af6c0`（`app-main`）
+
+分支：`codex/036-search-lifecycle`
 关联：GitHub Issue #288
 
 ## 范围与权限边界
