@@ -128,6 +128,7 @@ type NavKey =
   | "topics"
   | "marketingNodes"
   | "roiReview"
+  | "operatingDiagnosis"
   | "accounts"
   | "contentDiagnostics";
 
@@ -151,6 +152,7 @@ type NavLabelKey =
   | "topics"
   | "marketing_nodes"
   | "roi_review"
+  | "operating_diagnosis"
   | "accounts"
   | "content_diagnostics";
 
@@ -185,6 +187,7 @@ const contentNav: { key: NavKey; labelKey: NavLabelKey }[] = [
   { key: "topics", labelKey: "topics" },
   { key: "marketingNodes", labelKey: "marketing_nodes" },
   { key: "roiReview", labelKey: "roi_review" },
+  { key: "operatingDiagnosis", labelKey: "operating_diagnosis" },
   { key: "accounts", labelKey: "accounts" },
   { key: "contentDiagnostics", labelKey: "content_diagnostics" },
 ];

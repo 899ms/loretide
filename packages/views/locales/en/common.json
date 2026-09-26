@@ -1843,5 +1843,14 @@
       "aiState": "Status",
       "aiPending": "Pending: not available (the executor is disabled). Nothing below was generated."
     }
+  },
+  "contentOperatingDiagnosis": {
+    "title": "Operating diagnosis",
+    "description": "Review manual operating records by account or brand. Results stay as the server stored them; missing data is never treated as zero.",
+    "blocks": { "generate": "Generate", "reports": "Reports", "marks": "Work marks", "decisions": "Judgements and suggestions", "followUp": "Follow-up" },
+    "scope": "Scope", "account": "Account", "brand": "Brand", "accounts": "Accounts", "window": "Window", "comparisonWindow": "Comparison window", "timezone": "Brand timezone", "dimensions": "Dimensions", "roiReference": "ROI reference", "none": "None", "titleLabel": "Report title", "preview": "Preview", "generate": "Generate report", "previewHint": "Preview is not saved.",
+    "reports": "Generated reports", "versions": "Versions", "empty": "No records yet.", "status": "Status", "notComputable": "Not computable", "unknown": "Unknown", "reason": "Reason", "facts": "Facts", "gaps": "Missing records", "rules": "Rules and limits", "refs": "Evidence references", "inputsChanged": "Inputs changed after this version", "work": "Work", "mark": "Mark", "markKind": "Mark kind", "markItem": "Item", "verdict": "Verdict", "note": "Note", "saveMark": "Record mark",
+    "judgement": "Judgement", "suggestion": "Suggestion", "body": "Text", "targetKind": "Target", "saveJudgement": "Record judgement", "saveSuggestion": "Record suggestion", "adopt": "Adopt", "reject": "Reject", "retry": "Retry", "confirm": "Confirm", "dismiss": "Dismiss", "todos": "Supplemental todos", "proposals": "Profile proposals", "createTodo": "Create todo from gap", "manualOnly": "Manual records only", "pendingData": "Pending data; no AI conclusion was generated.", "loading": "Loading…", "loadFailed": "Could not load. Please refresh later.", "saving": "Saving…", "saved": "Saved", "failed": "Could not save.",
+    "sections": { "account": "Account", "unknown_account": "Unresolved account", "brand": "Brand" }, "dimension": { "consistency": "Consistency", "coverage": "Coverage", "cadence": "Cadence", "performance": "Performance", "audience_feedback": "Audience feedback", "execution_flow": "Execution flow" }, "reasons": { "no_data": "No data", "missing_config": "Missing configuration", "missing_comparison_window": "Missing comparison window", "missing_observation_window": "Missing observation window", "no_delivery_channel": "No delivery channel" }, "rulesMap": { "common.unknown_is_not_zero": "Unknown is not zero", "common.no_cross_platform_ranking": "No cross-platform ranking", "common.no_score": "No score", "common.window_in_brand_timezone": "Window is read in the brand timezone", "performance.difference_is_not_cause": "A difference is not a cause" }
   }
 }

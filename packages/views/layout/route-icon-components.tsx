@@ -25,6 +25,7 @@ import {
   Lightbulb,
   CalendarRange,
   Receipt,
+  Stethoscope,
   AtSign,
   Activity,
   type LucideIcon,
@@ -65,6 +66,7 @@ export const ROUTE_ICON_COMPONENTS: Record<RouteIconName, LucideIcon> = {
   Lightbulb,
   CalendarRange,
   Receipt,
+  Stethoscope,
   AtSign,
   Activity,
 };
