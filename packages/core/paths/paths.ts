@@ -81,6 +81,7 @@ function workspaceScoped(slug: string) {
     topics: () => `${ws}/topics`,
     marketingNodes: () => `${ws}/marketing-nodes`,
     roiReview: () => `${ws}/roi-review`,
+    operatingDiagnosis: () => `${ws}/operating-diagnosis`,
     accounts: () => `${ws}/accounts`,
     historicalImport: () => `${ws}/historical-import`,
     contentDiagnostics: () => `${ws}/diagnostics`,

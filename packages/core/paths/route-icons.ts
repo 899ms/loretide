@@ -42,6 +42,7 @@ export type RouteIconName =
   | "Lightbulb"
   | "CalendarRange"
   | "Receipt"
+  | "Stethoscope"
   | "AtSign"
   | "Activity"
   | "File"
@@ -72,6 +73,7 @@ export type NavLabelKey =
   | "topics"
   | "marketing_nodes"
   | "roi_review"
+  | "operating_diagnosis"
   | "accounts"
   | "historical_import"
   | "content_diagnostics";
@@ -95,6 +97,7 @@ export type WorkspacePageKey =
   | "topics"
   | "marketingNodes"
   | "roiReview"
+  | "operatingDiagnosis"
   | "accounts"
   | "historicalImport"
   | "contentDiagnostics";
@@ -134,6 +137,7 @@ export const WORKSPACE_PAGES: Record<WorkspacePageKey, WorkspacePage> = {
   topics: { segment: "topics", icon: "Lightbulb", navKey: "topics" },
   marketingNodes: { segment: "marketing-nodes", icon: "CalendarRange", navKey: "marketing_nodes" },
   roiReview: { segment: "roi-review", icon: "Receipt", navKey: "roi_review" },
+  operatingDiagnosis: { segment: "operating-diagnosis", icon: "Stethoscope", navKey: "operating_diagnosis" },
   accounts: { segment: "accounts", icon: "AtSign", navKey: "accounts" },
   historicalImport: { segment: "historical-import", icon: "FileArchive", navKey: "historical_import" },
   contentDiagnostics: {

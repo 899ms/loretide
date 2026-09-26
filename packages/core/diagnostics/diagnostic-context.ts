@@ -89,6 +89,7 @@ const WORKSPACE_ROUTES: readonly RoutePattern[] = [
   ["topics"],
   ["marketing-nodes"],
   ["roi-review"],
+  ["operating-diagnosis"],
   ["accounts"],
   ["historical-import"],
   ["diagnostics"],

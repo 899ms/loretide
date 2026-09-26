@@ -1094,3 +1094,4 @@ function publicationStatusLabel(t: Translate, status: string): string {
 // Cost, lead, deal and ROI review (specs/034 PR 5): a page of its own,
 // exported from the module it belongs to.
 export { RoiReviewPage, type RoiOption, type RoiReviewPageProps } from "./roi/page";
+export { OperatingDiagnosisPage, type OperatingDiagnosisOption, type OperatingDiagnosisPageProps, type OperatingDiagnosisWork } from "./opdiag/page";

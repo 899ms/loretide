@@ -110,6 +110,7 @@ const PAGE_KEYWORDS: Record<WorkspacePageKey, string[]> = {
   topics: ["topics", "ideas", "选题", "题目"],
   marketingNodes: ["marketing", "nodes", "holidays", "campaigns", "calendar", "营销节点", "节日", "节点"],
   roiReview: ["roi", "roas", "cost", "leads", "deals", "review", "复盘", "成本", "线索", "成交"],
+  operatingDiagnosis: ["operating", "diagnosis", "metrics", "经营", "诊断", "指标"],
   accounts: ["accounts", "brand", "persona", "账号", "品牌"],
   contentDiagnostics: ["diagnostics", "content", "traces", "诊断", "内容"],
 };
