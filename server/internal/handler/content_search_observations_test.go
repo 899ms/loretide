@@ -480,8 +480,8 @@ func TestContentSearchLifecycleFromThemeToPublicationObservation(t *testing.T) {
 		"channel":"xiaohongshu","status":"reported_published","declared_by":"运营人员",
 		"page_url_or_content_id":"https://example.invalid/search-lifecycle","version_match":"matched"}`,
 			artifactID, deliveryID)), "publication_record_id")
-	if publication["version_id"] != version2 || publication["work_id"] != workID {
-		t.Fatalf("publication = %v, want work %s and adopted version %s", publication, workID, version2)
+	if publication["version_id"] != "" || publication["work_id"] != workID {
+		t.Fatalf("publication = %v, want work %s and no redundant direct version pointer", publication, workID)
 	}
 	resolvedWork, resolvedArtifact, resolvedVersion, err := (feedbackPublications{db: h.DB}).Resolve(
 		t.Context(), fx.wsID, publicationID)

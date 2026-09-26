@@ -22,7 +22,7 @@ Draft PR：https://github.com/899ms/loretide/pull/290（base `app-main`；主控
 
 | 文件 | 与任务的关联 / 用途 |
 | --- | --- |
-| `server/internal/handler/content_search_observations_test.go` | 新增 `TestContentSearchLifecycleFromThemeToPublicationObservation`。使用真实 handler 与隔离数据库 fixture，验证搜索主题关联账号/选题卡；创建作品、文档与 v1；采用建议后形成 v2；对 v2 提交并批准审核；创建交付、人工登记发布；登记并读取搜索曝光及关联主题/发布记录的排名观察。检查发布解析器仍解析到 v2，观察值/来源正确，非成员读取被拒绝。无跨模块 fake、无生产实现修改。 |
+| `server/internal/handler/content_search_observations_test.go` | 新增 `TestContentSearchLifecycleFromThemeToPublicationObservation`。使用真实 handler 与隔离数据库 fixture，验证搜索主题关联账号/选题卡；创建作品、文档与 v1；采用建议后形成 v2；对 v2 提交并批准审核；创建交付、人工登记发布；登记并读取搜索曝光及关联主题/发布记录的排名观察。普通交付的发布记录按契约不重复写直接 `version_id`，测试通过发布记录解析适配器沿 delivery task → review request 强断言最终解析到 v2；观察值/来源正确，非成员读取被拒绝。无跨模块 fake、无生产实现修改。 |
 | `records/issue-288-search-lifecycle.md` | 本次对话记录：固定仓库与基线、范围、证据、未执行事项及关联文件。 |
 
 ## 已实施、验证与待办
@@ -30,6 +30,7 @@ Draft PR：https://github.com/899ms/loretide/pull/290（base `app-main`；主控
 - 已实施：新增真实 handler/DB 链路用例；测试清理按关联表顺序删除本次 fixture 数据。
 - 已验证：`gofmt`；`go test -c ./internal/handler` 成功（仅编译测试二进制，不执行测试）；`git diff --check` 成功。
 - 自动检查：PR #290 的 GitHub `boundaries` 检查已启动；记录时仍在运行，未宣称通过。
+- 首轮远程 CI 曾因测试错误期待普通发布记录直接返回 `version_id` 而失败。按 `review-delivery/publication.go` 的契约修正为直接字段为空、继续强断言 `feedbackPublications.Resolve` 经交付/审核链解析到 v2；未改生产实现。修订后的 CI 待重新运行。
 - 未验证：T091 的实际数据库断言尚未执行；不能将编译成功或 Skip 当作行为通过。等待主控在隔离 CI/数据库串行执行该用例。
 - 未执行：本机数据库/迁移/服务、浏览器 UI 与 computer use 验收。UI 项按用户豁免记录；远程数据库结果待回填。
 - 限制：仅静态/handler 接口层服务端闭环证据，不证明真实执行器运行时越权或浏览器流程验收（与 LT-004 的边界一致）。
