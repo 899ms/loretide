@@ -376,6 +376,170 @@ func TestContentSearchRankObservationRoundTrip(t *testing.T) {
 	}
 }
 
+// T091 / SC-014 / D14-V15: one real-handler path from a manual search theme,
+// through suggestion adoption and a fresh human review, to a publication
+// record and the two search observations. The publication resolver must still
+// point at the adopted v2; metrics and observations remain attached to their
+// actual publication/theme, not to a fabricated cross-module port.
+func TestContentSearchLifecycleFromThemeToPublicationObservation(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	fx := searchWorkspace(t, "search-lifecycle")
+	h := reviewHandler(t)
+
+	// These are all real records made via their HTTP handlers. Cleanup is local
+	// to this integration fixture and runs before searchWorkspace removes its
+	// topic card, account, and workspace.
+	t.Cleanup(func() {
+		ctx := context.Background()
+		for _, statement := range []string{
+			`DELETE FROM content_search_metric WHERE workspace_id=$1`,
+			`DELETE FROM content_search_rank_observation_revision WHERE workspace_id=$1`,
+			`DELETE FROM content_publication_record WHERE workspace_id=$1`,
+			`DELETE FROM content_delivery_task WHERE workspace_id=$1`,
+			`DELETE FROM content_review_transition WHERE workspace_id=$1`,
+			`DELETE FROM content_review_request WHERE workspace_id=$1`,
+			`DELETE FROM content_search_suggestion_effect WHERE workspace_id=$1`,
+			`DELETE FROM content_search_suggestion_decision WHERE workspace_id=$1`,
+			`DELETE FROM content_search_suggestion_revision WHERE workspace_id=$1`,
+			`DELETE FROM content_artifact_version WHERE workspace_id=$1`,
+			`DELETE FROM content_artifact WHERE workspace_id=$1`,
+			`DELETE FROM content_work WHERE workspace_id=$1`,
+		} {
+			_, _ = testPool.Exec(ctx, statement, fx.wsID)
+		}
+	})
+
+	themeID, theme := roiCreated(t, roiCall(t, h.CreateContentSearchTheme, fx.wsID, http.MethodPost,
+		"/api/content-search/themes", searchThemeBody(fx, "")), "theme_id")
+	topicCardIDs, ok := theme["topic_card_ids"].([]any)
+	if !ok || theme["account_id"] != fx.xhs || len(topicCardIDs) != 1 || topicCardIDs[0] != fx.card {
+		t.Fatalf("theme references = %v, want fixture account %s and topic card %s", theme, fx.xhs, fx.card)
+	}
+
+	workID, _ := roiCreated(t, roiCall(t, h.CreateContentWork, fx.wsID, http.MethodPost,
+		"/api/content-works", fmt.Sprintf(`{"topic_card_id":%q,"title":"羊绒护理指南"}`, fx.card)), "work_id")
+	artifactID, _ := roiCreated(t, roiCall(t, h.CreateContentArtifact, fx.wsID, http.MethodPost,
+		"/api/content-works/"+workID+"/artifacts", `{"kind":"channel_draft","title":"小红书稿","position":1}`,
+		"id", workID), "artifact_id")
+	roiCall(t, h.PatchContentArtifact, fx.wsID, http.MethodPatch, "/api/content-works/"+workID+"/artifacts/"+artifactID,
+		fmt.Sprintf(`{"draft_body":%q}`, suggestionBaseBody), "id", workID, "artifactId", artifactID).Want(http.StatusOK)
+	version1, versionOne := roiCreated(t, roiCall(t, h.SaveContentArtifactVersion, fx.wsID, http.MethodPost,
+		"/api/content-works/"+workID+"/artifacts/"+artifactID+"/versions", "", "id", workID, "artifactId", artifactID), "version_id")
+	if versionOne["revision"] != float64(1) || versionOne["body"] != suggestionBaseBody {
+		t.Fatalf("initial version = %v", versionOne)
+	}
+
+	world := suggestionWorld{searchFixture: fx, work: workID, artifact: artifactID, version: version1, themeID: themeID}
+	suggestionID, _ := roiCreated(t, roiCall(t, h.CreateContentSearchSuggestion, fx.wsID, http.MethodPost,
+		"/api/content-search/suggestions", suggestionBody(world, "")), "suggestion_id")
+	adopted := roiCall(t, h.DecideContentSearchSuggestion, fx.wsID, http.MethodPost,
+		"/api/content-search/suggestions/"+suggestionID+"/decisions", `{"decision":"adopt","revision":1}`,
+		"suggestionId", suggestionID).Want(http.StatusCreated)
+	var adoption struct {
+		Effects []struct {
+			Outcome   string `json:"outcome"`
+			VersionID string `json:"version_id"`
+		} `json:"effects"`
+	}
+	adopted.JSON(&adoption)
+	if len(adoption.Effects) != 1 || adoption.Effects[0].Outcome != "done" || adoption.Effects[0].VersionID == "" {
+		t.Fatalf("adoption effects = %+v", adoption.Effects)
+	}
+	version2 := adoption.Effects[0].VersionID
+	var revision2 int
+	var body2 string
+	if err := testPool.QueryRow(t.Context(), `SELECT revision, body FROM content_artifact_version
+		WHERE workspace_id=$1 AND artifact_id=$2 AND version_id=$3`, fx.wsID, artifactID, version2).
+		Scan(&revision2, &body2); err != nil {
+		t.Fatal(err)
+	}
+	if revision2 != 2 || body2 != "能机洗吗？不建议，只能用羊毛程序。\n平铺晾干。" {
+		t.Fatalf("adopted version = revision %d, body %q", revision2, body2)
+	}
+
+	var reviewBody struct {
+		ReviewRequestID string `json:"review_request_id"`
+		Status          string `json:"status"`
+		VersionID       string `json:"version_id"`
+	}
+	reviewPost(t, h.SubmitContentReview, fx.wsID, "/api/content-reviews",
+		fmt.Sprintf(`{"artifact_id":%q,"version_id":%q,"account_id":%q,"channel":"xiaohongshu"}`,
+			artifactID, version2, fx.xhs)).Want(http.StatusCreated).JSON(&reviewBody)
+	if reviewBody.ReviewRequestID == "" || reviewBody.Status != "pending" || reviewBody.VersionID != version2 {
+		t.Fatalf("submitted review = %+v", reviewBody)
+	}
+	decide(t, fx.wsID, reviewBody.ReviewRequestID, "approved", "第 2 版人工审核通过")
+	deliveryID := createDelivery(t, fx.wsID, artifactID, reviewBody.ReviewRequestID)
+	advance(t, fx.wsID, deliveryID, `{"status":"ready"}`, http.StatusOK)
+	advance(t, fx.wsID, deliveryID, `{"status":"handed_off","handoff_method":"export"}`, http.StatusOK)
+
+	publicationID, publication := roiCreated(t, reviewPost(t, h.RecordContentPublication, fx.wsID,
+		"/api/content-publications", fmt.Sprintf(`{"artifact_id":%q,"delivery_task_id":%q,
+		"channel":"xiaohongshu","status":"reported_published","declared_by":"运营人员",
+		"page_url_or_content_id":"https://example.invalid/search-lifecycle","version_match":"matched"}`,
+			artifactID, deliveryID)), "publication_record_id")
+	if publication["version_id"] != "" || publication["work_id"] != workID {
+		t.Fatalf("publication = %v, want work %s and no redundant direct version pointer", publication, workID)
+	}
+	resolvedWork, resolvedArtifact, resolvedVersion, err := (feedbackPublications{db: h.DB}).Resolve(
+		t.Context(), fx.wsID, publicationID)
+	if err != nil || resolvedWork != workID || resolvedArtifact != artifactID || resolvedVersion != version2 {
+		t.Fatalf("publication resolver = (%q, %q, %q, %v), want (%q, %q, %q)",
+			resolvedWork, resolvedArtifact, resolvedVersion, err, workID, artifactID, version2)
+	}
+
+	_, metric := roiCreated(t, roiCall(t, h.RecordContentSearchMetric, fx.wsID, http.MethodPost,
+		"/api/content-search/metrics", searchMetricBody(publicationID, "1240", "")), "search_metric_id")
+	if metric["publication_record_id"] != publicationID || metric["metric"] != "search_impression" ||
+		metric["value"] != float64(1240) || metric["data_origin"] != "manual_only" {
+		t.Fatalf("search metric = %v", metric)
+	}
+	_, observation := roiCreated(t, roiCall(t, h.RecordContentSearchRankObservation, fx.wsID, http.MethodPost,
+		"/api/content-search/rank-observations", strings.NewReplacer(
+			`"theme_id":""`, fmt.Sprintf(`"theme_id":%q`, themeID),
+			`"publication_record_id":""`, fmt.Sprintf(`"publication_record_id":%q`, publicationID),
+			`"account_id":""`, fmt.Sprintf(`"account_id":%q`, fx.xhs),
+		).Replace(rankObservationBody("", time.Now().UTC().Add(-time.Hour).Format(time.RFC3339), ""))), "observation_id")
+	if observation["theme_id"] != themeID || observation["publication_record_id"] != publicationID ||
+		observation["account_id"] != fx.xhs || observation["rule"] != "rank.single_observation" ||
+		observation["data_origin"] != "manual_only" || observation["result_kind"] != "position" ||
+		observation["position"] != float64(7) {
+		t.Fatalf("rank observation = %v", observation)
+	}
+
+	var observations struct {
+		Observations []map[string]any `json:"observations"`
+	}
+	roiCall(t, h.ListContentSearchRankObservations, fx.wsID, http.MethodGet,
+		"/api/content-search/rank-observations?theme_id="+themeID, "").Want(http.StatusOK).JSON(&observations)
+	if len(observations.Observations) != 1 || observations.Observations[0]["observation_id"] != observation["observation_id"] {
+		t.Fatalf("observations by theme = %v", observations.Observations)
+	}
+	var metrics struct {
+		Metrics []map[string]any `json:"metrics"`
+	}
+	roiCall(t, h.ListContentSearchMetrics, fx.wsID, http.MethodGet,
+		"/api/content-search/metrics?publication_record_id="+publicationID, "").Want(http.StatusOK).JSON(&metrics)
+	if len(metrics.Metrics) != 1 || metrics.Metrics[0]["search_metric_id"] != metric["search_metric_id"] ||
+		metrics.Metrics[0]["publication_record_id"] != publicationID || metrics.Metrics[0]["value"] != float64(1240) {
+		t.Fatalf("metrics by publication = %v", metrics.Metrics)
+	}
+	outsiderRequest := testutil.WithHeaders(testutil.JSONRequest(http.MethodGet,
+		"/api/content-search/metrics?publication_record_id="+publicationID, nil),
+		"X-User-ID", "not-a-member", "X-Workspace-ID", fx.wsID)
+	testutil.Call(t, h.ListContentSearchMetrics, outsiderRequest).Want(http.StatusNotFound)
+	var reviewVersion, reviewStatus string
+	if err := testPool.QueryRow(t.Context(), `SELECT version_id, status FROM content_review_request WHERE review_request_id=$1`,
+		reviewBody.ReviewRequestID).Scan(&reviewVersion, &reviewStatus); err != nil {
+		t.Fatal(err)
+	}
+	if reviewVersion != version2 || reviewStatus != "approved" {
+		t.Fatalf("approved review is (%s, %s), want adopted version %s approved", reviewVersion, reviewStatus, version2)
+	}
+}
+
 // T089 / contract §7.1 / FR-100: a non-member and an observation that is not
 // here - missing, or another brand's - answer byte for byte alike on every
 // endpoint, and the path is read before the body.
