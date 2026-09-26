@@ -31,7 +31,7 @@ export function splitList(value: string): string[] {
 }
 
 export function diagnosisParams(draft: DiagnosisDraft, timezone: string, roiReports: OperatingDiagnosisRoiReport[]): Record<string, unknown> {
-  const roi = roiReports.find((report) => report.id === draft.roiReportId);
+  const roi = roiReports.find((report) => roiReportSelectionKey(report) === draft.roiReportId);
   return {
     scope: { kind: draft.scope, account_ids: draft.scope === "account" ? [draft.accountId] : draft.accountIds },
     window: { start: draft.start, end: draft.end, timezone },
@@ -45,4 +45,8 @@ export function diagnosisParams(draft: DiagnosisDraft, timezone: string, roiRepo
     }),
     roi_report_ref: roi ? { report_id: roi.id, version_no: roi.versionNo } : null,
   };
+}
+
+export function roiReportSelectionKey(report: OperatingDiagnosisRoiReport): string {
+  return `${report.id}@${report.versionNo}`;
 }

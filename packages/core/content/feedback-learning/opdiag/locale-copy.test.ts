@@ -21,11 +21,14 @@ function strings(value: unknown, path = ""): Array<{ path: string; value: string
 describe("operating diagnosis locale copy", () => {
   it("keeps four locales neutral and distinct from development diagnostics", () => {
     for (const locale of LOCALES) {
-      const common = json(locale, "common").contentOperatingDiagnosis;
+      const common = json(locale, "common");
+      const opdiag = common.contentOperatingDiagnosis;
+      const details = common.contentOperatingDiagnosisDetails;
       const layout = json(locale, "layout") as { nav?: Record<string, string> };
-      expect(common).toBeTruthy();
-      for (const entry of strings(common)) {
-        if (entry.path === "rulesMap.performance.difference_is_not_cause") continue;
+      expect(opdiag).toBeTruthy();
+      expect(details).toBeTruthy();
+      for (const entry of [...strings(opdiag, "core"), ...strings(details, "details")]) {
+        if (entry.path === "core.rulesMap.performance.difference_is_not_cause" || entry.path === "details.ruleMap.performance.difference_is_not_cause") continue;
         expect(entry.value).not.toMatch(forbidden);
       }
       expect(layout.nav?.operating_diagnosis).toBeTruthy();
