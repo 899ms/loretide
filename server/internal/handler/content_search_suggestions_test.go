@@ -349,13 +349,16 @@ func TestContentSearchSuggestionRetryReplaysTheRealWorkVersion(t *testing.T) {
 	}
 	retries.Wait()
 	var successes, conflicts int
+	var successfulEffectIDs []string
 	for i, retryErr := range errs {
 		conflict, isConflict := errors.AsType[topicplanning.SearchConflict](retryErr)
 		switch {
 		case retryErr == nil:
 			successes++
-			if len(views[i].Effects) != 1 || views[i].Effects[0].VersionID != committedVersionID {
-				t.Errorf("successful retry effects = %+v; want original committed version %q", views[i].Effects, committedVersionID)
+			if views[i].State != topicplanning.StateAdopted || len(views[i].Effects) != 1 || views[i].Effects[0].VersionID != committedVersionID {
+				t.Errorf("successful retry view = %+v; want one adopted effect for original version %q", views[i], committedVersionID)
+			} else {
+				successfulEffectIDs = append(successfulEffectIDs, views[i].Effects[0].EffectID)
 			}
 		case isConflict && conflict.Field == "decision_id":
 			conflicts++
@@ -363,8 +366,17 @@ func TestContentSearchSuggestionRetryReplaysTheRealWorkVersion(t *testing.T) {
 			t.Errorf("concurrent retry = %v", retryErr)
 		}
 	}
-	if successes != 1 || conflicts != 1 || suggestionRows(t, "content_artifact_version", world.wsID) != 2 {
+	if successes < 1 || successes+conflicts != len(errs) || suggestionRows(t, "content_artifact_version", world.wsID) != 2 {
 		t.Fatalf("retries successes=%d conflicts=%d; versions=%d", successes, conflicts, suggestionRows(t, "content_artifact_version", world.wsID))
+	}
+	final, err := store.GetSearchSuggestion(ctx, world.wsID, testUserID, first.SuggestionID)
+	if err != nil || final.State != topicplanning.StateAdopted || len(final.Effects) != 1 || final.Effects[0].VersionID != committedVersionID {
+		t.Fatalf("final concurrent retry view = %+v, %v; want one effect for original version %q", final, err, committedVersionID)
+	}
+	for _, effectID := range successfulEffectIDs {
+		if effectID != final.Effects[0].EffectID {
+			t.Errorf("successful retry effect id %q differs from persisted %q", effectID, final.Effects[0].EffectID)
+		}
 	}
 }
 

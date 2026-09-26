@@ -500,9 +500,10 @@ func adoptionFailure(err error) EffectFailure {
 	}
 }
 
-// recordSearchEffect serializes retries on the decision row. Therefore at
-// most one done row can be inserted even when two retry requests arrive at
-// once; a second caller receives decision_id conflict after the first commit.
+// recordSearchEffect serializes retries on the decision row, so at most one
+// done row is inserted. A retry that reaches this transaction after another
+// request has recorded the effect gets decision_id conflict; an in-flight
+// completion may reload and return the now-adopted view to its caller.
 func (s *SuggestionStore) recordSearchEffect(ctx context.Context, workspaceID, actor string, decision SuggestionDecisionRecord,
 	outcome EffectOutcome, versionID string, failure EffectFailure) error {
 	tx, err := s.begin(ctx, workspaceID)

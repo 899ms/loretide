@@ -34,6 +34,7 @@
 - `go test -c` 仅编译 `internal/handler` 和 `cmd/server` 测试二进制后删除临时文件：本轮 T067/T068/T070/T072 断言修订后重新编译通过；没有执行数据库/handler 测试。
 - 内容边界与诊断契约检查、`git diff --check`：通过。
 - `git diff --check`：通过。
+- 远程隔离 CI `36253650381`：boundaries、topic-planning、cmd-server 成功；handler 唯一失败为 T067/T068 并发重试断言。证据显示两个同时开始的请求都可返回 Adopted，但仍只保留 2 个版本；这符合 in-flight 请求完成时读取已提交效果的行为，测试现已接受一个或两个成功返回，并逐个核对成功视图及最终唯一效果的同一 `effect_id`/首次 `version_id`。handler 回归待新 head 的远程隔离 CI 重跑；本机仍未运行数据库测试。
 - GitHub Actions 运行 `36251869254`（旧 head `1e5d6956`）：boundaries 与 cmd-server 成功；topic-planning、handler 失败。日志定位为旧用例仍断言 `adopt` 不可用／应为 400，现已改为新契约；本次修订尚未推送，不能把该运行记为已修复或通过。
 
 ## 未执行与待主控远程验收
