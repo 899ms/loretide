@@ -49,7 +49,13 @@ describe("operating diagnosis suggestion construction", () => {
   });
 
   it("includes selected current-version judgement IDs in the request", () => {
-    expect(suggestionRequest("Try this", "todo", { account_id: "a1", title: "Review" }, ["j1", "j3"], ["work:w1"]))
-      .toEqual({ body: "Try this", target_kind: "todo", target: { account_id: "a1", title: "Review" }, judgement_ids: ["j1", "j3"], evidence_refs: ["work:w1"] });
+    expect(suggestionRequest({
+      body: "Try this", targetKind: "todo", target: { account_id: "a1", title: "Review" },
+      judgementIds: ["j1", "voided", "other-version"], evidenceRefs: ["work:w1", "work:removed"],
+      validJudgementIds: ["j1", "j3"], validEvidenceRefs: ["work:w1", "work:w2"],
+    })).toEqual({
+      body: "Try this", target_kind: "todo", target: { account_id: "a1", title: "Review" },
+      judgement_ids: ["j1"], evidence_refs: ["work:w1"],
+    });
   });
 });

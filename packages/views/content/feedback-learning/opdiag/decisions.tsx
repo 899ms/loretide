@@ -38,7 +38,11 @@ export function DiagnosisDecisions({ wsId, report, accounts, annotations, topicC
   const decisionFor = (suggestionId: string, revision: number) => annotations?.decisions.find((entry) => entry.suggestionId === suggestionId && entry.suggestionRevision === revision);
   const saveJudgement = () => judgement.mutate({ path: `${path}/judgements`, body: { kind, basis, evidence_refs: basis === "evidence" ? refs : [], about_judgement_id: kind === "alternative_explanation" ? about : "", body } });
   const target = targetKind === "topic_card" ? { account_id: accountId } : targetKind === "todo" ? { account_id: accountId, title: todoTitle } : { account_id: accountId, patches };
-  const saveSuggestion = () => suggestion.mutate({ path: `${path}/suggestions`, body: suggestionRequest(body, targetKind, target, suggestionJudgementIds, refs) });
+  const saveSuggestion = () => suggestion.mutate({ path: `${path}/suggestions`, body: suggestionRequest({
+    body, targetKind, target, judgementIds: suggestionJudgementIds, evidenceRefs: refs,
+    validJudgementIds: (annotations?.judgements ?? []).filter((entry) => !entry.voided).map((entry) => entry.judgementId),
+    validEvidenceRefs: refsInReport,
+  }) });
   const decideEntry = (entry: NonNullable<typeof annotations>["suggestions"][number], decision: "adopt" | "reject", choice: { mode: "create" | "link"; linkTargetId: string }) => decide.mutate({ path: `suggestions/${encodeURIComponent(entry.suggestionId)}/decisions`, body: { suggestion_revision: entry.revision, decision, ...(decision === "adopt" && entry.targetKind === "topic_card" ? { mode: choice.mode, ...(choice.mode === "link" ? { link_target_id: choice.linkTargetId } : {}) } : {}), note: "" } });
   return <SettingsSection title={t(($) => $.contentOperatingDiagnosis.blocks.decisions)}><div className="space-y-4">
     <SettingsCard><div className="space-y-3"><h3 className="text-sm font-medium">{t(($) => $.contentOperatingDiagnosis.judgement)}</h3>

@@ -58,6 +58,22 @@ export function topicCardsForTargetAccount<T extends OperatingDiagnosisTopicCard
   return cards.filter((card) => card.accountId === expectedAccountId);
 }
 
-export function suggestionRequest(body: string, targetKind: string, target: Record<string, unknown>, judgementIds: string[], evidenceRefs: string[]) {
-  return { body, target_kind: targetKind, target, judgement_ids: judgementIds, evidence_refs: evidenceRefs };
+export function suggestionRequest(input: {
+  body: string;
+  targetKind: string;
+  target: Record<string, unknown>;
+  judgementIds: string[];
+  evidenceRefs: string[];
+  validJudgementIds: string[];
+  validEvidenceRefs: string[];
+}) {
+  const validJudgementIds = new Set(input.validJudgementIds);
+  const validEvidenceRefs = new Set(input.validEvidenceRefs);
+  return {
+    body: input.body,
+    target_kind: input.targetKind,
+    target: input.target,
+    judgement_ids: input.judgementIds.filter((id) => validJudgementIds.has(id)),
+    evidence_refs: input.evidenceRefs.filter((ref) => validEvidenceRefs.has(ref)),
+  };
 }

@@ -77,7 +77,7 @@ export function OperatingDiagnosisPage(props: OperatingDiagnosisPageProps) {
         <DiagnosisReport report={selectedReport} result={selectedReport.result} title={selectedReport.title} gapLinks={props.gapLinks} todos={todos.data ?? []} addTodo={(gap) => makeTodo(selectedReport, gap)} onNewVersion={(report) => generate.mutate({ path: `reports/${encodeURIComponent(report.reportId)}/versions`, body: {} }, { onSuccess: (next) => next && openReport(next.reportId, next.versionNo) })} busy={generate.isPending || addTodo.isPending} canAddTodo={!todos.isLoading && !todos.isError} />
         <QueryState loading={annotations.isLoading} failed={annotations.isError} label={t(($) => $.contentOperatingDiagnosis.blocks.decisions)} />
         {annotations.isSuccess && !annotations.data && <p className="text-sm text-muted-foreground">{t(($) => $.contentOperatingDiagnosis.loadFailed)}</p>}
-        {annotations.data && <DiagnosisDecisions wsId={props.wsId} report={selectedReport} accounts={props.accounts} annotations={annotations.data} topicCards={props.topicCards} topicsLoading={props.topicsLoading} topicsFailed={props.topicsFailed} />}
+        {annotations.data && <DiagnosisDecisions key={`${props.wsId}:${selectedReport.reportId}:${selectedReport.versionNo}`} wsId={props.wsId} report={selectedReport} accounts={props.accounts} annotations={annotations.data} topicCards={props.topicCards} topicsLoading={props.topicsLoading} topicsFailed={props.topicsFailed} />}
         <WorkMarks wsId={props.wsId} report={selectedReport} works={props.works} worksLoading={props.worksLoading} worksFailed={props.worksFailed} />
       </>}
       {addTodo.isError && <p className="text-sm text-muted-foreground">{t(($) => $.contentOperatingDiagnosis.failed)}</p>}
