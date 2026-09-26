@@ -13,7 +13,51 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
+
+// All generations of a suggestion must contend on the same row; otherwise
+// a waiter on revision 1 can bypass a decision locking revision 2.
+func TestSuggestionWritersKeepOneLockAcrossRevisions(t *testing.T) {
+	fx := newSuggestionFixture(t)
+	ctx := t.Context()
+	const workspace = "ws-stable-suggestion-lock"
+	fx.document(workspace, "work-1", "doc-1", "v3", scriptBaseBody)
+	created := fx.suggestion(t, workspace, fx.theme(t, workspace), "第一稿")
+	content := validSuggestion().Content
+	content.ProposedBody = "第二稿"
+	if _, err := fx.suggestions.ReviseSearchSuggestion(ctx, workspace, "actor-a", created.SuggestionID,
+		SuggestionRevisionRequest{BaseRevision: 1, Content: content}); err != nil {
+		t.Fatal(err)
+	}
+	for _, lock := range []string{"FOR UPDATE", "FOR SHARE"} {
+		t.Run(lock, func(t *testing.T) {
+			holder, err := fx.db.Pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer holder.Rollback(ctx)
+			head, err := lockCurrentSuggestion(ctx, holder, workspace, created.SuggestionID, lock)
+			if err != nil || head.Revision != 2 {
+				t.Fatalf("head = %+v, %v", head, err)
+			}
+			contender, err := fx.db.Pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer contender.Rollback(ctx)
+			var revision int64
+			err = contender.QueryRow(ctx, `SELECT revision FROM content_search_suggestion_revision
+				WHERE workspace_id = $1 AND suggestion_id = $2 AND revision = 1 FOR UPDATE NOWAIT`,
+				workspace, created.SuggestionID).Scan(&revision)
+			pgErr, ok := errors.AsType[*pgconn.PgError](err)
+			if !ok || pgErr.Code != "55P03" {
+				t.Fatalf("permanent row was not locked: %v", err)
+			}
+		})
+	}
+}
 
 // Real PostgreSQL tests for search suggestions (specs/036 PR 2: T039, T040,
 // T043 to T045; FR-030 to FR-041, FR-050, FR-051, FR-103; SC-003, SC-008,

@@ -20,8 +20,8 @@ import (
 //  2. begin, whose first statement is the workspace delete fence - a
 //     workspace whose deletion has committed answers ErrNotFound here and
 //     nothing below runs;
-//  3. for a revision or a decision: the suggestion's current revision, with
-//     a row lock (ErrNotFound if none);
+//  3. for a revision or a decision: lock the permanent first revision, then
+//     read the current revision (ErrNotFound if none);
 //  4. references: the theme (this module), the materials, and the base
 //     version and its document (through SearchWorks, reads only);
 //  5. revision and state (409);
@@ -31,7 +31,7 @@ import (
 // deletes them (search_guards_test.go), and PR 2 writes no effect row.
 //
 // The row lock in step 3 keeps a revision and a decision from passing each
-// other: a revision takes the current revision row FOR UPDATE, a decision
+// other: a revision takes the first revision row FOR UPDATE, a decision
 // takes it FOR SHARE, and each then reads again in a new statement, so the
 // later of the two sees what the earlier one wrote. Two decisions share the
 // lock and are told apart by the unique index on (workspace_id,
@@ -225,14 +225,15 @@ func insertSuggestion(ctx context.Context, tx pgx.Tx, workspaceID string, sugges
 	return stored, nil
 }
 
-// lockCurrentSuggestion takes the row lock on a suggestion's current
-// revision and then reads that revision again in a new statement, so a
-// writer that committed while this one waited is seen. lock is "FOR UPDATE"
-// for a revision and "FOR SHARE" for a decision.
+// lockCurrentSuggestion locks a stable row for the lifetime of a suggestion.
+// Locking the latest row lets a writer already waiting on an older revision
+// race a new writer locking the new head. The first row is immutable and
+// shared by all writers. Read the head in a fresh statement after acquiring
+// that lock, so commits made while waiting are visible.
 func lockCurrentSuggestion(ctx context.Context, tx pgx.Tx, workspaceID, suggestionID, lock string) (SearchSuggestion, error) {
 	var revision int64
 	err := tx.QueryRow(ctx, `SELECT revision FROM content_search_suggestion_revision
-		WHERE workspace_id = $1 AND suggestion_id = $2 ORDER BY revision DESC LIMIT 1 `+lock,
+		WHERE workspace_id = $1 AND suggestion_id = $2 ORDER BY revision ASC LIMIT 1 `+lock,
 		workspaceID, suggestionID).Scan(&revision)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SearchSuggestion{}, ErrNotFound

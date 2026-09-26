@@ -45,12 +45,12 @@ func TestSearchSuggestionsReadErrorMapsNotFoundAndStorageApart(t *testing.T) {
 	}
 }
 
-// noRowsDB answers every single-row read with "no such row": what
+// suggestionNoRowsDB answers every single-row read with "no such row": what
 // work-editor sees for a document or version that is gone, a deleted
 // workspace's included.
-type noRowsDB struct{ failingDB }
+type suggestionNoRowsDB struct{ failingDB }
 
-func (noRowsDB) QueryRow(context.Context, string, ...any) pgx.Row {
+func (suggestionNoRowsDB) QueryRow(context.Context, string, ...any) pgx.Row {
 	return errorRow{err: pgx.ErrNoRows}
 }
 
@@ -64,7 +64,7 @@ func workStoreOver(db dbExecutor) *workeditor.Store {
 // reaches it as ErrStorage; an adapter with nothing behind it is ErrStorage.
 func TestSearchWorksMapsWorkEditorAnswers(t *testing.T) {
 	ctx := context.Background()
-	gone := searchWorks{store: workStoreOver(noRowsDB{})}
+	gone := searchWorks{store: workStoreOver(suggestionNoRowsDB{})}
 	if _, err := gone.Document(ctx, "ws", "actor", "work", "doc"); !errors.Is(err, topicplanning.ErrNotFound) || errors.Is(err, topicplanning.ErrStorage) {
 		t.Errorf("a missing document = %v, want ErrNotFound", err)
 	}
