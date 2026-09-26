@@ -20,7 +20,7 @@ Required environment is the same explicit isolated DB contract as `scripts/test-
 | --- | --- | --- |
 | Move `idempotency.Claim` after `ApplyBody` base/document checks in `work-editor/version.go` | `TestApplyBodyAppendsOneSuggestionVersionAndReplays` and `TestApplyBodySameKeyConcurrentWritesOneVersion` (T060); `TestContentSearchSuggestionRetryReplaysTheRealWorkVersion` (T067) | Replay no longer returns the original version; concurrent ApplyBody or retry fails to recover the committed version. |
 | Commit the adoption decision before checking document base and saved-draft preconditions in `topic-planning/search_suggestion.go` | `TestContentSearchSuggestionAdoptionPreflightAndRepeat` (T064/T065) | The draft-status conflict still occurs, but an irreversible decision row was already committed. |
-| Map `workspacecore.ErrNotFound` to `ErrStorage` in `content_search_suggestions.go` | `TestContentSearchSuggestionAdaptersAndEndpointsAfterWorkspaceDeletion` (T071) | Deleted-workspace adapter answer becomes storage/503 instead of not-found/404. |
+| Map `workeditor.ErrNotFound` to `ErrStorage` in `content_search_suggestions.go` | `TestContentSearchSuggestionAdaptersAndEndpointsAfterWorkspaceDeletion` (T071) | Deleted workspace has cascaded the document row; adapter answer becomes storage/503 instead of not-found/404. |
 | Copy an approved old `content_review_request` onto the newly applied version in `content_search_suggestions.go` | `TestContentSearchAdoptionKeepsOldReviewAndDeliveryOnV3` (T072); `TestSearchHandlersDoNotWriteDeliveryOrCallNetwork` (T049) | v4 gains an inherited approved review and the static downstream-write guard reports the SQL write. |
 
 ## Current verification state

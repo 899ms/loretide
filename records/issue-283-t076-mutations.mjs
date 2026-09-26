@@ -125,10 +125,11 @@ ${adoptPreflight}\treturn s.completeSearchAdoption(ctx, workspaceID, actor, curr
         from: `\tcase errors.Is(err, workspacecore.ErrNotFound), errors.Is(err, workeditor.ErrNotFound),
 \t\terrors.Is(err, workeditor.ErrInvalid), errors.Is(err, topicplanning.ErrNotFound):
 `,
-        to: `\tcase errors.Is(err, workspacecore.ErrNotFound):
-\t\treturn topicplanning.ErrStorage
-\tcase errors.Is(err, workeditor.ErrNotFound), errors.Is(err, workeditor.ErrInvalid),
+        to: `\tcase errors.Is(err, workspacecore.ErrNotFound), errors.Is(err, workeditor.ErrInvalid),
 \t\terrors.Is(err, topicplanning.ErrNotFound):
+\t\treturn topicplanning.ErrNotFound
+\tcase errors.Is(err, workeditor.ErrNotFound):
+\t\treturn topicplanning.ErrStorage
 `,
       },
     ],
