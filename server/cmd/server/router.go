@@ -2109,6 +2109,20 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Get("/work-marks", h.ListContentOpDiagWorkMarks)
 			r.Post("/work-marks", h.RecordContentOpDiagWorkMark)
 			r.Post("/preview", h.PreviewContentOpDiagReport)
+			// specs/035 PR 3: judgements, suggestions, decisions, proposals, todos.
+			r.Get("/reports/{reportId}/versions/{versionNo}/annotations", h.GetContentOpDiagAnnotations)
+			r.Post("/reports/{reportId}/versions/{versionNo}/judgements", h.RecordContentOpDiagJudgement)
+			r.Post("/judgements/{judgementId}/revisions", h.ReviseContentOpDiagJudgement)
+			r.Post("/reports/{reportId}/versions/{versionNo}/suggestions", h.RecordContentOpDiagSuggestion)
+			r.Post("/suggestions/{suggestionId}/revisions", h.ReviseContentOpDiagSuggestion)
+			r.Post("/suggestions/{suggestionId}/decisions", h.DecideContentOpDiagSuggestion)
+			r.Post("/decisions/{decisionId}/retry", h.RetryContentOpDiagDecision)
+			r.Get("/profile-proposals", h.ListContentOpDiagProfileProposals)
+			r.Post("/profile-proposals/{proposalId}/confirm", h.ConfirmContentOpDiagProfileProposal)
+			r.Post("/profile-proposals/{proposalId}/dismiss", h.DismissContentOpDiagProfileProposal)
+			r.Get("/todos", h.ListContentOpDiagTodos)
+			r.Post("/todos", h.AddContentOpDiagTodo)
+			r.Post("/todos/{todoId}/revisions", h.ReviseContentOpDiagTodo)
 		})
 
 		// Platform search optimization (specs/036 PR 1): search themes.

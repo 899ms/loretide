@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/multica-ai/multica/server/internal/content/diagnostics"
 	ipprofile "github.com/multica-ai/multica/server/internal/content/ip-profile"
 	"go.opentelemetry.io/otel/trace"
@@ -201,7 +203,7 @@ func (s *Store) Create(ctx context.Context, actor string, card TopicCard) (Topic
 		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
 		return TopicCard{}, err
 	}
-	card, err = s.insertCardTx(ctx, tx, card)
+	card, err = s.insertCardTx(ctx, tx, card, "")
 	if err != nil {
 		_ = tx.Rollback(ctx)
 		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, "create", err)
@@ -247,7 +249,12 @@ func prepareNewCard(card TopicCard) (TopicCard, error) {
 //
 // The account is not checked here. Create and adoption each check it inside
 // the same fenced transaction, before calling this.
-func (s *Store) insertCardTx(ctx context.Context, tx pgx.Tx, card TopicCard) (TopicCard, error) {
+//
+// originKey is CreateOnce's key and "" for every other caller, stored as
+// NULL: a card Create writes has no origin key. A second card under a key
+// already taken answers errOriginKeyTaken, so CreateOnce can hand back the
+// card that took it.
+func (s *Store) insertCardTx(ctx context.Context, tx pgx.Tx, card TopicCard, originKey string) (TopicCard, error) {
 	channels, err := encodeStrings(card.Channels)
 	if err != nil {
 		return card, ErrInvalid
@@ -267,18 +274,110 @@ func (s *Store) insertCardTx(ctx context.Context, tx pgx.Tx, card TopicCard) (To
 		INSERT INTO content_topic_card (
 			topic_card_id, workspace_id, account_id, audience_problem_judgment,
 			ip_fit, timing, existing_content_relation, evidence_gaps_and_investment,
-			channels, fit_source_ids, evidence_source_ids, recommended_action, status
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+			channels, fit_source_ids, evidence_source_ids, recommended_action, status,
+			origin_key
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NULLIF($14, ''))
 		RETURNING created_at, updated_at`,
 		card.TopicCardID, card.WorkspaceID, card.AccountID,
 		card.AudienceProblemJudgment, card.IPFit, card.Timing,
 		card.ExistingContentRelation, card.EvidenceGapsAndInvestment,
 		channels, encodedFit, encodedEvidence, card.RecommendedAction, card.Status,
+		originKey,
 	).Scan(&card.CreatedAt, &card.UpdatedAt)
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && originKey != "" &&
+		pgErr.Code == "23505" && pgErr.ConstraintName == originKeyIndex {
+		return card, errOriginKeyTaken
+	}
 	if err != nil {
 		return card, ErrStorage
 	}
 	return card, nil
+}
+
+// originKeyIndex is the unique index that allows one card per (workspace,
+// origin key); errOriginKeyTaken is what inserting a second one answers.
+const originKeyIndex = "content_topic_card_origin_key_idx"
+
+var errOriginKeyTaken = errors.New("topic card origin key already taken")
+
+// CreateOnce writes a new draft card under originKey, or answers the card
+// already written under it (specs/035 ruling Q3 supplement, contract §7.4).
+// created says which.
+//
+// It is Create with one addition, for a caller that must never end up with
+// two cards for one intent even when it retries after a failure it cannot
+// see the far side of - an adopted operating diagnosis suggestion, whose key
+// is opdiag-suggestion:<suggestion_id>. Inside the workspace delete fence it
+// first reads the card under the key; only when there is none does it run
+// Create's own checks and insert. Two calls racing past that read meet at
+// the unique index content_topic_card_origin_key_idx: the second insert
+// fails, its transaction is rolled back, and the card the first one wrote
+// is read back and answered with created false - not an error.
+//
+// The key is stored only for this lookup. TopicCard carries no field for
+// it, so no response changes, and Create never writes one.
+func (s *Store) CreateOnce(ctx context.Context, actor string, card TopicCard, originKey string) (TopicCard, bool, error) {
+	const step = "create-once"
+	if s == nil {
+		return TopicCard{}, false, ErrStorage
+	}
+	if actor == "" || card.WorkspaceID == "" || strings.TrimSpace(originKey) == "" {
+		s.reportFailure(ctx, card.WorkspaceID, actor, "", step, ErrInvalid)
+		return TopicCard{}, false, ErrInvalid
+	}
+	card.TopicCardID = s.newID()
+
+	tx, err := s.begin(ctx, card.WorkspaceID)
+	if err != nil {
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, step, err)
+		return TopicCard{}, false, err
+	}
+	defer tx.Rollback(ctx)
+	existing, err := scanTopicCard(tx.QueryRow(ctx, topicCardSelect+` WHERE workspace_id=$1 AND origin_key=$2`,
+		card.WorkspaceID, originKey))
+	switch {
+	case err == nil:
+		// Nothing is written, so nothing is audited.
+		return existing, false, nil
+	case !errors.Is(err, ErrNotFound):
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, step, err)
+		return TopicCard{}, false, ErrStorage
+	}
+	ctx, err = s.audit(ctx, tx, card.WorkspaceID, actor, card.TopicCardID, step)
+	if err != nil {
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, step, err)
+		return TopicCard{}, false, err
+	}
+	if err = s.checkAccount(ctx, card.WorkspaceID, card.AccountID); err != nil {
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, step, err)
+		return TopicCard{}, false, err
+	}
+	if card, err = prepareNewCard(card); err != nil {
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, step, err)
+		return TopicCard{}, false, err
+	}
+	card, err = s.insertCardTx(ctx, tx, card, originKey)
+	if errors.Is(err, errOriginKeyTaken) {
+		// Another call wrote the card under this key after our read. Its
+		// card is the answer.
+		_ = tx.Rollback(ctx)
+		taken, readErr := scanTopicCard(s.DB.QueryRow(ctx, topicCardSelect+` WHERE workspace_id=$1 AND origin_key=$2`,
+			card.WorkspaceID, originKey))
+		if readErr != nil {
+			s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, step, readErr)
+			return TopicCard{}, false, ErrStorage
+		}
+		return taken, false, nil
+	}
+	if err != nil {
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, step, err)
+		return TopicCard{}, false, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		s.reportFailure(ctx, card.WorkspaceID, actor, card.TopicCardID, step, err)
+		return TopicCard{}, false, ErrStorage
+	}
+	return card, true, nil
 }
 
 // checkAccount refuses an account that is not this brand's.

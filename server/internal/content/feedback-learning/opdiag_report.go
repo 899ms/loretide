@@ -56,6 +56,21 @@ type DiagnosisStore struct {
 	own diagnosisOwnRecords
 	// roiSummaries reads a 034 ROI report summary; nil is Store's own read.
 	roiSummaries diagnosisROISummaries
+	// TopicCards and Profiles are the two write interfaces adopting a
+	// suggestion uses (PR 3, opdiag_decisions.go), answered in the handler
+	// by topic-planning and ip-profile.
+	TopicCards TopicCardCreator
+	Profiles   DiagProfileWriter
+	// BeforeDecisionInsert is a test seam and nil in production. It runs
+	// after the read check found no decision on the suggestion revision and
+	// right before the INSERT; a test parks two deciders there so the unique
+	// index, and not only the read, is what turns the second into a 409.
+	BeforeDecisionInsert func(ctx context.Context, suggestionID string)
+	// BeforeEffectRecord is a test seam and nil in production. It runs after
+	// a topic card was created (or failed to be) and before the outcome is
+	// recorded; an error from it stands in for that recording failing, so a
+	// test can leave a card with no outcome and retry (T070).
+	BeforeEffectRecord func(ctx context.Context, decisionID string) error
 }
 
 // DiagnosisReportRequest is the body of POST /reports and POST

@@ -856,7 +856,7 @@ func (s *Store) AdoptCandidate(ctx context.Context, workspaceID, actor, nodeID, 
 		if err != nil {
 			return fail(err)
 		}
-		if card, err = s.insertCardTx(ctx, tx, card); err != nil {
+		if card, err = s.insertCardTx(ctx, tx, card, ""); err != nil {
 			return fail(err)
 		}
 	case AdoptLink:

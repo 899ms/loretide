@@ -408,6 +408,24 @@ deleted_content_opdiag_work_marks AS (
 deleted_content_search_theme_revisions AS (
     DELETE FROM content_search_theme_revision WHERE workspace_id = $1::text
 ),
+deleted_content_opdiag_judgement_revisions AS (
+    DELETE FROM content_opdiag_judgement_revision WHERE workspace_id = $1::text
+),
+deleted_content_opdiag_suggestion_revisions AS (
+    DELETE FROM content_opdiag_suggestion_revision WHERE workspace_id = $1::text
+),
+deleted_content_opdiag_decisions AS (
+    DELETE FROM content_opdiag_decision WHERE workspace_id = $1::text
+),
+deleted_content_opdiag_effects AS (
+    DELETE FROM content_opdiag_effect WHERE workspace_id = $1::text
+),
+deleted_content_opdiag_profile_proposal_revisions AS (
+    DELETE FROM content_opdiag_profile_proposal_revision WHERE workspace_id = $1::text
+),
+deleted_content_opdiag_todo_revisions AS (
+    DELETE FROM content_opdiag_todo_revision WHERE workspace_id = $1::text
+),
 deleted_content_accounts AS (
     DELETE FROM content_account WHERE workspace_id = $1::text
 ),
@@ -664,6 +682,10 @@ WHERE channel_media_pending_object.workspace_id = $1
 // registered in the deletion manifest test alongside this.
 // Search themes (specs/036 PR 1): append-only revisions, removed here and
 // nowhere else, and registered in the deletion manifest test alongside this.
+// Operating diagnosis judgements, suggestions, decisions, effects, profile
+// proposals and todos (specs/035 PR 3): append-only like the tables above,
+// removed here and nowhere else, and registered in the deletion manifest
+// test alongside this.
 // Brand content accounts go with the workspace. Registered in the deletion
 // manifest test alongside this, because only doing one of the two leaves
 // either orphaned rows (manifest only) or a drifting manifest (delete only).

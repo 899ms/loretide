@@ -613,3 +613,482 @@ export function parseOpDiagWorkMarkList(data: unknown): OpDiagWorkMark[] {
   );
   return (parsed.marks ?? []).map(toMark);
 }
+
+// ---------------------------------------------------------------- PR 3: judgements, suggestions, decisions
+
+// specs/035 PR 3: what people write on a report version and what adopting
+// a suggestion produces. The same rules as above: a value outside a set
+// reads as "unknown"; nothing is inferred on the page. In particular an
+// author that is not "human" reads as unknown, never as a person, and an
+// adopted decision with no outcome reads "unrecorded" - adopted, outcome
+// not recorded - which is the state a retry converges.
+
+/** R-057 "判断、替代解释、局限" (FR-050). */
+export const OPDIAG_JUDGEMENT_KINDS = ["judgement", "alternative_explanation", "limitation"] as const;
+export type OpDiagJudgementKind = (typeof OPDIAG_JUDGEMENT_KINDS)[number];
+
+/** evidence cites facts of the result; qualitative cites none (FR-051). */
+export const OPDIAG_JUDGEMENT_BASES = ["evidence", "qualitative"] as const;
+export type OpDiagJudgementBasis = (typeof OPDIAG_JUDGEMENT_BASES)[number];
+
+/** FR-053: a person, and nobody else, in this version. */
+export const OPDIAG_AUTHOR_KINDS = ["human"] as const;
+export type OpDiagAuthorKind = (typeof OPDIAG_AUTHOR_KINDS)[number];
+
+/** R-057's three adoption targets, exactly; no business memory (FR-052). */
+export const OPDIAG_SUGGESTION_TARGETS = ["topic_card", "todo", "profile_proposal"] as const;
+export type OpDiagSuggestionTarget = (typeof OPDIAG_SUGGESTION_TARGETS)[number];
+
+export const OPDIAG_DECISION_KINDS = ["adopt", "reject"] as const;
+export type OpDiagDecisionKind = (typeof OPDIAG_DECISION_KINDS)[number];
+
+/** Ruling Q3: create a draft card, or link one that exists. */
+export const OPDIAG_ADOPT_MODES = ["create", "link"] as const;
+export type OpDiagAdoptMode = (typeof OPDIAG_ADOPT_MODES)[number];
+
+export const OPDIAG_EFFECT_OUTCOMES = ["done", "failed"] as const;
+export type OpDiagEffectOutcome = (typeof OPDIAG_EFFECT_OUTCOMES)[number];
+
+export const OPDIAG_EFFECT_FAILURES = ["target_refused", "target_not_found", "storage"] as const;
+export type OpDiagEffectFailure = (typeof OPDIAG_EFFECT_FAILURES)[number];
+
+/** How a decision's outcome rows read, derived by the server on each read. */
+export const OPDIAG_EFFECT_STATES = ["none", "done", "failed", "unrecorded"] as const;
+export type OpDiagEffectState = (typeof OPDIAG_EFFECT_STATES)[number];
+
+export const OPDIAG_PROPOSAL_STATES = ["proposed", "confirmed", "dismissed"] as const;
+export type OpDiagProposalState = (typeof OPDIAG_PROPOSAL_STATES)[number];
+
+export const OPDIAG_TODO_STATES = ["open", "done", "dropped"] as const;
+export type OpDiagTodoState = (typeof OPDIAG_TODO_STATES)[number];
+
+export const OPDIAG_TODO_ORIGINS = ["suggestion", "data_gap"] as const;
+export type OpDiagTodoOrigin = (typeof OPDIAG_TODO_ORIGINS)[number];
+
+const strings = z.array(z.string()).nullable().optional();
+
+export interface OpDiagJudgement {
+  judgementId: string;
+  revision: number;
+  reportId: string;
+  versionNo: number;
+  kind: OpDiagJudgementKind | "unknown";
+  basis: OpDiagJudgementBasis | "unknown";
+  /** Reference keys of the version's result (contract §5.8). */
+  evidenceRefs: string[];
+  aboutJudgementId: string;
+  body: string;
+  authorKind: OpDiagAuthorKind | "unknown";
+  voided: boolean;
+  recordedBy: string;
+  createdAt: string;
+}
+
+const judgementSchema = z.object({
+  judgement_id: z.string(),
+  revision: z.number().int(),
+  report_id: z.string(),
+  version_no: z.number().int(),
+  kind: oneOf(OPDIAG_JUDGEMENT_KINDS),
+  basis: oneOf(OPDIAG_JUDGEMENT_BASES),
+  evidence_refs: strings,
+  about_judgement_id: text,
+  body: z.string(),
+  author_kind: oneOf(OPDIAG_AUTHOR_KINDS),
+  voided: z.boolean(),
+  recorded_by: text,
+  created_at: text,
+});
+
+function toJudgement(wire: z.infer<typeof judgementSchema>): OpDiagJudgement {
+  return {
+    judgementId: wire.judgement_id,
+    revision: wire.revision,
+    reportId: wire.report_id,
+    versionNo: wire.version_no,
+    kind: wire.kind,
+    basis: wire.basis,
+    evidenceRefs: wire.evidence_refs ?? [],
+    aboutJudgementId: wire.about_judgement_id ?? "",
+    body: wire.body,
+    authorKind: wire.author_kind,
+    voided: wire.voided,
+    recordedBy: wire.recorded_by ?? "",
+    createdAt: wire.created_at ?? "",
+  };
+}
+
+export interface OpDiagProfilePatch {
+  field: string;
+  value: string;
+}
+
+export interface OpDiagSuggestion {
+  suggestionId: string;
+  revision: number;
+  reportId: string;
+  versionNo: number;
+  body: string;
+  targetKind: OpDiagSuggestionTarget | "unknown";
+  /** The target kind's own parameters (contract §7.3); "" and [] when absent. */
+  target: { accountId: string; title: string; patches: OpDiagProfilePatch[] };
+  judgementIds: string[];
+  evidenceRefs: string[];
+  authorKind: OpDiagAuthorKind | "unknown";
+  voided: boolean;
+  recordedBy: string;
+  createdAt: string;
+}
+
+const patchSchema = z.object({ field: z.string(), value: z.string() });
+
+const suggestionSchema = z.object({
+  suggestion_id: z.string(),
+  revision: z.number().int(),
+  report_id: z.string(),
+  version_no: z.number().int(),
+  body: z.string(),
+  target_kind: oneOf(OPDIAG_SUGGESTION_TARGETS),
+  target: z.object({
+    account_id: text,
+    title: text,
+    patches: z.array(patchSchema).nullable().optional(),
+  }).nullable().optional(),
+  judgement_ids: strings,
+  evidence_refs: strings,
+  author_kind: oneOf(OPDIAG_AUTHOR_KINDS),
+  voided: z.boolean(),
+  recorded_by: text,
+  created_at: text,
+});
+
+function toSuggestion(wire: z.infer<typeof suggestionSchema>): OpDiagSuggestion {
+  return {
+    suggestionId: wire.suggestion_id,
+    revision: wire.revision,
+    reportId: wire.report_id,
+    versionNo: wire.version_no,
+    body: wire.body,
+    targetKind: wire.target_kind,
+    target: {
+      accountId: wire.target?.account_id ?? "",
+      title: wire.target?.title ?? "",
+      patches: wire.target?.patches ?? [],
+    },
+    judgementIds: wire.judgement_ids ?? [],
+    evidenceRefs: wire.evidence_refs ?? [],
+    authorKind: wire.author_kind,
+    voided: wire.voided,
+    recordedBy: wire.recorded_by ?? "",
+    createdAt: wire.created_at ?? "",
+  };
+}
+
+export interface OpDiagEffect {
+  effectId: string;
+  decisionId: string;
+  outcome: OpDiagEffectOutcome | "unknown";
+  targetKind: OpDiagSuggestionTarget | "unknown";
+  /** The topic card, todo or proposal; "" when it failed. */
+  targetId: string;
+  /** "" when done. */
+  failureCode: OpDiagEffectFailure | "" | "unknown";
+  createdAt: string;
+}
+
+export interface OpDiagDecision {
+  decisionId: string;
+  suggestionId: string;
+  suggestionRevision: number;
+  decision: OpDiagDecisionKind | "unknown";
+  /** "" unless a topic card suggestion was adopted. */
+  mode: OpDiagAdoptMode | "" | "unknown";
+  linkTargetId: string;
+  note: string;
+  decidedBy: string;
+  createdAt: string;
+  targetKind: OpDiagSuggestionTarget | "unknown";
+  effects: OpDiagEffect[];
+  effectState: OpDiagEffectState | "unknown";
+}
+
+/** A set that also allows "" (not applicable), else unknown. */
+function oneOfOrEmpty<T extends readonly [string, ...string[]]>(values: T) {
+  return z.enum(values).or(z.literal("")).or(z.literal("unknown")).catch("unknown");
+}
+
+const effectSchema = z.object({
+  effect_id: z.string(),
+  decision_id: z.string(),
+  outcome: oneOf(OPDIAG_EFFECT_OUTCOMES),
+  target_kind: oneOf(OPDIAG_SUGGESTION_TARGETS),
+  target_id: text,
+  failure_code: oneOfOrEmpty(OPDIAG_EFFECT_FAILURES),
+  created_at: text,
+});
+
+const decisionSchema = z.object({
+  decision_id: z.string(),
+  suggestion_id: z.string(),
+  suggestion_revision: z.number().int(),
+  decision: oneOf(OPDIAG_DECISION_KINDS),
+  mode: oneOfOrEmpty(OPDIAG_ADOPT_MODES),
+  link_target_id: text,
+  note: text,
+  decided_by: text,
+  created_at: text,
+  target_kind: oneOf(OPDIAG_SUGGESTION_TARGETS),
+  effects: z.array(effectSchema).nullable().optional(),
+  effect_state: oneOf(OPDIAG_EFFECT_STATES),
+});
+
+function toEffect(wire: z.infer<typeof effectSchema>): OpDiagEffect {
+  return {
+    effectId: wire.effect_id,
+    decisionId: wire.decision_id,
+    outcome: wire.outcome,
+    targetKind: wire.target_kind,
+    targetId: wire.target_id ?? "",
+    failureCode: wire.failure_code,
+    createdAt: wire.created_at ?? "",
+  };
+}
+
+function toDecision(wire: z.infer<typeof decisionSchema>): OpDiagDecision {
+  return {
+    decisionId: wire.decision_id,
+    suggestionId: wire.suggestion_id,
+    suggestionRevision: wire.suggestion_revision,
+    decision: wire.decision,
+    mode: wire.mode,
+    linkTargetId: wire.link_target_id ?? "",
+    note: wire.note ?? "",
+    decidedBy: wire.decided_by ?? "",
+    createdAt: wire.created_at ?? "",
+    targetKind: wire.target_kind,
+    effects: (wire.effects ?? []).map(toEffect),
+    effectState: wire.effect_state,
+  };
+}
+
+export interface OpDiagAnnotations {
+  reportId: string;
+  versionNo: number;
+  judgements: OpDiagJudgement[];
+  suggestions: OpDiagSuggestion[];
+  decisions: OpDiagDecision[];
+}
+
+const annotationsSchema = z.object({
+  report_id: z.string(),
+  version_no: z.number().int(),
+  judgements: z.array(judgementSchema).nullable().optional(),
+  suggestions: z.array(suggestionSchema).nullable().optional(),
+  decisions: z.array(decisionSchema).nullable().optional(),
+});
+
+/** GET .../annotations. null when malformed. */
+export function parseOpDiagAnnotations(data: unknown): OpDiagAnnotations | null {
+  const parsed = parseWithFallback<z.infer<typeof annotationsSchema> | null>(
+    data, annotationsSchema, null, { endpoint: "content-operating-diagnosis/annotations" },
+  );
+  if (!parsed) return null;
+  return {
+    reportId: parsed.report_id,
+    versionNo: parsed.version_no,
+    judgements: (parsed.judgements ?? []).map(toJudgement),
+    suggestions: (parsed.suggestions ?? []).map(toSuggestion),
+    decisions: (parsed.decisions ?? []).map(toDecision),
+  };
+}
+
+/** POST .../judgements or /judgements/{id}/revisions. null when malformed. */
+export function parseOpDiagJudgement(data: unknown): OpDiagJudgement | null {
+  const parsed = parseWithFallback<z.infer<typeof judgementSchema> | null>(
+    data, judgementSchema, null, { endpoint: "content-operating-diagnosis/judgement" },
+  );
+  return parsed ? toJudgement(parsed) : null;
+}
+
+/** POST .../suggestions or /suggestions/{id}/revisions. null when malformed. */
+export function parseOpDiagSuggestion(data: unknown): OpDiagSuggestion | null {
+  const parsed = parseWithFallback<z.infer<typeof suggestionSchema> | null>(
+    data, suggestionSchema, null, { endpoint: "content-operating-diagnosis/suggestion" },
+  );
+  return parsed ? toSuggestion(parsed) : null;
+}
+
+/** POST /suggestions/{id}/decisions or /decisions/{id}/retry. null when malformed. */
+export function parseOpDiagDecision(data: unknown): OpDiagDecision | null {
+  const parsed = parseWithFallback<z.infer<typeof decisionSchema> | null>(
+    data, decisionSchema, null, { endpoint: "content-operating-diagnosis/decision" },
+  );
+  return parsed ? toDecision(parsed) : null;
+}
+
+// ---------------------------------------------------------------- PR 3: proposals and todos
+
+export interface OpDiagProposalItem {
+  field: string;
+  currentValue: string;
+  currentStatus: string;
+  proposedValue: string;
+}
+
+export interface OpDiagProposal {
+  proposalId: string;
+  revision: number;
+  accountId: string;
+  decisionId: string;
+  /** The profile revision the proposal was based on; a confirmation sends it back. */
+  baseRevisionId: string;
+  patches: OpDiagProfilePatch[];
+  state: OpDiagProposalState | "unknown";
+  appliedRevisionId: string;
+  voided: boolean;
+  createdAt: string;
+  /** From the list only: the account's profile now, and "current -> proposed" per item. */
+  currentRevisionId: string;
+  baseIsCurrent: boolean;
+  items: OpDiagProposalItem[];
+}
+
+const proposalSchema = z.object({
+  proposal_id: z.string(),
+  revision: z.number().int(),
+  account_id: z.string(),
+  decision_id: text,
+  base_revision_id: text,
+  patches: z.array(patchSchema).nullable().optional(),
+  state: oneOf(OPDIAG_PROPOSAL_STATES),
+  applied_revision_id: text,
+  voided: z.boolean(),
+  created_at: text,
+  current_revision_id: text,
+  base_is_current: z.boolean().optional(),
+  items: z.array(z.object({
+    field: z.string(),
+    current_value: text,
+    current_status: text,
+    proposed_value: text,
+  })).nullable().optional(),
+});
+
+const proposalListSchema = z.object({ proposals: z.array(proposalSchema).nullable().optional() });
+
+function toProposal(wire: z.infer<typeof proposalSchema>): OpDiagProposal {
+  return {
+    proposalId: wire.proposal_id,
+    revision: wire.revision,
+    accountId: wire.account_id,
+    decisionId: wire.decision_id ?? "",
+    baseRevisionId: wire.base_revision_id ?? "",
+    patches: wire.patches ?? [],
+    state: wire.state,
+    appliedRevisionId: wire.applied_revision_id ?? "",
+    voided: wire.voided,
+    createdAt: wire.created_at ?? "",
+    currentRevisionId: wire.current_revision_id ?? "",
+    // Absent is not "still current": the page asks the list before a confirm.
+    baseIsCurrent: wire.base_is_current ?? false,
+    items: (wire.items ?? []).map((item) => ({
+      field: item.field,
+      currentValue: item.current_value ?? "",
+      currentStatus: item.current_status ?? "",
+      proposedValue: item.proposed_value ?? "",
+    })),
+  };
+}
+
+/** POST /profile-proposals/{id}/confirm or dismiss. null when malformed. */
+export function parseOpDiagProposal(data: unknown): OpDiagProposal | null {
+  const parsed = parseWithFallback<z.infer<typeof proposalSchema> | null>(
+    data, proposalSchema, null, { endpoint: "content-operating-diagnosis/profile-proposal" },
+  );
+  return parsed ? toProposal(parsed) : null;
+}
+
+/** GET /profile-proposals. [] when malformed. */
+export function parseOpDiagProposalList(data: unknown): OpDiagProposal[] {
+  const parsed = parseWithFallback<z.infer<typeof proposalListSchema>>(
+    data, proposalListSchema, { proposals: [] }, { endpoint: "content-operating-diagnosis/profile-proposals" },
+  );
+  return (parsed.proposals ?? []).map(toProposal);
+}
+
+export interface OpDiagTodo {
+  todoId: string;
+  revision: number;
+  title: string;
+  note: string;
+  accountId: string;
+  originKind: OpDiagTodoOrigin | "unknown";
+  originDecisionId: string;
+  originReportId: string;
+  originVersionNo: number;
+  originGapKey: string;
+  state: OpDiagTodoState | "unknown";
+  voided: boolean;
+  createdAt: string;
+}
+
+const todoSchema = z.object({
+  todo_id: z.string(),
+  revision: z.number().int(),
+  title: z.string(),
+  note: text,
+  account_id: text,
+  origin_kind: oneOf(OPDIAG_TODO_ORIGINS),
+  origin_decision_id: text,
+  origin_report_id: text,
+  origin_version_no: z.number().int().optional(),
+  origin_gap_key: text,
+  state: oneOf(OPDIAG_TODO_STATES),
+  voided: z.boolean(),
+  created_at: text,
+});
+
+const todoListSchema = z.object({ todos: z.array(todoSchema).nullable().optional() });
+
+function toTodo(wire: z.infer<typeof todoSchema>): OpDiagTodo {
+  return {
+    todoId: wire.todo_id,
+    revision: wire.revision,
+    title: wire.title,
+    note: wire.note ?? "",
+    accountId: wire.account_id ?? "",
+    originKind: wire.origin_kind,
+    originDecisionId: wire.origin_decision_id ?? "",
+    originReportId: wire.origin_report_id ?? "",
+    originVersionNo: wire.origin_version_no ?? 0,
+    originGapKey: wire.origin_gap_key ?? "",
+    state: wire.state,
+    voided: wire.voided,
+    createdAt: wire.created_at ?? "",
+  };
+}
+
+/** POST /todos or /todos/{id}/revisions. null when malformed. */
+export function parseOpDiagTodo(data: unknown): OpDiagTodo | null {
+  const parsed = parseWithFallback<z.infer<typeof todoSchema> | null>(
+    data, todoSchema, null, { endpoint: "content-operating-diagnosis/todo" },
+  );
+  return parsed ? toTodo(parsed) : null;
+}
+
+/** GET /todos. [] when malformed. */
+export function parseOpDiagTodoList(data: unknown): OpDiagTodo[] {
+  const parsed = parseWithFallback<z.infer<typeof todoListSchema>>(
+    data, todoListSchema, { todos: [] }, { endpoint: "content-operating-diagnosis/todos" },
+  );
+  return (parsed.todos ?? []).map(toTodo);
+}
+
+// The prefixes other modules' queries are cached under. Adopting a topic
+// card suggestion creates a card (topic-planning), and confirming a profile
+// proposal writes an account revision (ip-profile); their lists refetch
+// after either. The prefixes are copied, not imported - this module does
+// not depend on those two - and contract.test.ts reads their sources to
+// hold the copies to them.
+export const OPDIAG_TOPIC_CARDS_KEY_PREFIX = "contentTopics";
+export const OPDIAG_ACCOUNTS_KEY_PREFIX = "contentAccounts";

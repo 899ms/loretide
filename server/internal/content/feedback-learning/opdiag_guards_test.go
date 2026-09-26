@@ -17,6 +17,13 @@ import (
 var opdiagTables = []string{
 	"content_opdiag_report_version",
 	"content_opdiag_work_mark",
+	// PR 3.
+	"content_opdiag_judgement_revision",
+	"content_opdiag_suggestion_revision",
+	"content_opdiag_decision",
+	"content_opdiag_effect",
+	"content_opdiag_profile_proposal_revision",
+	"content_opdiag_todo_revision",
 }
 
 // opdiagSourceFiles returns the non-test opdiag_*.go files by name.
@@ -38,7 +45,7 @@ func opdiagSourceFiles(t *testing.T) map[string]string {
 		files[filepath.Base(path)] = string(body)
 	}
 	for _, required := range []string{"opdiag_contract.go", "opdiag_inputs.go", "opdiag_calc.go",
-		"opdiag_report.go", "opdiag_marks.go"} {
+		"opdiag_report.go", "opdiag_marks.go", "opdiag_annotations.go", "opdiag_decisions.go"} {
 		if _, ok := files[required]; !ok {
 			t.Fatalf("%s is missing; every guard below would pass vacuously", required)
 		}
@@ -163,9 +170,67 @@ func TestOpDiagMakesNoOutboundCallAndCallsNoModel(t *testing.T) {
 				t.Errorf("%s contains %q", name, forbidden)
 			}
 		}
-		if strings.Contains(body, "author_kind") || strings.Contains(strings.ToLower(body), "ai_judgement_revision") {
-			t.Errorf("%s has an AI judgement path; PR 1 keeps only the hook key", name)
+		// PR 3 stores author_kind on judgements and suggestions, and the
+		// only author is a person (FR-053): TestOnlyAPersonAuthorsAnything
+		// holds that. There is still no AI judgement table.
+		if strings.Contains(strings.ToLower(body), "ai_judgement_revision") {
+			t.Errorf("%s has an AI judgement path; this version keeps only the hook key", name)
 		}
+	}
+}
+
+// FR-053 / FR-071 / contract §9 "没有 AI 与记忆": the only author there is
+// is a person. AuthorKind has one value, every write passes that value and
+// never one from a request, and both migrations that carry author_kind hold
+// it to that value in their CHECK.
+func TestOnlyAPersonAuthorsAnything(t *testing.T) {
+	sources := moduleSources(t)
+	if declared := strings.Count(sources, "AuthorKind = \""); declared != 1 {
+		t.Fatalf("%d AuthorKind values declared, want exactly the human one", declared)
+	}
+	writes := 0
+	for name, body := range opdiagSourceFiles(t) {
+		for _, statement := range sqlLiterals(t, body) {
+			if !strings.Contains(statement, "INSERT INTO") || !strings.Contains(statement, "author_kind") {
+				continue
+			}
+			writes++
+		}
+		// The value bound for author_kind is the constant, never an input.
+		for _, line := range strings.Split(body, "\n") {
+			if strings.Contains(line, "in.AuthorKind") || strings.Contains(line, "input.AuthorKind") {
+				t.Errorf("%s takes an author from its input: %s", name, strings.TrimSpace(line))
+			}
+		}
+	}
+	if writes != 2 {
+		t.Fatalf("%d INSERTs write author_kind, want the judgement and the suggestion", writes)
+	}
+	for _, name := range []string{"string(AuthorHuman), j.Voided", "string(AuthorHuman), s.Voided"} {
+		if !strings.Contains(sources, name) {
+			t.Errorf("an insert no longer binds AuthorHuman (%q)", name)
+		}
+	}
+	matches, err := filepath.Glob(filepath.Join(moduleDir(t), "..", "..", "..", "migrations", "*_content_opdiag_*.up.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, path := range matches {
+		body, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if !strings.Contains(string(body), "author_kind ") {
+			continue
+		}
+		checked++
+		if !strings.Contains(string(body), "CHECK (author_kind IN ('human'))") {
+			t.Errorf("%s lets author_kind be something other than human", filepath.Base(path))
+		}
+	}
+	if checked != 2 {
+		t.Fatalf("%d migrations carry author_kind, want 2", checked)
 	}
 }
 

@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_opdiag_todo_revision_time_idx;

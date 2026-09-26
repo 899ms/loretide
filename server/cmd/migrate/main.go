@@ -436,6 +436,25 @@ var concurrentIndexCleanups = map[string]string{
 	// provisional and move with the files at merge.
 	"591_content_search_theme_revision_key_idx":  "content_search_theme_revision_key_idx",
 	"592_content_search_theme_revision_time_idx": "content_search_theme_revision_time_idx",
+
+	// specs/035 PR 3: judgements, suggestions, decisions, effects, profile
+	// proposals and todos, and topic-planning's origin key (contract §7.4).
+	// Its own block, as above. The seven table and column migrations (593,
+	// 596, 599, 602, 605, 608, 611) build no index and are absent. The
+	// numbers are provisional and move with the files at merge.
+	"594_content_opdiag_judgement_revision_key_idx":            "content_opdiag_judgement_revision_key_idx",
+	"595_content_opdiag_judgement_revision_report_idx":         "content_opdiag_judgement_revision_report_idx",
+	"597_content_opdiag_suggestion_revision_key_idx":           "content_opdiag_suggestion_revision_key_idx",
+	"598_content_opdiag_suggestion_revision_report_idx":        "content_opdiag_suggestion_revision_report_idx",
+	"600_content_opdiag_decision_key_idx":                      "content_opdiag_decision_key_idx",
+	"601_content_opdiag_decision_suggestion_idx":               "content_opdiag_decision_suggestion_idx",
+	"603_content_opdiag_effect_key_idx":                        "content_opdiag_effect_key_idx",
+	"604_content_opdiag_effect_decision_idx":                   "content_opdiag_effect_decision_idx",
+	"606_content_opdiag_profile_proposal_revision_key_idx":     "content_opdiag_profile_proposal_revision_key_idx",
+	"607_content_opdiag_profile_proposal_revision_account_idx": "content_opdiag_profile_proposal_revision_account_idx",
+	"609_content_opdiag_todo_revision_key_idx":                 "content_opdiag_todo_revision_key_idx",
+	"610_content_opdiag_todo_revision_time_idx":                "content_opdiag_todo_revision_time_idx",
+	"612_content_topic_card_origin_key_idx":                    "content_topic_card_origin_key_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction

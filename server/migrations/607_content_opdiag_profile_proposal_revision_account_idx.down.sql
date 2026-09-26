@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_opdiag_profile_proposal_revision_account_idx;

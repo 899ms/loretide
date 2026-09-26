@@ -169,6 +169,16 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"workspace":                          workspaceDelete,
 	"workspace_invitation":               workspaceDelete,
 	"workspace_share_link":               workspaceDelete,
+
+	// specs/035 PR 3 operating diagnosis judgements, suggestions,
+	// decisions, effects, profile proposals and todos. A block of its own so
+	// the longest name does not realign the map above.
+	"content_opdiag_decision":                  workspaceDelete,
+	"content_opdiag_effect":                    workspaceDelete,
+	"content_opdiag_judgement_revision":        workspaceDelete,
+	"content_opdiag_profile_proposal_revision": workspaceDelete,
+	"content_opdiag_suggestion_revision":       workspaceDelete,
+	"content_opdiag_todo_revision":             workspaceDelete,
 }
 
 func TestWorkspaceDeletionManifestCoversPublicSchema(t *testing.T) {
