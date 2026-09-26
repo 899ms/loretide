@@ -81,8 +81,8 @@ const cases = [
       },
       {
         file: 'server/internal/content/work-editor/version.go',
-        from: '\tctx, err = s.audit(ctx, tx, workspaceID, actor, artifactID, intent.step)\n',
-        to: claimAfterValidation + '\tctx, err = s.audit(ctx, tx, workspaceID, actor, artifactID, intent.step)\n',
+        from: '\tif intent.fromVersionID != "" {\n',
+        to: claimAfterValidation + '\tif intent.fromVersionID != "" {\n',
       },
     ],
     runs: [
