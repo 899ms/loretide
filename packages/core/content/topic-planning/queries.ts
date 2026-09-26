@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@multica/core/api";
 import {
   briefRevisionInputToWire,
@@ -159,6 +159,24 @@ export function useContentBriefs(workspaceId: string, topicCardId: string) {
     queryFn: async () =>
       parseBriefRevisions(await api.listContentBriefs(topicCardId)),
   });
+}
+
+/** Load briefs for every selected card, retaining each card's identity. */
+export function useContentBriefsForTopics(workspaceId: string, topicCardIds: readonly string[]) {
+  const uniqueIds = [...new Set(topicCardIds.filter(Boolean))];
+  const results = useQueries({
+    queries: uniqueIds.map((topicCardId) => ({
+      queryKey: topicPlanningKeys.briefs(workspaceId, topicCardId),
+      enabled: topicCardId !== "",
+      queryFn: async () => parseBriefRevisions(await api.listContentBriefs(topicCardId)),
+    })),
+  });
+  return {
+    data: results.flatMap((result, index) => (result.data ?? []).map((brief) => ({ ...brief, topicCardId: uniqueIds[index] }))),
+    isPending: results.some((result) => result.isPending),
+    isError: results.some((result) => result.isError),
+    error: results.find((result) => result.isError)?.error ?? null,
+  };
 }
 
 export function useContentBrief(

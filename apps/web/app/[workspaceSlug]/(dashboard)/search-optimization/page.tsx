@@ -1,10 +1,11 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useContentAccounts } from "@multica/core/content/ip-profile";
+import { CONTENT_PLATFORMS } from "@multica/core/content/ip-profile";
 import { useContentTopics } from "@multica/core/content/topic-planning";
 import { useContentSources } from "@multica/core/content/source-inbox";
 import { useArtifactVersions, useContentArtifacts, useContentWorks } from "@multica/core/content/work-editor";
@@ -16,7 +17,7 @@ import { SearchSuggestionsSection, SearchThemesSection } from "@multica/views/co
 import { PageHeader } from "@multica/views/layout/page-header";
 import { useT } from "@multica/views/i18n";
 
-type Option = { id: string; label: string };
+type Option = { id: string; label: string; platform: string };
 
 function SearchOptimizationAdapter() {
   const { t } = useT("common");
@@ -37,7 +38,11 @@ function SearchOptimizationAdapter() {
   const versions = useArtifactVersions(wsId, activeWorkId, activeArtifactId);
   const themes = useSearchThemes(wsId, { includeArchived: true });
   const rankObservations = useRankObservations(wsId, { themeId: selectedThemeId });
-  const accountOptions: Option[] = (accounts.data ?? []).map((account) => ({ id: account.account_id, label: account.display_name || account.account_id }));
+  useEffect(() => {
+    setActiveWorkId(initialWorkId);
+    setActiveArtifactId(initialArtifactId);
+  }, [initialWorkId, initialArtifactId]);
+  const accountOptions: Option[] = (accounts.data ?? []).map((account) => ({ id: account.account_id, label: account.display_name || account.account_id, platform: account.platform }));
   const topicCards = topics.data ?? [];
   const sourceList = sources.data ?? [];
   const workList = works.data ?? [];
@@ -57,9 +62,9 @@ function SearchOptimizationAdapter() {
       <PageHeader><h1 className="min-w-0 flex-1 truncate text-title">{t(($) => $.search_optimization.title)}</h1></PageHeader>
       <main className="space-y-6 p-4">
         <p className="text-body text-muted-foreground">{t(($) => $.search_optimization.description)}</p>
-        <SearchThemesSection wsId={wsId} topicCards={topicCards} sources={sourceOptions} accounts={accountOptions} rankObservations={rankObservations.data ?? []} onSelectedThemeChange={setSelectedThemeId} onConflict={refreshOnConflict} />
-        <SearchSuggestionsSection wsId={wsId} works={workList} artifacts={artifactList} versions={versionList} themes={themeList} sources={sourceOptions} initialWorkId={initialWorkId} initialArtifactId={initialArtifactId} onWorkIdChange={setActiveWorkId} onArtifactIdChange={setActiveArtifactId} onConflict={refreshOnConflict} />
-        <SearchPerformanceSections wsId={wsId} publications={publicationList} accounts={accountOptions} themes={themeList} onConflict={refreshOnConflict} />
+        <SearchThemesSection wsId={wsId} topicCards={topicCards} sources={sourceOptions} accounts={accountOptions} platforms={[...CONTENT_PLATFORMS]} topicCardsLoading={topics.isPending} topicCardsError={topics.isError} sourcesLoading={sources.isPending} sourcesError={sources.isError} accountsLoading={accounts.isPending} accountsError={accounts.isError} rankObservations={rankObservations.data ?? []} rankObservationsLoading={rankObservations.isPending} rankObservationsError={rankObservations.isError} onSelectedThemeChange={setSelectedThemeId} onConflict={refreshOnConflict} />
+        <SearchSuggestionsSection key={`${wsId}:${activeWorkId}:${activeArtifactId}`} wsId={wsId} works={workList} artifacts={artifactList} versions={versionList} themes={themeList} sources={sourceOptions} workId={activeWorkId} artifactId={activeArtifactId} worksLoading={works.isPending} worksError={works.isError} artifactsLoading={artifacts.isPending} artifactsError={artifacts.isError} versionsLoading={versions.isPending} versionsError={versions.isError} themesLoading={themes.isPending} themesError={themes.isError} sourcesLoading={sources.isPending} sourcesError={sources.isError} onWorkIdChange={setActiveWorkId} onArtifactIdChange={setActiveArtifactId} onConflict={refreshOnConflict} />
+        <SearchPerformanceSections wsId={wsId} publications={publicationList} accounts={accountOptions} themes={themeList} publicationsLoading={publications.isPending} publicationsError={publications.isError} accountsLoading={accounts.isPending} accountsError={accounts.isError} themesLoading={themes.isPending} themesError={themes.isError} onConflict={refreshOnConflict} />
       </main>
     </>
   );

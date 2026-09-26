@@ -15,3 +15,4 @@ export * from "./opdiag/queries";
 export * from "./search/contract";
 export * from "./search/queries";
 export * from "./search/display";
+export * from "./search/page-requests";

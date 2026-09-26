@@ -1864,6 +1864,7 @@
     "unknown": "Unknown",
     "loading": "Loading...",
     "loadFailed": "Could not load these records. Refresh and try again.",
+    "invalidContext": "The selected topic, publication and account do not match. Choose compatible records.",
     "saveFailed": "Could not save. Your draft is still here; review it and retry.",
     "saved": "Saved",
     "empty": "No records yet.",
@@ -1898,7 +1899,7 @@
       "title": "Search performance", "description": "Manually record values shown by the platform for a publication record.", "publication": "Publication record", "account": "Account", "metric": "Metric", "value": "Value", "unit": "Unit", "window": "Statistics window", "sampledAt": "Sampled at", "evidence": "Evidence note", "record": "Record metric", "unrecorded": "Unknown (not recorded)", "unknown": "Unknown (the platform did not provide a value)", "zero": "0 (confirmed zero)", "empty": "No publication record is available for this document."
     },
     "observations": {
-      "title": "Rank observations", "publication": "Publication record", "account": "Account", "query": "Search query", "observedAt": "Observed at", "conditions": "Observation conditions", "result": "Result", "position": "Position", "scannedDepth": "Scanned depth", "evidence": "Evidence note", "record": "Record observation", "void": "Void observation", "voided": "Voided", "empty": "No observations recorded; rank is unknown.", "singleObservation": "One observation; it does not represent a stable or platform-wide rank.", "channelMissing": "This platform has no registrable publication channel.", "includeVoided": "Include voided observations"
+      "title": "Rank observations", "publication": "Publication record", "account": "Account", "query": "Search query", "observedAt": "Observed at", "conditions": "Observation conditions", "result": "Result", "position": "Position", "scannedDepth": "Scanned depth", "evidence": "Evidence note", "record": "Record observation", "revise": "Correct observation", "void": "Void observation", "voided": "Voided", "empty": "No observations recorded; rank is unknown.", "singleObservation": "One observation; it does not represent a stable or platform-wide rank.", "channelMissing": "This platform has no registrable publication channel.", "includeVoided": "Include voided observations"
     }
   },
   "contentOperatingDiagnosisDetails": {

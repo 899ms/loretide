@@ -53,3 +53,11 @@ export function themeUnknownReasonDisplay(theme: SearchTheme): "no_data_source" 
 export function searchDataOriginDisplay(value: string): "manual_only" | "unknown" {
   return value === "manual_only" ? "manual_only" : "unknown";
 }
+
+export function themeHasQuestionOrKeyword(questions: readonly string[], keywords: readonly string[]): boolean {
+  return questions.some((value) => value.trim() !== "") || keywords.some((value) => value.trim() !== "");
+}
+
+export function themeAccountMatchesPlatform(themePlatform: string, accountPlatform: string | null | undefined): boolean {
+  return !accountPlatform || accountPlatform === themePlatform;
+}

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   authorKindDisplay, searchDataOriginDisplay, searchIntentDisplay, searchOriginDisplay,
   suggestionAspectDisplay, suggestionFailureDisplay, suggestionStateDisplay, themeUnknownReasonDisplay,
+  themeAccountMatchesPlatform, themeHasQuestionOrKeyword,
 } from "./display";
 
 describe("search optimization display values", () => {
@@ -35,6 +36,14 @@ describe("search optimization display values", () => {
     expect(suggestionAspectDisplay("future-aspect")).toBe("unknown");
     expect(themeUnknownReasonDisplay({ searchVolume: { status: "unknown", reason: "no_data_source" }, competition: { status: "unknown", reason: "no_data_source" } } as never)).toBe("no_data_source");
     expect(themeUnknownReasonDisplay({ searchVolume: { status: "unknown", reason: "unknown" }, competition: { status: "unknown", reason: "no_data_source" } } as never)).toBe("unknown");
+  });
+  it("requires either questions or keywords and enforces account/platform compatibility", () => {
+    expect(themeHasQuestionOrKeyword([], [])).toBe(false);
+    expect(themeHasQuestionOrKeyword(["  "], ["羊绒"])).toBe(true);
+    expect(themeHasQuestionOrKeyword(["问题"], [])).toBe(true);
+    expect(themeAccountMatchesPlatform("bilibili", "bilibili")).toBe(true);
+    expect(themeAccountMatchesPlatform("bilibili", "douyin")).toBe(false);
+    expect(themeAccountMatchesPlatform("bilibili", "")).toBe(true);
   });
 });
 
