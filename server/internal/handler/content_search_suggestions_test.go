@@ -299,7 +299,7 @@ func TestContentSearchSuggestionRetryReplaysTheRealWorkVersion(t *testing.T) {
 	}
 	ctx := t.Context()
 	h := feedbackHandler(t)
-	newUnrecorded := func(slug string) (*topicplanning.SuggestionStore, suggestionWorld, topicplanning.SuggestionView, *failSecondSuggestionFence) {
+	newUnrecorded := func(slug string) (*topicplanning.SuggestionStore, suggestionWorld, topicplanning.SuggestionView, *failSecondSuggestionFence, string) {
 		t.Helper()
 		world := suggestionWorkspace(t, h, slug)
 		id, _ := roiCreated(t, roiCall(t, h.CreateContentSearchSuggestion, world.wsID, "POST", "/", suggestionBody(world, "")), "suggestion_id")
@@ -314,35 +314,49 @@ func TestContentSearchSuggestionRetryReplaysTheRealWorkVersion(t *testing.T) {
 		if versions := suggestionRows(t, "content_artifact_version", world.wsID); versions != 2 {
 			t.Fatalf("versions after committed apply = %d, want 2", versions)
 		}
-		return store, world, view, fence
+		var committedVersionID string
+		if err := testPool.QueryRow(ctx, `SELECT version_id FROM content_artifact_version
+			WHERE workspace_id=$1 AND artifact_id=$2 ORDER BY revision DESC LIMIT 1`, world.wsID, world.artifact).
+			Scan(&committedVersionID); err != nil {
+			t.Fatal(err)
+		}
+		if committedVersionID == "" || committedVersionID == world.version {
+			t.Fatalf("ApplyBody committed version id %q; original was %q", committedVersionID, world.version)
+		}
+		return store, world, view, fence, committedVersionID
 	}
 
-	store, world, first, fence := newUnrecorded("suggest-retry-real")
+	store, world, first, fence, committedVersionID := newUnrecorded("suggest-retry-real")
 	fence.allowFutureWrites()
 	recovered, err := store.RetrySearchSuggestionDecision(ctx, world.wsID, testUserID, first.Decision.DecisionID)
 	if err != nil || recovered.State != topicplanning.StateAdopted || len(recovered.Effects) != 1 {
 		t.Fatalf("recovered adoption = %+v, %v", recovered, err)
 	}
-	if recovered.Effects[0].VersionID == "" || suggestionRows(t, "content_artifact_version", world.wsID) != 2 {
+	if recovered.Effects[0].VersionID != committedVersionID || suggestionRows(t, "content_artifact_version", world.wsID) != 2 {
 		t.Fatalf("recovery changed version history: %+v", recovered.Effects)
 	}
 
-	store, world, first, fence = newUnrecorded("suggest-retry-real-race")
+	store, world, first, fence, committedVersionID = newUnrecorded("suggest-retry-real-race")
 	fence.allowFutureWrites()
 	errs := make([]error, 2)
+	views := make([]topicplanning.SuggestionView, 2)
 	var retries sync.WaitGroup
 	for i := range errs {
+		i := i
 		retries.Go(func() {
-			_, errs[i] = store.RetrySearchSuggestionDecision(ctx, world.wsID, testUserID, first.Decision.DecisionID)
+			views[i], errs[i] = store.RetrySearchSuggestionDecision(ctx, world.wsID, testUserID, first.Decision.DecisionID)
 		})
 	}
 	retries.Wait()
 	var successes, conflicts int
-	for _, retryErr := range errs {
+	for i, retryErr := range errs {
 		conflict, isConflict := errors.AsType[topicplanning.SearchConflict](retryErr)
 		switch {
 		case retryErr == nil:
 			successes++
+			if len(views[i].Effects) != 1 || views[i].Effects[0].VersionID != committedVersionID {
+				t.Errorf("successful retry effects = %+v; want original committed version %q", views[i].Effects, committedVersionID)
+			}
 		case isConflict && conflict.Field == "decision_id":
 			conflicts++
 		default:
@@ -435,8 +449,11 @@ func TestContentSearchAdoptionKeepsOldReviewAndDeliveryOnV3(t *testing.T) {
 	advance(t, world.wsID, task, `{"status":"ready"}`, http.StatusOK)
 	advance(t, world.wsID, task, `{"status":"handed_off","handoff_method":"export"}`, http.StatusOK)
 
-	var oldSnapshot []byte
-	if err := testPool.QueryRow(t.Context(), `SELECT snapshot FROM content_review_request WHERE review_request_id=$1`, review).Scan(&oldSnapshot); err != nil {
+	var oldReviewRow, oldTaskRow string
+	if err := testPool.QueryRow(t.Context(), `SELECT row_to_json(r)::text FROM content_review_request r WHERE review_request_id=$1`, review).Scan(&oldReviewRow); err != nil {
+		t.Fatal(err)
+	}
+	if err := testPool.QueryRow(t.Context(), `SELECT row_to_json(d)::text FROM content_delivery_task d WHERE delivery_task_id=$1`, task).Scan(&oldTaskRow); err != nil {
 		t.Fatal(err)
 	}
 	theme, _ := roiCreated(t, roiCall(t, h.CreateContentSearchTheme, world.wsID, "POST", "/",
@@ -450,22 +467,28 @@ func TestContentSearchAdoptionKeepsOldReviewAndDeliveryOnV3(t *testing.T) {
 	adopted.Want(http.StatusCreated)
 	versionID := adopted.Map()["effects"].([]any)[0].(map[string]any)["version_id"].(string)
 
-	var afterSnapshot []byte
-	var frozenVersion, reviewStatus string
-	if err := testPool.QueryRow(t.Context(), `SELECT snapshot, version_id, status FROM content_review_request
-		WHERE review_request_id=$1`, review).Scan(&afterSnapshot, &frozenVersion, &reviewStatus); err != nil {
+	var afterReviewRow string
+	if err := testPool.QueryRow(t.Context(), `SELECT row_to_json(r)::text FROM content_review_request r WHERE review_request_id=$1`, review).Scan(&afterReviewRow); err != nil {
 		t.Fatal(err)
 	}
-	if string(afterSnapshot) != string(oldSnapshot) || frozenVersion != world.version || reviewStatus != "approved" {
-		t.Fatalf("v3 review changed: snapshot same=%v version=%q status=%q", string(afterSnapshot) == string(oldSnapshot), frozenVersion, reviewStatus)
+	if afterReviewRow != oldReviewRow {
+		t.Fatalf("v3 review row changed:\nbefore %s\nafter  %s", oldReviewRow, afterReviewRow)
 	}
-	var taskReview, taskStatus string
-	if err := testPool.QueryRow(t.Context(), `SELECT review_request_id, status FROM content_delivery_task WHERE delivery_task_id=$1`, task).
-		Scan(&taskReview, &taskStatus); err != nil {
+	var afterTaskRow string
+	if err := testPool.QueryRow(t.Context(), `SELECT row_to_json(d)::text FROM content_delivery_task d WHERE delivery_task_id=$1`, task).
+		Scan(&afterTaskRow); err != nil {
 		t.Fatal(err)
 	}
-	if taskReview != review || taskStatus != "handed_off" {
-		t.Fatalf("existing delivery task points to review %q with status %q", taskReview, taskStatus)
+	if afterTaskRow != oldTaskRow {
+		t.Fatalf("existing delivery task row changed:\nbefore %s\nafter  %s", oldTaskRow, afterTaskRow)
+	}
+	var adoptedRevision int
+	if err := testPool.QueryRow(t.Context(), `SELECT revision FROM content_artifact_version
+		WHERE workspace_id=$1 AND artifact_id=$2 AND version_id=$3`, world.wsID, world.artifact, versionID).Scan(&adoptedRevision); err != nil {
+		t.Fatal(err)
+	}
+	if adoptedRevision != 4 {
+		t.Fatalf("adopted version revision = %d, want 4", adoptedRevision)
 	}
 	var oldReviewCount int
 	if err := testPool.QueryRow(t.Context(), `SELECT count(*) FROM content_review_request

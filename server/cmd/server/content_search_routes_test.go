@@ -36,7 +36,7 @@ var contentSearchRoutes = []struct {
 	{http.MethodGet, "/api/content-search/suggestions/{suggestionId}", "/api/content-search/suggestions/sug-1"},
 	{http.MethodPost, "/api/content-search/suggestions/{suggestionId}/revisions", "/api/content-search/suggestions/sug-1/revisions"},
 	{http.MethodPost, "/api/content-search/suggestions/{suggestionId}/decisions", "/api/content-search/suggestions/sug-1/decisions"},
-	{http.MethodPost, "/api/content-search/suggestions/decisions/{decisionId}/retry", "/api/content-search/suggestions/decisions/decision-1/retry"},
+	{http.MethodPost, "/api/content-search/decisions/{decisionId}/retry", "/api/content-search/decisions/decision-1/retry"},
 }
 
 // T026 / FR-107: every PR 1 endpoint is mounted, and - a theme changing only
@@ -158,10 +158,10 @@ func TestContentSearchThemePathIDsSurviveTheRealMiddleware(t *testing.T) {
 func TestContentSearchCompareIsNotASuggestionID(t *testing.T) {
 	router := NewRouter(nil, realtime.NewHub(), events.New(), analytics.NoopClient{}, nil)
 	for path, want := range map[string]string{
-		"/api/content-search/suggestions/compare":                    "/api/content-search/suggestions/compare",
-		"/api/content-search/suggestions/sug-1":                      "/api/content-search/suggestions/{suggestionId}",
-		"/api/content-search/suggestions/compar":                     "/api/content-search/suggestions/{suggestionId}",
-		"/api/content-search/suggestions/decisions/decision-1/retry": "/api/content-search/suggestions/decisions/{decisionId}/retry",
+		"/api/content-search/suggestions/compare":        "/api/content-search/suggestions/compare",
+		"/api/content-search/suggestions/sug-1":          "/api/content-search/suggestions/{suggestionId}",
+		"/api/content-search/suggestions/compar":         "/api/content-search/suggestions/{suggestionId}",
+		"/api/content-search/decisions/decision-1/retry": "/api/content-search/decisions/{decisionId}/retry",
 	} {
 		method := http.MethodGet
 		if strings.HasSuffix(path, "/retry") {
@@ -282,11 +282,18 @@ func TestContentSearchSuggestionRetryPathAndPermissionOrder(t *testing.T) {
 	suggestion := roiString(t, roiAPI(t, http.MethodPost, "/api/content-search/suggestions", suggestionBody, http.StatusCreated), "suggestion_id")
 	decision := roiAPI(t, http.MethodPost, "/api/content-search/suggestions/"+suggestion+"/decisions",
 		`{"decision":"abandon","revision":1}`, http.StatusCreated)
-	decisionID := roiString(t, decision, "decision_id")
+	decisionRecord, ok := decision["decision"].(map[string]any)
+	if !ok {
+		t.Fatalf("abandon response has no decision object: %v", decision)
+	}
+	decisionID, ok := decisionRecord["decision_id"].(string)
+	if !ok || decisionID == "" {
+		t.Fatalf("abandon response has no decision_id: %v", decisionRecord)
+	}
 	if decisionID == testWorkspaceID {
 		t.Fatal("the path decision id equals the workspace id; they cannot be distinguished")
 	}
-	path := "/api/content-search/suggestions/decisions/" + decisionID + "/retry"
+	path := "/api/content-search/decisions/" + decisionID + "/retry"
 	valid := accountAPIRequest(t, http.MethodPost, path, `{}`)
 	var validBody map[string]any
 	if err := json.NewDecoder(valid.Body).Decode(&validBody); err != nil {
@@ -297,7 +304,7 @@ func TestContentSearchSuggestionRetryPathAndPermissionOrder(t *testing.T) {
 		t.Fatalf("retry of path decision = %d %v, want 409 decision_id", valid.StatusCode, validBody)
 	}
 
-	missing := accountAPIRequest(t, http.MethodPost, "/api/content-search/suggestions/decisions/no-such-decision/retry", `{}`)
+	missing := accountAPIRequest(t, http.MethodPost, "/api/content-search/decisions/no-such-decision/retry", `{}`)
 	defer missing.Body.Close()
 	if missing.StatusCode != http.StatusNotFound {
 		t.Fatalf("retry of missing path decision = %d, want 404", missing.StatusCode)

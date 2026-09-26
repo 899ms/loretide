@@ -21,7 +21,7 @@
 | `server/internal/content/work-editor/{contract.go,version.go,apply_integration_test.go}` | 新增 `ApplyBody`、三种冲突哨兵与 `suggestion_applied`；沿用唯一 `appendVersion` 路径，幂等 Claim 在状态检查之前；隔离数据库测试覆盖正常写入、重放与三类拒绝。 |
 | `server/internal/content/topic-planning/{search_ports.go,search_suggestion.go}` | 定义 handler 适配器写端口；决定已存在时先报 `suggestion_id` 冲突、不会读取文档；在预检后记录采用决定，写版本并追加成功/失败效果；重试从存储的决定恢复。 |
 | `server/internal/content/topic-planning/{search_suggestion*_test.go}` | 增补采用预检顺序、删除工作区 fence与失败效果的覆盖；数据库部分只由隔离 CI 执行。 |
-| `server/internal/handler/content_search_suggestions.go`、`server/cmd/server/router.go`、相关测试 | 将跨模块写映射到 `work-editor.ApplyBody`，新增决策重试端点；数据库用例覆盖效果未记后的真实版本单次/并发重试（T067/T068）、决策后真实 `SaveVersion` 抢先（T069）、retry 中间件路径参数及越权顺序（T070）、工作区删除时 `Apply` 为 404（T071），以及 v3 审核/交付快照不变、v4 无继承审核且新提审为 pending（T072）。上述数据库用例仅编译，待隔离 CI 执行。 |
+| `server/internal/handler/content_search_suggestions.go`、`server/cmd/server/router.go`、相关测试 | 将跨模块写映射到 `work-editor.ApplyBody`，新增决策重试端点；数据库用例覆盖效果未记后的真实版本单次/并发重试且断言重用 ApplyBody 首次提交的确切 version ID（T067/T068）、决策后真实 `SaveVersion` 抢先（T069）、正确 retry 路由路径、嵌套决策响应取值及越权顺序（T070）、工作区删除时 `Apply` 为 404（T071），以及采用后 revision 4、v3 审核与交付整行 JSON 不变、v4 无继承审核且新提审为 pending（T072）。上述数据库用例仅编译，待隔离 CI 执行。 |
 | `packages/core/content/{work-editor,topic-planning/search}` | 更新受控动作集合；提供非乐观采用/重试 mutation，并以纯 Node 的 mutation-options 测试验证请求与成功后的缓存失效（不使用 jsdom 或 renderHook）。 |
 | `packages/views/content/work-editor/index.tsx`、四份 `common.json` | `suggestion_applied` 的历史动作显示文案；未做页面验收。 |
 | `server/internal/content/*/*guards_test.go` | 保持版本/建议/效果表仅追加写入的源码守卫。 |
@@ -31,7 +31,7 @@
 - `go test ./internal/content/work-editor ./internal/content/topic-planning -run 'Test(AdoptPreflight|ApplyBody|Version|SourceAndAction|SearchSuggestion|SuggestionDecision|AbandonRefusals)'`：通过；真实库用例因未配置 `LORETIDE_WORK_TEST_DATABASE_URL` 跳过，未把跳过记为通过。
 - `go build ./internal/handler ./cmd/server`、`go vet ./internal/content/work-editor ./internal/content/topic-planning`：通过。
 - core 定向 Node Vitest（工作编辑器契约、搜索建议契约和 mutation 配置）：44 通过；`pnpm --filter @multica/core typecheck` 与全仓 `pnpm typecheck --force` 均取得退出码 0；全仓强制检查 9/9 包成功，包含 views/web/desktop。
-- `go test -c` 仅编译 `internal/handler` 和 `cmd/server` 测试二进制后删除临时文件：通过；没有执行数据库/handler 测试。
+- `go test -c` 仅编译 `internal/handler` 和 `cmd/server` 测试二进制后删除临时文件：本轮 T067/T068/T070/T072 断言修订后重新编译通过；没有执行数据库/handler 测试。
 - 内容边界与诊断契约检查、`git diff --check`：通过。
 - `git diff --check`：通过。
 - GitHub Actions 运行 `36251869254`（旧 head `1e5d6956`）：boundaries 与 cmd-server 成功；topic-planning、handler 失败。日志定位为旧用例仍断言 `adopt` 不可用／应为 400，现已改为新契约；本次修订尚未推送，不能把该运行记为已修复或通过。
