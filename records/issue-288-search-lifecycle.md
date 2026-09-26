@@ -9,6 +9,8 @@
 分支：`codex/036-search-lifecycle`
 关联：GitHub Issue #288
 
+Draft PR：https://github.com/899ms/loretide/pull/290（base `app-main`；主控待审；Issue 保持 OPEN 并标记 `review-needed`）
+
 ## 范围与权限边界
 
 - 本次只完成 036 T091：在 handler 集成测试中覆盖 SC-014 的搜索主题 → 作品版本 1 → 建议采用版本 2 → 版本 2 人工审核与批准 → 交付和人工发布记录 → 搜索曝光指标与单次排名观察的真实服务端链路。
@@ -27,6 +29,7 @@
 
 - 已实施：新增真实 handler/DB 链路用例；测试清理按关联表顺序删除本次 fixture 数据。
 - 已验证：`gofmt`；`go test -c ./internal/handler` 成功（仅编译测试二进制，不执行测试）；`git diff --check` 成功。
+- 自动检查：PR #290 的 GitHub `boundaries` 检查已启动；记录时仍在运行，未宣称通过。
 - 未验证：T091 的实际数据库断言尚未执行；不能将编译成功或 Skip 当作行为通过。等待主控在隔离 CI/数据库串行执行该用例。
 - 未执行：本机数据库/迁移/服务、浏览器 UI 与 computer use 验收。UI 项按用户豁免记录；远程数据库结果待回填。
 - 限制：仅静态/handler 接口层服务端闭环证据，不证明真实执行器运行时越权或浏览器流程验收（与 LT-004 的边界一致）。
