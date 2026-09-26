@@ -288,8 +288,7 @@ func (h *Handler) ReviseContentSearchSuggestion(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusCreated, suggestion)
 }
 
-// DecideContentSearchSuggestion records the one decision on a suggestion.
-// This version accepts abandon only; adopt is 400 naming decision until PR 3.
+// DecideContentSearchSuggestion records an adopt or abandon decision.
 func (h *Handler) DecideContentSearchSuggestion(w http.ResponseWriter, r *http.Request) {
 	workspace, actor, ok := h.searchScope(w, r)
 	if !ok {

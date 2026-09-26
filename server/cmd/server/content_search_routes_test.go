@@ -35,6 +35,7 @@ var contentSearchRoutes = []struct {
 	{http.MethodGet, "/api/content-search/suggestions/{suggestionId}", "/api/content-search/suggestions/sug-1"},
 	{http.MethodPost, "/api/content-search/suggestions/{suggestionId}/revisions", "/api/content-search/suggestions/sug-1/revisions"},
 	{http.MethodPost, "/api/content-search/suggestions/{suggestionId}/decisions", "/api/content-search/suggestions/sug-1/decisions"},
+	{http.MethodPost, "/api/content-search/suggestions/decisions/{decisionId}/retry", "/api/content-search/suggestions/decisions/decision-1/retry"},
 }
 
 // T026 / FR-107: every PR 1 endpoint is mounted, and - a theme changing only
@@ -156,12 +157,17 @@ func TestContentSearchThemePathIDsSurviveTheRealMiddleware(t *testing.T) {
 func TestContentSearchCompareIsNotASuggestionID(t *testing.T) {
 	router := NewRouter(nil, realtime.NewHub(), events.New(), analytics.NoopClient{}, nil)
 	for path, want := range map[string]string{
-		"/api/content-search/suggestions/compare": "/api/content-search/suggestions/compare",
-		"/api/content-search/suggestions/sug-1":   "/api/content-search/suggestions/{suggestionId}",
-		"/api/content-search/suggestions/compar":  "/api/content-search/suggestions/{suggestionId}",
+		"/api/content-search/suggestions/compare":                    "/api/content-search/suggestions/compare",
+		"/api/content-search/suggestions/sug-1":                      "/api/content-search/suggestions/{suggestionId}",
+		"/api/content-search/suggestions/compar":                     "/api/content-search/suggestions/{suggestionId}",
+		"/api/content-search/suggestions/decisions/decision-1/retry": "/api/content-search/suggestions/decisions/{decisionId}/retry",
 	} {
-		if got := router.Find(chi.NewRouteContext(), http.MethodGet, path); got != want {
-			t.Errorf("GET %s matches %q, want %q", path, got, want)
+		method := http.MethodGet
+		if strings.HasSuffix(path, "/retry") {
+			method = http.MethodPost
+		}
+		if got := router.Find(chi.NewRouteContext(), method, path); got != want {
+			t.Errorf("%s %s matches %q, want %q", method, path, got, want)
 		}
 	}
 }

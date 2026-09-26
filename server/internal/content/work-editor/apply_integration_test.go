@@ -2,6 +2,7 @@ package workeditor
 
 import (
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/multica-ai/multica/server/internal/content/idempotency"
@@ -60,6 +61,59 @@ func TestApplyBodyAppendsOneSuggestionVersionAndReplays(t *testing.T) {
 		BodyApplication{BaseVersionID: base.VersionID, Body: "另一份正文"}, different)
 	if !errors.Is(err, idempotency.ErrConflict) {
 		t.Fatalf("different request with same key = %v, want ErrConflict", err)
+	}
+}
+
+// T060: two callers with the same key contend on the idempotency row. The
+// second one must replay the committed version instead of appending another.
+func TestApplyBodySameKeyConcurrentWritesOneVersion(t *testing.T) {
+	fx := newWorkFixture(t)
+	ctx := t.Context()
+	workID, artifactID := seedArtifact(t, fx)
+	typeInto(t, fx, workID, artifactID, "基础正文")
+	base, err := fx.store.SaveVersion(ctx, testWorkspace, testActor, workID, artifactID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := idempotency.NewRequest("apply-search-suggestion", artifactID, "concurrent-suggestion", struct {
+		BaseVersionID string `json:"base_version_id"`
+		Body          string `json:"body"`
+	}{base.VersionID, "采用正文"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := make(chan struct{})
+	versions := make(chan ArtifactVersion, 2)
+	errs := make(chan error, 2)
+	var group sync.WaitGroup
+	for range 2 {
+		group.Go(func() {
+			<-start
+			version, applyErr := fx.store.ApplyBody(ctx, testWorkspace, testActor, workID, artifactID,
+				BodyApplication{BaseVersionID: base.VersionID, Body: "采用正文"}, request)
+			versions <- version
+			errs <- applyErr
+		})
+	}
+	close(start)
+	group.Wait()
+	close(versions)
+	close(errs)
+	var seen []ArtifactVersion
+	for applyErr := range errs {
+		if applyErr != nil {
+			t.Fatalf("concurrent ApplyBody: %v", applyErr)
+		}
+	}
+	for version := range versions {
+		seen = append(seen, version)
+	}
+	if len(seen) != 2 || seen[0].VersionID == "" || seen[0].VersionID != seen[1].VersionID {
+		t.Fatalf("replayed versions = %+v", seen)
+	}
+	versionsAfter, err := fx.store.ListVersions(ctx, testWorkspace, testActor, workID, artifactID)
+	if err != nil || len(versionsAfter) != 2 {
+		t.Fatalf("versions after concurrent apply = %d, %v; want exactly 2", len(versionsAfter), err)
 	}
 }
 

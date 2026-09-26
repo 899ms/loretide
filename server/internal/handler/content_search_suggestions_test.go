@@ -204,6 +204,47 @@ func TestContentSearchSuggestionRoundTrip(t *testing.T) {
 	assertROIField(t, roiCall(t, h.ListContentSearchSuggestions, world.wsID, "GET", "/?state=rejected", ""), http.StatusBadRequest, "state")
 }
 
+// T064/T065: preflight failures leave no decision, a successful adoption
+// appends exactly one suggestion_applied version, and a repeat reports the
+// decision conflict before observing that the document has since moved.
+func TestContentSearchSuggestionAdoptionPreflightAndRepeat(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	h := feedbackHandler(t)
+	world := suggestionWorkspace(t, h, "suggest-adopt")
+	id, _ := roiCreated(t, roiCall(t, h.CreateContentSearchSuggestion, world.wsID, "POST", "/", suggestionBody(world, "")), "suggestion_id")
+	if _, err := testPool.Exec(t.Context(), `UPDATE content_artifact SET draft_body='未保存', draft_status='working'
+		WHERE workspace_id=$1 AND artifact_id=$2`, world.wsID, world.artifact); err != nil {
+		t.Fatal(err)
+	}
+	assertROIField(t, roiCall(t, h.DecideContentSearchSuggestion, world.wsID, "POST", "/",
+		`{"decision":"adopt","revision":1}`, "suggestionId", id), http.StatusConflict, "draft_status")
+	if rows := suggestionRows(t, "content_search_suggestion_decision", world.wsID); rows != 0 {
+		t.Fatalf("draft preflight wrote %d decisions", rows)
+	}
+	if _, err := testPool.Exec(t.Context(), `UPDATE content_artifact SET draft_body=$3, draft_status='saved'
+		WHERE workspace_id=$1 AND artifact_id=$2`, world.wsID, world.artifact, suggestionBaseBody); err != nil {
+		t.Fatal(err)
+	}
+	adopted := roiCall(t, h.DecideContentSearchSuggestion, world.wsID, "POST", "/",
+		`{"decision":"adopt","revision":1}`, "suggestionId", id)
+	adopted.Want(http.StatusCreated)
+	if adopted.Map()["state"] != "adopted" {
+		t.Fatalf("adoption = %v", adopted.Map())
+	}
+	var action string
+	if err := testPool.QueryRow(t.Context(), `SELECT action FROM content_artifact_version
+		WHERE workspace_id=$1 AND artifact_id=$2 ORDER BY revision DESC LIMIT 1`, world.wsID, world.artifact).Scan(&action); err != nil {
+		t.Fatal(err)
+	}
+	if action != "suggestion_applied" {
+		t.Fatalf("latest action = %q", action)
+	}
+	assertROIField(t, roiCall(t, h.DecideContentSearchSuggestion, world.wsID, "POST", "/",
+		`{"decision":"adopt","revision":1}`, "suggestionId", id), http.StatusConflict, "suggestion_id")
+}
+
 // T047 / contract §7.1 / FR-100: the decision order, first failure winning.
 // A non-member and a suggestion that is not here - missing, or another
 // brand's - answer byte for byte alike; then the body, by field; then the
@@ -265,7 +306,7 @@ func TestContentSearchSuggestionDecisionOrder(t *testing.T) {
 		assertROIField(t, roiCall(t, h.CreateContentSearchSuggestion, world.wsID, "POST", "/", tc.body), http.StatusBadRequest, tc.field)
 	}
 	assertROIField(t, roiCall(t, h.DecideContentSearchSuggestion, world.wsID, "POST", "/", `{"decision":"adopt","revision":9}`,
-		"suggestionId", id), http.StatusBadRequest, "decision")
+		"suggestionId", id), http.StatusConflict, "revision")
 
 	// 4. References: another brand's theme and version answer like missing ones.
 	for _, tc := range []struct{ field, own, foreign, missing string }{

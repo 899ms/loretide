@@ -43,7 +43,8 @@ import (
 // embedding.
 type SuggestionStore struct {
 	*Store
-	Works SearchWorks
+	Works      SearchWorks
+	afterApply func() error // test-only seam for the post-version effect write.
 }
 
 const searchSuggestionColumns = `workspace_id, suggestion_id, revision, work_id, artifact_id, base_version_id,
@@ -446,18 +447,8 @@ func (s *SuggestionStore) adoptSearchSuggestion(ctx context.Context, workspaceID
 	if err != nil {
 		return SuggestionView{}, err
 	}
-	document, err := s.Works.Document(ctx, workspaceID, actor, current.WorkID, current.ArtifactID)
-	if err != nil {
-		return SuggestionView{}, worksReadError(err)
-	}
 	if req.Revision != current.Revision {
 		return SuggestionView{}, SearchConflict{Field: "revision"}
-	}
-	if document.LatestVersionID != current.BaseVersionID {
-		return SuggestionView{}, SearchConflict{Field: "base_version_id"}
-	}
-	if !document.DraftSaved {
-		return SuggestionView{}, SearchConflict{Field: "draft_status"}
 	}
 	decided, err := hasDecision(ctx, tx, workspaceID, suggestionID)
 	if err != nil {
@@ -465,6 +456,16 @@ func (s *SuggestionStore) adoptSearchSuggestion(ctx context.Context, workspaceID
 	}
 	if decided {
 		return SuggestionView{}, SearchConflict{Field: "suggestion_id"}
+	}
+	document, err := s.Works.Document(ctx, workspaceID, actor, current.WorkID, current.ArtifactID)
+	if err != nil {
+		return SuggestionView{}, worksReadError(err)
+	}
+	if document.LatestVersionID != current.BaseVersionID {
+		return SuggestionView{}, SearchConflict{Field: "base_version_id"}
+	}
+	if !document.DraftSaved {
+		return SuggestionView{}, SearchConflict{Field: "draft_status"}
 	}
 	decision, err := scanDecision(tx.QueryRow(ctx, `INSERT INTO content_search_suggestion_decision (
 		workspace_id, decision_id, suggestion_id, suggestion_revision, decision, note, decided_by
@@ -552,6 +553,11 @@ func (s *SuggestionStore) completeSearchAdoption(ctx context.Context, workspaceI
 		}
 		return s.GetSearchSuggestion(ctx, workspaceID, actor, suggestion.SuggestionID)
 	}
+	if s.afterApply != nil && s.afterApply() != nil {
+		// Test-only: model an unavailable effect ledger after the idempotent
+		// work-editor transaction committed. The next retry must converge.
+		return s.GetSearchSuggestion(ctx, workspaceID, actor, suggestion.SuggestionID)
+	}
 	if err := s.recordSearchEffect(ctx, workspaceID, actor, decision, EffectDone, versionID, ""); err != nil {
 		// The version transaction has already committed. Returning the derived
 		// view exposes adopt_unrecorded so a retry can finish recording it.
@@ -572,11 +578,17 @@ func (s *SuggestionStore) RetrySearchSuggestionDecision(ctx context.Context, wor
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SuggestionView{}, ErrNotFound
 	}
-	if err != nil || decision.Decision != DecisionAdopt {
+	if err != nil {
 		return SuggestionView{}, ErrStorage
 	}
+	if decision.Decision != DecisionAdopt {
+		return SuggestionView{}, SearchConflict{Field: "decision_id"}
+	}
 	suggestions, err := s.currentSuggestions(ctx, workspaceID, []string{decision.SuggestionID}, SuggestionFilter{})
-	if err != nil || len(suggestions) != 1 {
+	if err != nil {
+		return SuggestionView{}, ErrStorage
+	}
+	if len(suggestions) != 1 {
 		return SuggestionView{}, ErrNotFound
 	}
 	view, err := s.GetSearchSuggestion(ctx, workspaceID, actor, decision.SuggestionID)
