@@ -160,7 +160,7 @@ func searchObservationWorkspace(t *testing.T, slug string) searchObservationFixt
 func searchMetricBody(publication, value, extra string) string {
 	return fmt.Sprintf(`{"publication_record_id":%q,"platform":"xiaohongshu","account_id":"",
 		"metric":"search_impression","value":%s,"unit":"次","stat_window":"发布后 7 天累计",
-		"sampled_at":"2026-10-02T13:30:00Z","evidence_note":"笔记数据页截图 0928-1.png"%s}`, publication, value, extra)
+		"sampled_at":"2020-10-02T13:30:00Z","evidence_note":"笔记数据页截图 0928-1.png"%s}`, publication, value, extra)
 }
 
 func rankObservationBody(themeID, observedAt, extra string) string {
@@ -277,7 +277,7 @@ func TestContentSearchRankObservationRoundTrip(t *testing.T) {
 	foreignTheme, _ := roiCreated(t, roiCall(t, h.CreateContentSearchTheme, other.wsID, "POST", "/", searchThemeBody(other.searchFixture, "")), "theme_id")
 
 	ids := []string{}
-	for _, observed := range []string{"2026-10-02T21:30:00+08:00", "2026-10-03T21:30:00+08:00", "2026-10-01T21:30:00+08:00"} {
+	for _, observed := range []string{"2020-10-02T21:30:00+08:00", "2020-10-03T21:30:00+08:00", "2020-10-01T21:30:00+08:00"} {
 		id, created := roiCreated(t, roiCall(t, h.RecordContentSearchRankObservation, fx.wsID, "POST", "/",
 			rankObservationBody(themeID, observed, `,"rule":"x","data_origin":"ai"`)), "observation_id")
 		if created["revision"] != float64(1) || created["rule"] != "rank.single_observation" ||
@@ -308,12 +308,12 @@ func TestContentSearchRankObservationRoundTrip(t *testing.T) {
 
 	// A correction, then a void; the list drops the voided one by default.
 	roiCreated(t, roiCall(t, h.ReviseContentSearchRankObservation, fx.wsID, "POST", "/",
-		rankObservationBody(themeID, "2026-10-02T21:30:00+08:00", `,"base_revision":1,"position":8`), "observationId", ids[0]), "observation_id")
+		rankObservationBody(themeID, "2020-10-02T21:30:00+08:00", `,"base_revision":1,"position":8`), "observationId", ids[0]), "observation_id")
 	assertROIField(t, roiCall(t, h.ReviseContentSearchRankObservation, fx.wsID, "POST", "/",
-		rankObservationBody(themeID, "2026-10-02T21:30:00+08:00", `,"base_revision":1`), "observationId", ids[0]),
+		rankObservationBody(themeID, "2020-10-02T21:30:00+08:00", `,"base_revision":1`), "observationId", ids[0]),
 		http.StatusConflict, "base_revision")
 	_, voided := roiCreated(t, roiCall(t, h.ReviseContentSearchRankObservation, fx.wsID, "POST", "/",
-		rankObservationBody(themeID, "2026-10-02T21:30:00+08:00", `,"base_revision":2,"voided":true`), "observationId", ids[0]), "observation_id")
+		rankObservationBody(themeID, "2020-10-02T21:30:00+08:00", `,"base_revision":2,"voided":true`), "observationId", ids[0]), "observation_id")
 	if voided["revision"] != float64(3) || voided["voided"] != true {
 		t.Fatalf("void = %v", voided)
 	}
@@ -340,12 +340,12 @@ func TestContentSearchRankObservationRoundTrip(t *testing.T) {
 	// Field rules and references, by field; a foreign theme and a missing
 	// one alike.
 	for _, tc := range []struct{ name, body, field string }{
-		{"no conditions", strings.Replace(rankObservationBody(themeID, "2026-10-02T21:30:00+08:00", ""), `"自己手机，未登录，定位上海，综合排序"`, `""`, 1), "conditions"},
-		{"no evidence", strings.Replace(rankObservationBody(themeID, "2026-10-02T21:30:00+08:00", ""), `"截图 1002-2130.png"`, `""`, 1), "evidence_note"},
+		{"no conditions", strings.Replace(rankObservationBody(themeID, "2020-10-02T21:30:00+08:00", ""), `"自己手机，未登录，定位上海，综合排序"`, `""`, 1), "conditions"},
+		{"no evidence", strings.Replace(rankObservationBody(themeID, "2020-10-02T21:30:00+08:00", ""), `"截图 1002-2130.png"`, `""`, 1), "evidence_note"},
 		{"no observed_at", rankObservationBody(themeID, "", ""), "observed_at"},
 		{"future", rankObservationBody(themeID, time.Now().Add(time.Hour).UTC().Format(time.RFC3339), ""), "observed_at"},
-		{"both integers", rankObservationBody(themeID, "2026-10-02T21:30:00+08:00", `,"scanned_depth":30`), "scanned_depth"},
-		{"rank member", rankObservationBody(themeID, "2026-10-02T21:30:00+08:00", `,"rank":7`), "rank"},
+		{"both integers", rankObservationBody(themeID, "2020-10-02T21:30:00+08:00", `,"scanned_depth":30`), "scanned_depth"},
+		{"rank member", rankObservationBody(themeID, "2020-10-02T21:30:00+08:00", `,"rank":7`), "rank"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			assertROIField(t, roiCall(t, h.RecordContentSearchRankObservation, fx.wsID, "POST", "/", tc.body), http.StatusBadRequest, tc.field)
@@ -353,23 +353,23 @@ func TestContentSearchRankObservationRoundTrip(t *testing.T) {
 	}
 	answers := []*testutil.Response{}
 	for _, theme := range []string{foreignTheme, "no-such-theme"} {
-		response := roiCall(t, h.RecordContentSearchRankObservation, fx.wsID, "POST", "/", rankObservationBody(theme, "2026-10-02T21:30:00+08:00", ""))
+		response := roiCall(t, h.RecordContentSearchRankObservation, fx.wsID, "POST", "/", rankObservationBody(theme, "2020-10-02T21:30:00+08:00", ""))
 		assertROIField(t, response, http.StatusBadRequest, "theme_id")
 		answers = append(answers, response)
 	}
 	if !sameRefusalApartFromTrace(t, answers[0], answers[1]) {
 		t.Error("a foreign theme and a missing one answer differently")
 	}
-	withRecord := strings.Replace(rankObservationBody(themeID, "2026-10-02T21:30:00+08:00", ""),
+	withRecord := strings.Replace(rankObservationBody(themeID, "2020-10-02T21:30:00+08:00", ""),
 		`"publication_record_id":""`, fmt.Sprintf(`"publication_record_id":%q`, other.publication), 1)
 	assertROIField(t, roiCall(t, h.RecordContentSearchRankObservation, fx.wsID, "POST", "/", withRecord), http.StatusBadRequest, "publication_record_id")
-	withAccount := strings.Replace(rankObservationBody(themeID, "2026-10-02T21:30:00+08:00", ""),
+	withAccount := strings.Replace(rankObservationBody(themeID, "2020-10-02T21:30:00+08:00", ""),
 		`"account_id":""`, fmt.Sprintf(`"account_id":%q`, other.xhs), 1)
 	assertROIField(t, roiCall(t, h.RecordContentSearchRankObservation, fx.wsID, "POST", "/", withAccount), http.StatusBadRequest, "account_id")
 
 	// The accepting side of each reference.
 	all := strings.NewReplacer(`"publication_record_id":""`, fmt.Sprintf(`"publication_record_id":%q`, fx.publication),
-		`"account_id":""`, fmt.Sprintf(`"account_id":%q`, fx.xhs)).Replace(rankObservationBody(themeID, "2026-10-02T21:30:00+08:00", ""))
+		`"account_id":""`, fmt.Sprintf(`"account_id":%q`, fx.xhs)).Replace(rankObservationBody(themeID, "2020-10-02T21:30:00+08:00", ""))
 	roiCreated(t, roiCall(t, h.RecordContentSearchRankObservation, fx.wsID, "POST", "/", all), "observation_id")
 	if rows := searchObservationRows(t, "content_search_rank_observation_revision", fx.wsID); rows != 6 {
 		t.Fatalf("%d observation rows, want 3 created + 2 revisions + 1", rows)
@@ -387,9 +387,9 @@ func TestContentSearchObservationDecisionOrder(t *testing.T) {
 	other := searchObservationWorkspace(t, "search-obs-order-other")
 	h := feedbackHandler(t)
 	foreign, _ := roiCreated(t, roiCall(t, h.RecordContentSearchRankObservation, other.wsID, "POST", "/",
-		rankObservationBody("", "2026-10-02T21:30:00+08:00", "")), "observation_id")
+		rankObservationBody("", "2020-10-02T21:30:00+08:00", "")), "observation_id")
 	reference := roiCall(t, h.ReviseContentSearchRankObservation, fx.wsID, "POST", "/",
-		rankObservationBody("", "2026-10-02T21:30:00+08:00", `,"base_revision":1`), "observationId", "no-such-observation")
+		rankObservationBody("", "2020-10-02T21:30:00+08:00", `,"base_revision":1`), "observationId", "no-such-observation")
 	reference.Want(http.StatusNotFound)
 
 	outsider := dbfx.Insert(t, "workspace", testutil.Cols{
@@ -402,11 +402,11 @@ func TestContentSearchObservationDecisionOrder(t *testing.T) {
 		"list metrics":       roiCall(t, h.ListContentSearchMetrics, outsider, "GET", "/?publication_record_id="+fx.publication, ""),
 		"record metric":      roiCall(t, h.RecordContentSearchMetric, outsider, "POST", "/", searchMetricBody(fx.publication, "1", "")),
 		"list observations":  roiCall(t, h.ListContentSearchRankObservations, outsider, "GET", "/?query=x", ""),
-		"record observation": roiCall(t, h.RecordContentSearchRankObservation, outsider, "POST", "/", rankObservationBody("", "2026-10-02T21:30:00+08:00", "")),
+		"record observation": roiCall(t, h.RecordContentSearchRankObservation, outsider, "POST", "/", rankObservationBody("", "2020-10-02T21:30:00+08:00", "")),
 		"revise observation": roiCall(t, h.ReviseContentSearchRankObservation, outsider, "POST", "/",
-			rankObservationBody("", "2026-10-02T21:30:00+08:00", `,"base_revision":1`), "observationId", foreign),
+			rankObservationBody("", "2020-10-02T21:30:00+08:00", `,"base_revision":1`), "observationId", foreign),
 		"revise foreign": roiCall(t, h.ReviseContentSearchRankObservation, fx.wsID, "POST", "/",
-			rankObservationBody("", "2026-10-02T21:30:00+08:00", `,"base_revision":1`), "observationId", foreign),
+			rankObservationBody("", "2020-10-02T21:30:00+08:00", `,"base_revision":1`), "observationId", foreign),
 		"revise missing, bad body": roiCall(t, h.ReviseContentSearchRankObservation, fx.wsID, "POST", "/",
 			`{"rank":1}`, "observationId", "no-such-observation"),
 	} {
@@ -433,7 +433,7 @@ func TestContentSearchObservationAdaptersAndWritesAfterWorkspaceDeletion(t *test
 	h := feedbackHandler(t)
 	themeID, _ := roiCreated(t, roiCall(t, h.CreateContentSearchTheme, fx.wsID, "POST", "/", searchThemeBody(fx.searchFixture, "")), "theme_id")
 	observationID, _ := roiCreated(t, roiCall(t, h.RecordContentSearchRankObservation, fx.wsID, "POST", "/",
-		rankObservationBody(themeID, "2026-10-02T21:30:00+08:00", "")), "observation_id")
+		rankObservationBody(themeID, "2020-10-02T21:30:00+08:00", "")), "observation_id")
 	roiCreated(t, roiCall(t, h.RecordContentSearchMetric, fx.wsID, "POST", "/", searchMetricBody(fx.publication, "1", "")), "search_metric_id")
 
 	request := newRequest(http.MethodDelete, "/api/workspaces/"+fx.wsID, nil)
@@ -452,7 +452,7 @@ func TestContentSearchObservationAdaptersAndWritesAfterWorkspaceDeletion(t *test
 	}
 
 	withRefs := strings.NewReplacer(`"publication_record_id":""`, fmt.Sprintf(`"publication_record_id":%q`, fx.publication),
-		`"account_id":""`, fmt.Sprintf(`"account_id":%q`, fx.xhs)).Replace(rankObservationBody(themeID, "2026-10-02T21:30:00+08:00", ""))
+		`"account_id":""`, fmt.Sprintf(`"account_id":%q`, fx.xhs)).Replace(rankObservationBody(themeID, "2020-10-02T21:30:00+08:00", ""))
 	for name, response := range map[string]*testutil.Response{
 		"record metric":      roiCall(t, h.RecordContentSearchMetric, fx.wsID, "POST", "/", searchMetricBody(fx.publication, "1", "")),
 		"record observation": roiCall(t, h.RecordContentSearchRankObservation, fx.wsID, "POST", "/", withRefs),
@@ -467,7 +467,7 @@ func TestContentSearchObservationAdaptersAndWritesAfterWorkspaceDeletion(t *test
 	}
 	// The store itself, past the membership check: the fence refuses.
 	if _, err := store.RecordRankObservation(ctx, fx.wsID, testUserID, feedbacklearning.RankObservationInput{
-		Platform: "xiaohongshu", Query: "羊绒", ObservedAt: "2026-10-02T13:30:00Z", Conditions: "c",
+		Platform: "xiaohongshu", Query: "羊绒", ObservedAt: "2020-10-02T13:30:00Z", Conditions: "c",
 		ResultKind: "not_found", ScannedDepth: func() *int { depth := 30; return &depth }(), EvidenceNote: "e",
 	}); !errors.Is(err, feedbacklearning.ErrNotFound) {
 		t.Errorf("a store write after the deletion = %v, want ErrNotFound", err)
@@ -491,7 +491,7 @@ func TestDeleteWorkspaceRemovesSearchMetricsAndObservations(t *testing.T) {
 	for _, fx := range []searchObservationFixture{target, neighbor} {
 		roiCreated(t, roiCall(t, h.RecordContentSearchMetric, fx.wsID, "POST", "/", searchMetricBody(fx.publication, "1", "")), "search_metric_id")
 		roiCreated(t, roiCall(t, h.RecordContentSearchRankObservation, fx.wsID, "POST", "/",
-			rankObservationBody("", "2026-10-02T21:30:00+08:00", "")), "observation_id")
+			rankObservationBody("", "2020-10-02T21:30:00+08:00", "")), "observation_id")
 	}
 	request := newRequest(http.MethodDelete, "/api/workspaces/"+target.wsID, nil)
 	request = withURLParam(request, "id", target.wsID)

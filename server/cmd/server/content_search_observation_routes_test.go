@@ -109,7 +109,7 @@ func TestContentSearchObservationPathIDSurvivesTheRealMiddleware(t *testing.T) {
 	fx.Cleanup(t, `DELETE FROM content_search_rank_observation_revision WHERE workspace_id=$1`, testWorkspaceID)
 	fx.Cleanup(t, `DELETE FROM content_operation_audit WHERE workspace_id=$1`, testWorkspaceID)
 
-	body := `{"platform":"douyin","query":"羊绒大衣能机洗吗","observed_at":"2026-10-03T13:30:00Z",
+	body := `{"platform":"douyin","query":"羊绒大衣能机洗吗","observed_at":"2020-10-03T13:30:00Z",
 		"conditions":"同事账号，北京，综合排序","result_kind":"not_found","scanned_depth":30,"evidence_note":"截图 1003.png"}`
 	created := roiAPI(t, http.MethodPost, "/api/content-search/rank-observations", body, http.StatusCreated)
 	observationID := roiString(t, created, "observation_id")
