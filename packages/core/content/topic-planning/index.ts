@@ -8,5 +8,6 @@ export * from "./search/contract";
 export * from "./search/queries";
 export * from "./search/suggestion-contract";
 export * from "./search/suggestion-queries";
+export * from "./search/display";
 export * from "./snapshot";
 export * from "./start-form";

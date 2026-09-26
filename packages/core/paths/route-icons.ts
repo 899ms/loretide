@@ -52,7 +52,8 @@ export type RouteIconName =
   | "FileArchive"
   | "FileAudio"
   | "FileVideo"
-  | "FileQuestion";
+  | "FileQuestion"
+  | "SearchCheck";
 
 /** i18n label key (under the `layout.nav` namespace) for a page. */
 export type NavLabelKey =
@@ -76,7 +77,8 @@ export type NavLabelKey =
   | "operating_diagnosis"
   | "accounts"
   | "historical_import"
-  | "content_diagnostics";
+  | "content_diagnostics"
+  | "search_optimization";
 
 /** Stable identifier for each workspace navigation page. */
 export type WorkspacePageKey =
@@ -100,7 +102,8 @@ export type WorkspacePageKey =
   | "operatingDiagnosis"
   | "accounts"
   | "historicalImport"
-  | "contentDiagnostics";
+  | "contentDiagnostics"
+  | "searchOptimization";
 
 export interface WorkspacePage {
   /** Route segment at index 1 of `/{slug}/{segment}/...`. */
@@ -144,6 +147,11 @@ export const WORKSPACE_PAGES: Record<WorkspacePageKey, WorkspacePage> = {
     segment: "diagnostics",
     icon: "Activity",
     navKey: "content_diagnostics",
+  },
+  searchOptimization: {
+    segment: "search-optimization",
+    icon: "SearchCheck",
+    navKey: "search_optimization",
   },
 };
 

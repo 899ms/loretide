@@ -92,7 +92,8 @@
       "@multica/views/i18n",
       "react-i18next",
       "@multica/views/settings/layout",
-      "@multica/views/layout/page-header"
+      "@multica/views/layout/page-header",
+      "@multica/core/paths"
     ]
   },
   "adapters": [
@@ -136,6 +137,7 @@
     "server/internal/handler/content_search_themes.go",
     "server/internal/handler/content_opdiag_decisions.go",
     "server/internal/handler/content_search_observations.go",
-    "server/internal/handler/content_search_suggestions.go"
+    "server/internal/handler/content_search_suggestions.go",
+    "apps/web/app/[workspaceSlug]/(dashboard)/search-optimization/page.tsx"
   ]
 }

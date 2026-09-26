@@ -20,7 +20,8 @@
     "operating_diagnosis": "Operating diagnosis",
     "accounts": "Accounts",
     "content_diagnostics": "Content diagnostics",
-    "historical_import": "Historical import"
+    "historical_import": "Historical import",
+    "search_optimization": "Search optimization"
   },
   "tab": {
     "issue": "Issue",

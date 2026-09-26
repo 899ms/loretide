@@ -1095,3 +1095,4 @@ function publicationStatusLabel(t: Translate, status: string): string {
 // exported from the module it belongs to.
 export { RoiReviewPage, type RoiOption, type RoiReviewPageProps } from "./roi/page";
 export { OperatingDiagnosisPage, type OperatingDiagnosisOption, type OperatingDiagnosisPageProps, type OperatingDiagnosisWork } from "./opdiag/page";
+export { SearchPerformanceSections } from "./search";

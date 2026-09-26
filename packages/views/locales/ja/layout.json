@@ -20,7 +20,8 @@
     "operating_diagnosis": "運営診断",
     "accounts": "アカウント",
     "content_diagnostics": "コンテンツ診断",
-    "historical_import": "過去コンテンツのインポート"
+    "historical_import": "過去コンテンツのインポート",
+    "search_optimization": "検索最適化"
   },
   "tab": {
     "issue": "タスク",
