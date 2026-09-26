@@ -6,6 +6,8 @@
 
 复用的既有组件：`SettingsSection` / `SettingsCard` / `SettingsRow`（`@multica/views/settings/layout`）、`Button` / `Input` / `Textarea` / `Select`（`@multica/ui`）。不新建控件，不设颜色。
 
+本清单随 PR 4 的页面交付一并复核；以下所有条目仍保持「未执行」，不能以类型检查或 Node 合约检查代替人工验收。
+
 ## 本清单最要紧的五条
 
 **U-10、U-12、U-14、U-24、U-40。** 它们对应「未知不是 0」、不同平台不混排、不下因果结论、拒绝什么都不改、以及 D14-V08 的浏览器闭环。前四处任何一处在界面上走样，诊断就会误导人，而且不会有任何报错。

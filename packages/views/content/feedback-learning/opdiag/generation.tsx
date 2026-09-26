@@ -1,0 +1,38 @@
+"use client";
+
+import { useState } from "react";
+import { OPDIAG_DIMENSIONS, type OpDiagDimension } from "@multica/core/content/feedback-learning";
+import { Button } from "@multica/ui/components/ui/button";
+import { Checkbox } from "@multica/ui/components/ui/checkbox";
+import { Input } from "@multica/ui/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@multica/ui/components/ui/select";
+import { SettingsCard, SettingsRow, SettingsSection } from "@multica/views/settings/layout";
+import { useT } from "@multica/views/i18n";
+import { diagnosisParams, initialDiagnosisDraft, type DiagnosisDraft, type OperatingDiagnosisOption, type OperatingDiagnosisRoiReport } from "./shared";
+
+export function DiagnosisGeneration({ timezone, accounts, roiReports, onPreview, onGenerate, busy }: { timezone: string; accounts: OperatingDiagnosisOption[]; roiReports: OperatingDiagnosisRoiReport[]; onPreview: (params: Record<string, unknown>) => void; onGenerate: (title: string, params: Record<string, unknown>) => void; busy: boolean }) {
+  const { t } = useT("common"); const [draft, setDraft] = useState<DiagnosisDraft>(initialDiagnosisDraft); const [title, setTitle] = useState("");
+  const set = <K extends keyof DiagnosisDraft>(key: K, value: DiagnosisDraft[K]) => setDraft((current) => ({ ...current, [key]: value }));
+  const toggle = (key: OpDiagDimension) => set("dimensions", draft.dimensions.includes(key) ? draft.dimensions.filter((item) => item !== key) : [...draft.dimensions, key]);
+  const toggleAccount = (id: string) => set("accountIds", draft.accountIds.includes(id) ? draft.accountIds.filter((item) => item !== id) : [...draft.accountIds, id]);
+  const validScope = draft.scope === "account" ? Boolean(draft.accountId) : draft.accountIds.length > 0;
+  const validWindow = Boolean(draft.start && draft.end && draft.start <= draft.end);
+  const params = diagnosisParams(draft, timezone, roiReports);
+  const dimensionLabel = (key: OpDiagDimension) => t(($) => $.contentOperatingDiagnosis.dimension[key]);
+  return <SettingsSection title={t(($) => $.contentOperatingDiagnosis.blocks.generate)}><SettingsCard><div className="space-y-4">
+    <SettingsRow label={t(($) => $.contentOperatingDiagnosis.scope)}><div className="flex gap-2"><Button size="sm" variant={draft.scope === "account" ? "brand" : "outline"} onClick={() => set("scope", "account")}>{t(($) => $.contentOperatingDiagnosis.account)}</Button><Button size="sm" variant={draft.scope === "brand" ? "brand" : "outline"} onClick={() => set("scope", "brand")}>{t(($) => $.contentOperatingDiagnosis.brand)}</Button></div></SettingsRow>
+    {draft.scope === "account" ? <SettingsRow label={t(($) => $.contentOperatingDiagnosis.account)}><Select items={accounts.map((account) => ({ label: account.label, value: account.id }))} value={draft.accountId} onValueChange={(value) => set("accountId", value ?? "")}><SelectTrigger><SelectValue placeholder={t(($) => $.contentOperatingDiagnosis.account)} /></SelectTrigger><SelectContent>{accounts.map((account) => <SelectItem value={account.id} key={account.id}>{account.label}</SelectItem>)}</SelectContent></Select></SettingsRow> : <SettingsRow label={t(($) => $.contentOperatingDiagnosis.accounts)}><div className="flex flex-wrap gap-3">{accounts.map((account) => <label className="flex items-center gap-2 text-sm" key={account.id}><Checkbox checked={draft.accountIds.includes(account.id)} onCheckedChange={() => toggleAccount(account.id)} />{account.label}</label>)}</div></SettingsRow>}
+    {!validScope && <p className="text-sm text-muted-foreground">{t(($) => $.contentOperatingDiagnosis.description)}</p>}
+    <SettingsRow label={t(($) => $.contentOperatingDiagnosis.window)}><div className="grid w-full gap-2 sm:grid-cols-2"><Input type="date" value={draft.start} onChange={(event) => set("start", event.target.value)} /><Input type="date" value={draft.end} onChange={(event) => set("end", event.target.value)} /></div></SettingsRow>
+    <p className="text-sm text-muted-foreground">{t(($) => $.contentOperatingDiagnosis.timezone)}: {timezone}</p>
+    <SettingsRow label={t(($) => $.contentOperatingDiagnosis.comparisonWindow)}><div className="grid w-full gap-2 sm:grid-cols-2"><Input type="date" value={draft.comparisonStart} onChange={(event) => set("comparisonStart", event.target.value)} /><Input type="date" value={draft.comparisonEnd} onChange={(event) => set("comparisonEnd", event.target.value)} /></div></SettingsRow>
+    <SettingsRow label={t(($) => $.contentOperatingDiagnosis.dimensions)}><div className="flex flex-wrap gap-3">{OPDIAG_DIMENSIONS.map((key) => <label className="flex items-center gap-2 text-sm" key={key}><Checkbox checked={draft.dimensions.includes(key)} onCheckedChange={() => toggle(key)} />{dimensionLabel(key)}</label>)}</div></SettingsRow>
+    {draft.dimensions.includes("consistency") && <SettingsRow label={dimensionLabel("consistency")}><Input value={draft.items} onChange={(event) => set("items", event.target.value)} placeholder={t(($) => $.contentOperatingDiagnosis.note)} /></SettingsRow>}
+    {draft.dimensions.includes("coverage") && <SettingsRow label={dimensionLabel("coverage")}><Input value={draft.pillars} onChange={(event) => set("pillars", event.target.value)} placeholder={t(($) => $.contentOperatingDiagnosis.note)} /></SettingsRow>}
+    {draft.dimensions.includes("performance") && <><SettingsRow label={dimensionLabel("performance")}><Input value={draft.metrics} onChange={(event) => set("metrics", event.target.value)} placeholder={t(($) => $.contentOperatingDiagnosis.note)} /></SettingsRow><SettingsRow label={t(($) => $.contentOperatingDiagnosis.account)}><Input value={draft.platforms} onChange={(event) => set("platforms", event.target.value)} placeholder={t(($) => $.contentOperatingDiagnosis.none)} /></SettingsRow></>}
+    {draft.dimensions.includes("audience_feedback") && <SettingsRow label={dimensionLabel("audience_feedback")}><Input value={draft.sources} onChange={(event) => set("sources", event.target.value)} placeholder={t(($) => $.contentOperatingDiagnosis.none)} /></SettingsRow>}
+    <SettingsRow label={t(($) => $.contentOperatingDiagnosis.roiReference)}><Select items={roiReports.map((report) => ({ label: report.label, value: report.id }))} value={draft.roiReportId} onValueChange={(value) => set("roiReportId", value ?? "")}><SelectTrigger><SelectValue placeholder={t(($) => $.contentOperatingDiagnosis.none)} /></SelectTrigger><SelectContent><SelectItem value="">{t(($) => $.contentOperatingDiagnosis.none)}</SelectItem>{roiReports.map((report) => <SelectItem value={report.id} key={`${report.id}-${report.versionNo}`}>{report.label} · {report.versionNo}</SelectItem>)}</SelectContent></Select></SettingsRow>
+    <SettingsRow label={t(($) => $.contentOperatingDiagnosis.titleLabel)}><Input value={title} onChange={(event) => setTitle(event.target.value)} /></SettingsRow>
+    <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={!validScope || !validWindow || busy} onClick={() => onPreview(params)}>{t(($) => $.contentOperatingDiagnosis.preview)}</Button><Button variant="brand" disabled={!validScope || !validWindow || busy} onClick={() => onGenerate(title, params)}>{t(($) => $.contentOperatingDiagnosis.generate)}</Button></div>
+  </div></SettingsCard></SettingsSection>;
+}
