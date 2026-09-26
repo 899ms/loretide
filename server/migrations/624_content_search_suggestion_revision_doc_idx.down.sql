@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_search_suggestion_revision_doc_idx;
