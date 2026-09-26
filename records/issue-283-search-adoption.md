@@ -21,7 +21,7 @@
 | `server/internal/content/work-editor/{contract.go,version.go,apply_integration_test.go}` | 新增 `ApplyBody`、三种冲突哨兵与 `suggestion_applied`；沿用唯一 `appendVersion` 路径，幂等 Claim 在状态检查之前；隔离数据库测试覆盖正常写入、重放与三类拒绝。 |
 | `server/internal/content/topic-planning/{search_ports.go,search_suggestion.go}` | 定义 handler 适配器写端口；决定已存在时先报 `suggestion_id` 冲突、不会读取文档；在预检后记录采用决定，写版本并追加成功/失败效果；重试从存储的决定恢复。 |
 | `server/internal/content/topic-planning/{search_suggestion*_test.go}` | 增补采用预检顺序、删除工作区 fence与失败效果的覆盖；数据库部分只由隔离 CI 执行。 |
-| `server/internal/handler/content_search_suggestions.go`、`server/cmd/server/router.go`、相关测试 | 将跨模块写映射到 `work-editor.ApplyBody`，新增决策重试端点，并锁定路由匹配与未认证入口；真实 handler 链路覆盖“版本已提交、效果未记”后单次/并发重试仅复用该一条版本。 |
+| `server/internal/handler/content_search_suggestions.go`、`server/cmd/server/router.go`、相关测试 | 将跨模块写映射到 `work-editor.ApplyBody`，新增决策重试端点；数据库用例覆盖效果未记后的真实版本单次/并发重试（T067/T068）、决策后真实 `SaveVersion` 抢先（T069）、retry 中间件路径参数及越权顺序（T070）、工作区删除时 `Apply` 为 404（T071），以及 v3 审核/交付快照不变、v4 无继承审核且新提审为 pending（T072）。上述数据库用例仅编译，待隔离 CI 执行。 |
 | `packages/core/content/{work-editor,topic-planning/search}` | 更新受控动作集合；提供非乐观采用/重试 mutation，并以纯 Node 的 mutation-options 测试验证请求与成功后的缓存失效（不使用 jsdom 或 renderHook）。 |
 | `packages/views/content/work-editor/index.tsx`、四份 `common.json` | `suggestion_applied` 的历史动作显示文案；未做页面验收。 |
 | `server/internal/content/*/*guards_test.go` | 保持版本/建议/效果表仅追加写入的源码守卫。 |
@@ -30,14 +30,16 @@
 
 - `go test ./internal/content/work-editor ./internal/content/topic-planning -run 'Test(AdoptPreflight|ApplyBody|Version|SourceAndAction|SearchSuggestion|SuggestionDecision|AbandonRefusals)'`：通过；真实库用例因未配置 `LORETIDE_WORK_TEST_DATABASE_URL` 跳过，未把跳过记为通过。
 - `go build ./internal/handler ./cmd/server`、`go vet ./internal/content/work-editor ./internal/content/topic-planning`：通过。
-- core 定向 Vitest（工作编辑器契约、搜索建议契约和 mutation 查询）：44 通过；`pnpm --filter @multica/core typecheck` 获得成功退出；内容边界与诊断契约检查通过。
+- core 定向 Node Vitest（工作编辑器契约、搜索建议契约和 mutation 配置）：44 通过；`pnpm --filter @multica/core typecheck` 与全仓 `pnpm typecheck --force` 均取得退出码 0；全仓强制检查 9/9 包成功，包含 views/web/desktop。
+- `go test -c` 仅编译 `internal/handler` 和 `cmd/server` 测试二进制后删除临时文件：通过；没有执行数据库/handler 测试。
+- 内容边界与诊断契约检查、`git diff --check`：通过。
 - `git diff --check`：通过。
 - GitHub Actions 运行 `36251869254`（旧 head `1e5d6956`）：boundaries 与 cmd-server 成功；topic-planning、handler 失败。日志定位为旧用例仍断言 `adopt` 不可用／应为 400，现已改为新契约；本次修订尚未推送，不能把该运行记为已修复或通过。
 
 ## 未执行与待主控远程验收
 
 - 所有真实数据库集成、并发、迁移规则、handler 路由及“新版本不继承终审”测试；由主控在隔离远程数据库执行。`go test ./cmd/server ...` 被项目的数据库保护器在启动前拒绝（未设 `LORETIDE_DB_TESTS=1`），因此没有运行任何路由测试，也不是失败证据。
-- 全仓 `pnpm typecheck --force` 与 views typecheck 没有在本机 30 秒命令窗口内取得最终退出结论，不能标记通过；仅 core 包类型检查已完成。
+- 本地未运行真实数据库、handler、路由、迁移或并发集成用例；新增 T067–T072 的隔离用例由主控在专用远程测试数据库执行。路由包的本地测试启动保护器会因未设置 `LORETIDE_DB_TESTS=1` 在任何测试开始前拒绝，因此本地未取得其运行结果。
 - 曾有一次以 `127.0.0.1:1` 伪地址尝试数据库迁移测试，因连接失败且违背本轮“不得连接数据库”约束，不作为任何验证证据；后续未再执行该命令。
 - 手动 UI：`specs/036-search-optimization/manual-ui-todo.md` 的所有项目仍为“未执行”；本 PR 相关为 U-12、U-13、U-15、U-17、U-18，另有 U-30 闭环。不得以自动测试替代。
 

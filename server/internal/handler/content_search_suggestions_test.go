@@ -28,6 +28,24 @@ type failSecondSuggestionFence struct {
 	failAt int
 }
 
+type saveVersionBeforeApplyGuard struct {
+	delegate                         diagnostics.WorkspaceWriteGuard
+	saver                            *workeditor.Store
+	workspace, actor, work, artifact string
+	once                             sync.Once
+	err                              error
+}
+
+func (g *saveVersionBeforeApplyGuard) LockForContentDiagnosticWrite(ctx context.Context, tx pgx.Tx, workspaceID string) error {
+	g.once.Do(func() {
+		_, g.err = g.saver.SaveVersion(ctx, g.workspace, g.actor, g.work, g.artifact)
+	})
+	if g.err != nil {
+		return g.err
+	}
+	return g.delegate.LockForContentDiagnosticWrite(ctx, tx, workspaceID)
+}
+
 func (g *failSecondSuggestionFence) LockForContentDiagnosticWrite(_ context.Context, _ pgx.Tx, _ string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -333,6 +351,138 @@ func TestContentSearchSuggestionRetryReplaysTheRealWorkVersion(t *testing.T) {
 	}
 	if successes != 1 || conflicts != 1 || suggestionRows(t, "content_artifact_version", world.wsID) != 2 {
 		t.Fatalf("retries successes=%d conflicts=%d; versions=%d", successes, conflicts, suggestionRows(t, "content_artifact_version", world.wsID))
+	}
+}
+
+// T069: after the decision commits, a concurrent human save wins the
+// work-editor fence before ApplyBody checks the base. The adoption is recorded
+// as base_moved and the human's v4 remains the sole new version.
+func TestContentSearchSuggestionSaveWinsBetweenDecisionAndApply(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	h := feedbackHandler(t)
+	world := suggestionWorkspace(t, h, "suggest-save-race")
+	if _, err := testPool.Exec(t.Context(), `UPDATE content_artifact SET draft_body=$3, draft_status='saved'
+		WHERE workspace_id=$1 AND artifact_id=$2`, world.wsID, world.artifact, suggestionBaseBody); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testPool.Exec(t.Context(), `UPDATE content_artifact_version SET revision=3
+		WHERE workspace_id=$1 AND artifact_id=$2 AND version_id=$3`, world.wsID, world.artifact, world.version); err != nil {
+		t.Fatal(err)
+	}
+	body := suggestionBody(world, "")
+	id, _ := roiCreated(t, roiCall(t, h.CreateContentSearchSuggestion, world.wsID, "POST", "/", body), "suggestion_id")
+
+	store := h.searchSuggestionsStore()
+	works := store.Works.(searchWorks)
+	saver := *works.store
+	race := &saveVersionBeforeApplyGuard{
+		delegate: works.store.Guard, saver: &saver, workspace: world.wsID, actor: testUserID,
+		work: world.work, artifact: world.artifact,
+	}
+	works.store.Guard = race
+	store.Works = works
+	view, err := store.DecideSearchSuggestion(t.Context(), world.wsID, testUserID, id,
+		topicplanning.DecisionRequest{Decision: topicplanning.DecisionAdopt, Revision: 1})
+	if err != nil || view.State != topicplanning.StateAdoptFailed || view.FailureCode != topicplanning.FailureBaseMoved {
+		t.Fatalf("adoption after racing save = %+v, %v", view, err)
+	}
+	if race.err != nil {
+		t.Fatalf("the competing SaveVersion failed: %v", race.err)
+	}
+	versions := suggestionRows(t, "content_artifact_version", world.wsID)
+	if versions != 2 {
+		t.Fatalf("version count after racing save = %d, want initial v3 plus saved v4", versions)
+	}
+	var latestRevision int
+	var latestBody, latestAction string
+	if err := testPool.QueryRow(t.Context(), `SELECT revision, body, action FROM content_artifact_version
+		WHERE workspace_id=$1 AND artifact_id=$2 ORDER BY revision DESC LIMIT 1`, world.wsID, world.artifact).
+		Scan(&latestRevision, &latestBody, &latestAction); err != nil {
+		t.Fatal(err)
+	}
+	if latestRevision != 4 || latestBody != suggestionBaseBody || latestAction != "saved" {
+		t.Fatalf("latest version after race = rev %d body %q action %q", latestRevision, latestBody, latestAction)
+	}
+}
+
+// T072: a v3 approval and delivery snapshot remain byte-for-byte bound to v3
+// after adopting a suggestion into v4. v4 has no inherited review; it requires
+// a new review request, which starts pending.
+func TestContentSearchAdoptionKeepsOldReviewAndDeliveryOnV3(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	h := feedbackHandler(t)
+	world := suggestionWorkspace(t, h, "suggest-review-isolation")
+	t.Cleanup(func() {
+		for _, table := range []string{"content_publication_record", "content_delivery_task", "content_review_transition", "content_review_request"} {
+			_, _ = testPool.Exec(context.Background(), `DELETE FROM `+table+` WHERE workspace_id=$1`, world.wsID)
+		}
+	})
+	if _, err := testPool.Exec(t.Context(), `UPDATE content_artifact SET draft_body=$3, draft_status='saved'
+		WHERE workspace_id=$1 AND artifact_id=$2`, world.wsID, world.artifact, suggestionBaseBody); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testPool.Exec(t.Context(), `UPDATE content_artifact_version SET revision=3
+		WHERE workspace_id=$1 AND artifact_id=$2 AND version_id=$3`, world.wsID, world.artifact, world.version); err != nil {
+		t.Fatal(err)
+	}
+	review := submitReview(t, world.wsID, world.artifact, world.version)
+	decide(t, world.wsID, review, "approved", "v3 人工审核通过")
+	task := createDelivery(t, world.wsID, world.artifact, review)
+	advance(t, world.wsID, task, `{"status":"ready"}`, http.StatusOK)
+	advance(t, world.wsID, task, `{"status":"handed_off","handoff_method":"export"}`, http.StatusOK)
+
+	var oldSnapshot []byte
+	if err := testPool.QueryRow(t.Context(), `SELECT snapshot FROM content_review_request WHERE review_request_id=$1`, review).Scan(&oldSnapshot); err != nil {
+		t.Fatal(err)
+	}
+	theme, _ := roiCreated(t, roiCall(t, h.CreateContentSearchTheme, world.wsID, "POST", "/",
+		`{"name":"羊绒大衣护理","platform":"xiaohongshu","keywords":["羊绒"],"intent":"solve","origin":"manual_keyword"}`), "theme_id")
+	body := fmt.Sprintf(`{"work_id":%q,"artifact_id":%q,"base_version_id":%q,"theme_id":%q,
+		"target_question":"羊绒大衣能机洗吗","aspects":["body"],"rationale":"依据","proposed_body":"采用后的新正文"}`,
+		world.work, world.artifact, world.version, theme)
+	id, _ := roiCreated(t, roiCall(t, h.CreateContentSearchSuggestion, world.wsID, "POST", "/", body), "suggestion_id")
+	adopted := roiCall(t, h.DecideContentSearchSuggestion, world.wsID, "POST", "/",
+		`{"decision":"adopt","revision":1}`, "suggestionId", id)
+	adopted.Want(http.StatusCreated)
+	versionID := adopted.Map()["effects"].([]any)[0].(map[string]any)["version_id"].(string)
+
+	var afterSnapshot []byte
+	var frozenVersion, reviewStatus string
+	if err := testPool.QueryRow(t.Context(), `SELECT snapshot, version_id, status FROM content_review_request
+		WHERE review_request_id=$1`, review).Scan(&afterSnapshot, &frozenVersion, &reviewStatus); err != nil {
+		t.Fatal(err)
+	}
+	if string(afterSnapshot) != string(oldSnapshot) || frozenVersion != world.version || reviewStatus != "approved" {
+		t.Fatalf("v3 review changed: snapshot same=%v version=%q status=%q", string(afterSnapshot) == string(oldSnapshot), frozenVersion, reviewStatus)
+	}
+	var taskReview, taskStatus string
+	if err := testPool.QueryRow(t.Context(), `SELECT review_request_id, status FROM content_delivery_task WHERE delivery_task_id=$1`, task).
+		Scan(&taskReview, &taskStatus); err != nil {
+		t.Fatal(err)
+	}
+	if taskReview != review || taskStatus != "handed_off" {
+		t.Fatalf("existing delivery task points to review %q with status %q", taskReview, taskStatus)
+	}
+	var oldReviewCount int
+	if err := testPool.QueryRow(t.Context(), `SELECT count(*) FROM content_review_request
+		WHERE workspace_id=$1 AND artifact_id=$2 AND version_id=$3`, world.wsID, world.artifact, versionID).Scan(&oldReviewCount); err != nil {
+		t.Fatal(err)
+	}
+	if oldReviewCount != 0 {
+		t.Fatalf("v4 inherited %d reviews", oldReviewCount)
+	}
+	newReview := submitReview(t, world.wsID, world.artifact, versionID)
+	var newStatus, newVersion string
+	if err := testPool.QueryRow(t.Context(), `SELECT status, version_id FROM content_review_request
+		WHERE review_request_id=$1`, newReview).Scan(&newStatus, &newVersion); err != nil {
+		t.Fatal(err)
+	}
+	if newStatus != "pending" || newVersion != versionID || versionID == world.version {
+		t.Fatalf("new v4 review = status %q version %q; adopted %q, old %q", newStatus, newVersion, versionID, world.version)
 	}
 }
 
