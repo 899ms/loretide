@@ -1136,6 +1136,43 @@ type ContentRoiTouchRevision struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 
+type ContentSearchMetric struct {
+	WorkspaceID         string             `json:"workspace_id"`
+	SearchMetricID      string             `json:"search_metric_id"`
+	PublicationRecordID string             `json:"publication_record_id"`
+	Platform            string             `json:"platform"`
+	AccountID           string             `json:"account_id"`
+	Metric              string             `json:"metric"`
+	Value               pgtype.Int8        `json:"value"`
+	Unit                string             `json:"unit"`
+	StatWindow          string             `json:"stat_window"`
+	SampledAt           pgtype.Timestamptz `json:"sampled_at"`
+	EvidenceNote        string             `json:"evidence_note"`
+	SourceType          string             `json:"source_type"`
+	RecordedBy          string             `json:"recorded_by"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type ContentSearchRankObservationRevision struct {
+	WorkspaceID         string             `json:"workspace_id"`
+	ObservationID       string             `json:"observation_id"`
+	Revision            int32              `json:"revision"`
+	Voided              bool               `json:"voided"`
+	Platform            string             `json:"platform"`
+	AccountID           string             `json:"account_id"`
+	Query               string             `json:"query"`
+	ThemeID             string             `json:"theme_id"`
+	PublicationRecordID string             `json:"publication_record_id"`
+	ObservedAt          pgtype.Timestamptz `json:"observed_at"`
+	Conditions          string             `json:"conditions"`
+	ResultKind          string             `json:"result_kind"`
+	Position            pgtype.Int4        `json:"position"`
+	ScannedDepth        pgtype.Int4        `json:"scanned_depth"`
+	EvidenceNote        string             `json:"evidence_note"`
+	RecordedBy          string             `json:"recorded_by"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
 type ContentSearchThemeRevision struct {
 	WorkspaceID      string             `json:"workspace_id"`
 	ThemeID          string             `json:"theme_id"`

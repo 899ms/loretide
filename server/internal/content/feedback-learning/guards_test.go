@@ -356,6 +356,15 @@ func TestThereIsNoSixthControlledSet(t *testing.T) {
 		}
 		delete(found, name)
 	}
+	// specs/036 PR 4's sets, contract §3: the two search metrics a platform
+	// offers (FR-071; Q2 keeps them out of Metrics), what one look found
+	// (FR-074) and where a search metric came from.
+	for _, name := range []string{"SearchMetrics", "RankResultKinds", "SearchMetricSources"} {
+		if !found[name] {
+			t.Errorf("036 PR 4 controlled set %s is gone", name)
+		}
+		delete(found, name)
+	}
 	for extra := range found {
 		t.Errorf("a controlled set %q was added; SOP 10.1 names those fields but gives no values, and inventing some puts words in the SOP's mouth that every stored row then has to be valid against", extra)
 	}

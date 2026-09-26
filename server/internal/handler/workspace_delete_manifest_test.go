@@ -91,6 +91,7 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"content_opdiag_report_version":      workspaceDelete,
 	"content_opdiag_work_mark":           workspaceDelete,
 	"content_search_theme_revision":      workspaceDelete,
+	"content_search_metric":              workspaceDelete,
 	"comment_reaction":                   workspaceDelete,
 	"contact_sales_inquiry":              workspaceDeleteKeep,
 	"daemon_connection":                  workspaceDelete,
@@ -179,6 +180,10 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"content_opdiag_profile_proposal_revision": workspaceDelete,
 	"content_opdiag_suggestion_revision":       workspaceDelete,
 	"content_opdiag_todo_revision":             workspaceDelete,
+
+	// specs/036 PR 4, beside content_search_metric above. Kept last, after a
+	// comment, because the name is longer than this map's key column.
+	"content_search_rank_observation_revision": workspaceDelete,
 }
 
 func TestWorkspaceDeletionManifestCoversPublicSchema(t *testing.T) {

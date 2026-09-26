@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS content_search_rank_observation_key_idx;
