@@ -400,10 +400,8 @@ func TestDecidedSuggestionTakesNoRevisionOrSecondDecision(t *testing.T) {
 	}
 }
 
-// T066-T069: an adopted decision survives a failed apply, a missing effect
-// ledger entry, and competing retries. The fake work port stands in only for
-// the already-tested work-editor idempotency boundary; these assertions use
-// the real PostgreSQL decision/effect tables and their row locks.
+// T066: a failed apply records the failure and a retry can finish it. The
+// handler integration suite separately proves the real work-editor replay.
 func TestSearchSuggestionAdoptionRetriesConverge(t *testing.T) {
 	fx := newSuggestionFixture(t)
 	ctx := t.Context()
@@ -429,56 +427,6 @@ func TestSearchSuggestionAdoptionRetriesConverge(t *testing.T) {
 		t.Fatalf("retry after done = %v, want decision_id conflict", err)
 	}
 
-	unrecorded := fx.suggestion(t, workspace, themeID, "版本已写但效果未记")
-	fx.works.applyID = "version-unrecorded"
-	fx.suggestions.afterApply = func() error { return errors.New("effect ledger unavailable") }
-	first, err = fx.suggestions.DecideSearchSuggestion(ctx, workspace, "actor-a", unrecorded.SuggestionID,
-		DecisionRequest{Decision: DecisionAdopt, Revision: 1})
-	if err != nil || first.State != StateAdoptUnrecorded || first.Decision == nil || len(first.Effects) != 0 {
-		t.Fatalf("unrecorded adoption = %+v, %v", first, err)
-	}
-	fx.suggestions.afterApply = nil
-	recovered, err = fx.suggestions.RetrySearchSuggestionDecision(ctx, workspace, "actor-a", first.Decision.DecisionID)
-	if err != nil || recovered.State != StateAdopted || len(recovered.Effects) != 1 || recovered.Effects[0].VersionID != "version-unrecorded" {
-		t.Fatalf("unrecorded recovery = %+v, %v", recovered, err)
-	}
-
-	race := fx.suggestion(t, workspace, themeID, "双重重试")
-	fx.works.applyID = "version-race"
-	fx.suggestions.afterApply = func() error { return errors.New("effect ledger unavailable") }
-	first, err = fx.suggestions.DecideSearchSuggestion(ctx, workspace, "actor-a", race.SuggestionID,
-		DecisionRequest{Decision: DecisionAdopt, Revision: 1})
-	if err != nil || first.Decision == nil {
-		t.Fatalf("race setup = %+v, %v", first, err)
-	}
-	fx.suggestions.afterApply = nil
-	errs := make([]error, 2)
-	var retries sync.WaitGroup
-	for i := range errs {
-		retries.Go(func() {
-			_, errs[i] = fx.suggestions.RetrySearchSuggestionDecision(ctx, workspace, "actor-a", first.Decision.DecisionID)
-		})
-	}
-	retries.Wait()
-	var successes, conflicts int
-	for _, retryErr := range errs {
-		conflict, isConflict := errors.AsType[SearchConflict](retryErr)
-		switch {
-		case retryErr == nil:
-			successes++
-		case isConflict && conflict.Field == "decision_id":
-			conflicts++
-		default:
-			t.Errorf("concurrent retry = %v", retryErr)
-		}
-	}
-	if successes != 1 || conflicts != 1 {
-		t.Fatalf("concurrent retries successes=%d conflicts=%d (%v)", successes, conflicts, errs)
-	}
-	if n := fx.db.Count(t, `SELECT count(*) FROM content_search_suggestion_effect
-		WHERE workspace_id=$1 AND decision_id=$2 AND outcome='done'`, workspace, first.Decision.DecisionID); n != 1 {
-		t.Fatalf("done effects=%d, want 1", n)
-	}
 }
 
 // T039 / FR-038 / contract §5: the five states, with the adoption states

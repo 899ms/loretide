@@ -6,16 +6,43 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/multica-ai/multica/server/internal/content/diagnostics"
 	topicplanning "github.com/multica-ai/multica/server/internal/content/topic-planning"
 	workeditor "github.com/multica-ai/multica/server/internal/content/work-editor"
 	workspacecore "github.com/multica-ai/multica/server/internal/content/workspace-core"
 	"github.com/multica-ai/multica/server/internal/testutil"
 )
+
+// failSecondSuggestionFence permits the adoption decision and the work-editor
+// version transaction, then refuses the effect transaction. It lets this
+// handler integration test exercise recovery with the real ApplyBody port.
+type failSecondSuggestionFence struct {
+	mu     sync.Mutex
+	calls  int
+	failAt int
+}
+
+func (g *failSecondSuggestionFence) LockForContentDiagnosticWrite(_ context.Context, _ pgx.Tx, _ string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.calls++
+	if g.failAt > 0 && g.calls >= g.failAt {
+		return diagnostics.ErrDenied
+	}
+	return nil
+}
+
+func (g *failSecondSuggestionFence) allowFutureWrites() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.failAt = 0
+}
 
 // specs/036 PR 2: suggestions over HTTP and the searchWorks adapter (T046
 // to T050; FR-100, FR-104, FR-105; SC-003, SC-008, SC-012). The database
@@ -245,6 +272,70 @@ func TestContentSearchSuggestionAdoptionPreflightAndRepeat(t *testing.T) {
 		`{"decision":"adopt","revision":1}`, "suggestionId", id), http.StatusConflict, "suggestion_id")
 }
 
+// T067/T068: the first real ApplyBody transaction can commit before the
+// effect ledger is available. A retry (including two concurrent retries)
+// replays that one version, records one done effect, and appends no version.
+func TestContentSearchSuggestionRetryReplaysTheRealWorkVersion(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	ctx := t.Context()
+	h := feedbackHandler(t)
+	newUnrecorded := func(slug string) (*topicplanning.SuggestionStore, suggestionWorld, topicplanning.SuggestionView, *failSecondSuggestionFence) {
+		t.Helper()
+		world := suggestionWorkspace(t, h, slug)
+		id, _ := roiCreated(t, roiCall(t, h.CreateContentSearchSuggestion, world.wsID, "POST", "/", suggestionBody(world, "")), "suggestion_id")
+		store := h.searchSuggestionsStore()
+		fence := &failSecondSuggestionFence{failAt: 2}
+		store.Guard = fence
+		view, err := store.DecideSearchSuggestion(ctx, world.wsID, testUserID, id,
+			topicplanning.DecisionRequest{Decision: topicplanning.DecisionAdopt, Revision: 1})
+		if err != nil || view.State != topicplanning.StateAdoptUnrecorded || view.Decision == nil {
+			t.Fatalf("unrecorded adoption = %+v, %v", view, err)
+		}
+		if versions := suggestionRows(t, "content_artifact_version", world.wsID); versions != 2 {
+			t.Fatalf("versions after committed apply = %d, want 2", versions)
+		}
+		return store, world, view, fence
+	}
+
+	store, world, first, fence := newUnrecorded("suggest-retry-real")
+	fence.allowFutureWrites()
+	recovered, err := store.RetrySearchSuggestionDecision(ctx, world.wsID, testUserID, first.Decision.DecisionID)
+	if err != nil || recovered.State != topicplanning.StateAdopted || len(recovered.Effects) != 1 {
+		t.Fatalf("recovered adoption = %+v, %v", recovered, err)
+	}
+	if recovered.Effects[0].VersionID == "" || suggestionRows(t, "content_artifact_version", world.wsID) != 2 {
+		t.Fatalf("recovery changed version history: %+v", recovered.Effects)
+	}
+
+	store, world, first, fence = newUnrecorded("suggest-retry-real-race")
+	fence.allowFutureWrites()
+	errs := make([]error, 2)
+	var retries sync.WaitGroup
+	for i := range errs {
+		retries.Go(func() {
+			_, errs[i] = store.RetrySearchSuggestionDecision(ctx, world.wsID, testUserID, first.Decision.DecisionID)
+		})
+	}
+	retries.Wait()
+	var successes, conflicts int
+	for _, retryErr := range errs {
+		conflict, isConflict := errors.AsType[topicplanning.SearchConflict](retryErr)
+		switch {
+		case retryErr == nil:
+			successes++
+		case isConflict && conflict.Field == "decision_id":
+			conflicts++
+		default:
+			t.Errorf("concurrent retry = %v", retryErr)
+		}
+	}
+	if successes != 1 || conflicts != 1 || suggestionRows(t, "content_artifact_version", world.wsID) != 2 {
+		t.Fatalf("retries successes=%d conflicts=%d; versions=%d", successes, conflicts, suggestionRows(t, "content_artifact_version", world.wsID))
+	}
+}
+
 // T047 / contract §7.1 / FR-100: the decision order, first failure winning.
 // A non-member and a suggestion that is not here - missing, or another
 // brand's - answer byte for byte alike; then the body, by field; then the
@@ -441,6 +532,12 @@ func TestContentSearchSuggestionAdaptersAndEndpointsAfterWorkspaceDeletion(t *te
 	if _, err := works.VersionBody(ctx, world.wsID, testUserID, world.work, world.artifact, world.version); !errors.Is(err, topicplanning.ErrNotFound) || errors.Is(err, topicplanning.ErrStorage) {
 		t.Errorf("VersionBody after the deletion = %v, want ErrNotFound", err)
 	}
+	if _, err := works.Apply(ctx, world.wsID, testUserID, topicplanning.SearchApply{
+		Key: "deleted-workspace", WorkID: world.work, ArtifactID: world.artifact,
+		BaseVersionID: world.version, Body: "不得在已删除工作区写入",
+	}); !errors.Is(err, topicplanning.ErrNotFound) || errors.Is(err, topicplanning.ErrStorage) {
+		t.Errorf("Apply after the deletion = %v, want ErrNotFound", err)
+	}
 	for name, response := range map[string]*testutil.Response{
 		"create":   roiCall(t, h.CreateContentSearchSuggestion, world.wsID, "POST", "/", suggestionBody(world, "")),
 		"get":      roiCall(t, h.GetContentSearchSuggestion, world.wsID, "GET", "/", "", "suggestionId", id),
@@ -495,6 +592,10 @@ func TestContentSearchSuggestionWritesAreFencedByWorkspaceDeletion(t *testing.T)
 	if _, err := store.DecideSearchSuggestion(ctx, world.wsID, testUserID, id,
 		topicplanning.DecisionRequest{Decision: topicplanning.DecisionAbandon, Revision: 1}); !errors.Is(err, topicplanning.ErrNotFound) {
 		t.Fatalf("abandon after the delete committed = %v, want ErrNotFound", err)
+	}
+	if _, err := store.DecideSearchSuggestion(ctx, world.wsID, testUserID, id,
+		topicplanning.DecisionRequest{Decision: topicplanning.DecisionAdopt, Revision: 1}); !errors.Is(err, topicplanning.ErrNotFound) {
+		t.Fatalf("adopt after the delete committed = %v, want ErrNotFound", err)
 	}
 	if rows := suggestionRows(t, "content_search_suggestion_revision", world.wsID); rows != 1 {
 		t.Fatalf("%d suggestion rows after fenced writes, want the 1 from before", rows)

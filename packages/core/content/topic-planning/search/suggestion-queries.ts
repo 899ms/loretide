@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api } from "@multica/core/api";
 import { searchPath } from "./contract";
 import {
@@ -78,9 +78,8 @@ export function useAbandonSearchSuggestion(workspaceId: string) {
 // Adoption and retry are never optimistic: the server may reject a moved base
 // or record an intermediate effect. Refresh both search state and the target
 // document's version cache after its authoritative response arrives.
-export function useAdoptSearchSuggestion(workspaceId: string) {
-  const client = useQueryClient();
-  return useMutation({
+export function searchSuggestionAdoptionMutationOptions(workspaceId: string, client: Pick<QueryClient, "invalidateQueries">) {
+	return {
     mutationFn: async (values: { suggestionId: string; input: SearchSuggestionAdoptInput; workId: string; artifactId: string }) =>
       parseSearchSuggestion(await api.contentSearchPost(searchPath("suggestions", values.suggestionId, "decisions"), { ...values.input })),
     onSuccess: () => {
@@ -89,17 +88,26 @@ export function useAdoptSearchSuggestion(workspaceId: string) {
       // helpers here. Its public cache root is invalidated instead.
       void client.invalidateQueries({ queryKey: ["contentWorks", workspaceId] });
     },
-  });
+	};
 }
 
-export function useRetrySearchSuggestionDecision(workspaceId: string) {
-  const client = useQueryClient();
-  return useMutation({
+export function useAdoptSearchSuggestion(workspaceId: string) {
+	const client = useQueryClient();
+	return useMutation(searchSuggestionAdoptionMutationOptions(workspaceId, client));
+}
+
+export function searchSuggestionRetryMutationOptions(workspaceId: string, client: Pick<QueryClient, "invalidateQueries">) {
+	return {
     mutationFn: async (values: { decisionId: string; workId: string; artifactId: string }) =>
       parseSearchSuggestion(await api.contentSearchPost(searchPath("decisions", values.decisionId, "retry"), {})),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: searchSuggestionKeys.all(workspaceId) });
       void client.invalidateQueries({ queryKey: ["contentWorks", workspaceId] });
     },
-  });
+	};
+}
+
+export function useRetrySearchSuggestionDecision(workspaceId: string) {
+	const client = useQueryClient();
+	return useMutation(searchSuggestionRetryMutationOptions(workspaceId, client));
 }

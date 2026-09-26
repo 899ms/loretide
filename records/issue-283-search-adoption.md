@@ -20,9 +20,9 @@
 | `server/migrations/627_content_artifact_version_action_suggestion_applied.*.sql` | 原子替换版本动作 CHECK；down 在已有新动作行时按设计失败，避免改写历史。 |
 | `server/internal/content/work-editor/{contract.go,version.go,apply_integration_test.go}` | 新增 `ApplyBody`、三种冲突哨兵与 `suggestion_applied`；沿用唯一 `appendVersion` 路径，幂等 Claim 在状态检查之前；隔离数据库测试覆盖正常写入、重放与三类拒绝。 |
 | `server/internal/content/topic-planning/{search_ports.go,search_suggestion.go}` | 定义 handler 适配器写端口；决定已存在时先报 `suggestion_id` 冲突、不会读取文档；在预检后记录采用决定，写版本并追加成功/失败效果；重试从存储的决定恢复。 |
-| `server/internal/content/topic-planning/{search_suggestion*_test.go}` | 增补采用预检顺序、删除工作区 fence、失败效果、效果未记录恢复、双重重试仅一条 `done` 效果的覆盖；数据库部分只由隔离 CI 执行。 |
-| `server/internal/handler/content_search_suggestions.go`、`server/cmd/server/router.go`、相关测试 | 将跨模块写映射到 `work-editor.ApplyBody`，新增决策重试端点，并锁定路由匹配与未认证入口。 |
-| `packages/core/content/{work-editor,topic-planning/search}` | 更新受控动作集合；提供非乐观采用/重试 mutation，并在成功时失效建议与作品版本/编辑副本查询。 |
+| `server/internal/content/topic-planning/{search_suggestion*_test.go}` | 增补采用预检顺序、删除工作区 fence与失败效果的覆盖；数据库部分只由隔离 CI 执行。 |
+| `server/internal/handler/content_search_suggestions.go`、`server/cmd/server/router.go`、相关测试 | 将跨模块写映射到 `work-editor.ApplyBody`，新增决策重试端点，并锁定路由匹配与未认证入口；真实 handler 链路覆盖“版本已提交、效果未记”后单次/并发重试仅复用该一条版本。 |
+| `packages/core/content/{work-editor,topic-planning/search}` | 更新受控动作集合；提供非乐观采用/重试 mutation，并以纯 Node 的 mutation-options 测试验证请求与成功后的缓存失效（不使用 jsdom 或 renderHook）。 |
 | `packages/views/content/work-editor/index.tsx`、四份 `common.json` | `suggestion_applied` 的历史动作显示文案；未做页面验收。 |
 | `server/internal/content/*/*guards_test.go` | 保持版本/建议/效果表仅追加写入的源码守卫。 |
 

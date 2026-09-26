@@ -43,8 +43,7 @@ import (
 // embedding.
 type SuggestionStore struct {
 	*Store
-	Works      SearchWorks
-	afterApply func() error // test-only seam for the post-version effect write.
+	Works SearchWorks
 }
 
 const searchSuggestionColumns = `workspace_id, suggestion_id, revision, work_id, artifact_id, base_version_id,
@@ -551,11 +550,6 @@ func (s *SuggestionStore) completeSearchAdoption(ctx context.Context, workspaceI
 		if err := s.recordSearchEffect(ctx, workspaceID, actor, decision, EffectFailed, "", adoptionFailure(applyErr)); err != nil {
 			return SuggestionView{}, err
 		}
-		return s.GetSearchSuggestion(ctx, workspaceID, actor, suggestion.SuggestionID)
-	}
-	if s.afterApply != nil && s.afterApply() != nil {
-		// Test-only: model an unavailable effect ledger after the idempotent
-		// work-editor transaction committed. The next retry must converge.
 		return s.GetSearchSuggestion(ctx, workspaceID, actor, suggestion.SuggestionID)
 	}
 	if err := s.recordSearchEffect(ctx, workspaceID, actor, decision, EffectDone, versionID, ""); err != nil {
