@@ -41,7 +41,7 @@ export function DiagnosisReport({ report, result, title, gapLinks, todos, addTod
       </div>
       <p className="text-sm">{t(($) => $.contentOperatingDiagnosis.scope)}: {result.scope.kind === "brand" ? t(($) => $.contentOperatingDiagnosis.brand) : result.scope.kind === "account" ? t(($) => $.contentOperatingDiagnosis.account) : t(($) => $.contentOperatingDiagnosis.unknown)} · {latestVersion.accounts.map((account) => `${account.displayName || account.accountId} (${account.platform}, ${account.profileRevisionId || t(($) => $.contentOperatingDiagnosis.unknown)})`).join(" · ") || t(($) => $.contentOperatingDiagnosis.empty)}</p>
       {result.scope.comparisonWindow && <p className="text-sm">{t(($) => $.contentOperatingDiagnosis.comparisonWindow)}: {result.scope.comparisonWindow.start} – {result.scope.comparisonWindow.end}</p>}
-      <dl className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">{Object.entries(result.scope.inputCounts).map(([key, value]) => <div key={key}><dt className="text-muted-foreground">{key}</dt><dd>{value}</dd></div>)}</dl>
+      <dl className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">{Object.entries(result.scope.inputCounts).map(([key, value]) => <div key={key}><dt className="text-muted-foreground">{factLabel(t, key)}</dt><dd>{value}</dd></div>)}</dl>
       <p className="text-sm text-muted-foreground">{t(($) => $.contentOperatingDiagnosis.pendingData)}</p>
       {report?.inputsChanged.changed && <div className="rounded-md border p-3 text-sm">{t(($) => $.contentOperatingDiagnosis.inputsChanged)}: {report.inputsChanged.added.length + report.inputsChanged.modified.length + report.inputsChanged.removed.length}<ul className="mt-2 list-disc pl-5 text-muted-foreground">{[...report.inputsChanged.added.map((ref) => `+ ${ref.kind}: ${ref.id}`), ...report.inputsChanged.modified.map((ref) => `~ ${ref.kind}: ${ref.id}`), ...report.inputsChanged.removed.map((ref) => `− ${ref.kind}: ${ref.id}`)].map((entry) => <li key={entry}>{entry}</li>)}</ul></div>}
       {result.sections.map((section, index) => <div className="space-y-3 border-t pt-3" key={`${section.section}-${section.accountId}-${index}`}>
@@ -74,7 +74,45 @@ function DimensionBlock({ t, name, dimension }: { t: DiagnosisT; name: string; d
 function FactsByDimension({ t, dimension }: { t: DiagnosisT; dimension: Extract<OpDiagDimensionResult, { status: "ok" }> }) {
   const facts = dimension.facts as Record<string, unknown>;
   if (Array.isArray(facts.groups)) return <div className="space-y-3">{(facts.groups as OpDiagFactsByDimension["performance"]["groups"]).map((group) => <div className="rounded-md border p-2" key={`${group.platform}/${group.metric}`}><p className="font-medium">{group.platform} · {group.metric}</p><WindowFacts t={t} label={t(($) => $.contentOperatingDiagnosisDetails.current)} window={group.current} /><WindowFacts t={t} label={t(($) => $.contentOperatingDiagnosisDetails.baseline)} window={group.baseline} /><p className="text-muted-foreground">{t(($) => $.contentOperatingDiagnosisDetails.change)}: {opdiagNumberDisplay(group.change) ?? t(($) => $.contentOperatingDiagnosis.notComputable)} · {t(($) => $.contentOperatingDiagnosisDetails.statWindows)}: {group.statWindows.join(", ") || "—"}{group.statWindowMixed ? ` · ${t(($) => $.contentOperatingDiagnosisDetails.mixedStatWindow)}` : ""}</p></div>)}</div>;
-  return <FactsValue value={facts} />;
+  if (Array.isArray(facts.items) && typeof facts.works === "number") {
+    const consistency = dimension.facts as OpDiagFactsByDimension["consistency"];
+    return <div className="space-y-2"><p>{factLabel(t, "works")}: {consistency.works}</p><ul className="space-y-1">{consistency.items.map((item) => <li className="rounded border p-2" key={item.item}><span className="font-medium">{factLabel(t, item.item)}</span><span className="text-muted-foreground"> · {profileStatusLabel(t, item.profileStatus)}</span><p className="text-muted-foreground">{t(($) => $.contentOperatingDiagnosisDetails.consistent)} {item.consistent} · {t(($) => $.contentOperatingDiagnosisDetails.inconsistent)} {item.inconsistent} · {t(($) => $.contentOperatingDiagnosisDetails.unsure)} {item.unsure} · {t(($) => $.contentOperatingDiagnosisDetails.unchecked)} {item.unchecked}</p></li>)}</ul><p className="text-muted-foreground">{factLabel(t, "marksOnOlderRevision")}: {consistency.marksOnOlderRevision}</p></div>;
+  }
+  if (Array.isArray(facts.pillars) && typeof facts.works === "number") {
+    const coverage = dimension.facts as OpDiagFactsByDimension["coverage"];
+    return <div className="space-y-1"><p>{factLabel(t, "works")}: {coverage.works}</p>{coverage.pillars.map((pillar) => <p key={pillar.pillar}>{pillar.pillar}: {pillar.works} {factLabel(t, "works").toLocaleLowerCase()}</p>)}<p className="text-muted-foreground">{factLabel(t, "untagged")}: {coverage.untagged} · {t(($) => $.contentOperatingDiagnosisDetails.pillarsNotAdditive)}</p></div>;
+  }
+  if (Array.isArray(facts.channels) && typeof facts.publishedAtMissing === "number") {
+    const cadence = dimension.facts as OpDiagFactsByDimension["cadence"];
+    return <div className="space-y-3">{cadence.channels.map((channel) => <div className="rounded border p-2" key={channel.channel}><p className="font-medium">{channel.channel}</p><p className="text-muted-foreground">{t(($) => $.contentOperatingDiagnosisDetails.target)}: {channel.target.set ? `${channel.target.perWeek} / ${factLabel(t, "perWeek")}` : t(($) => $.contentOperatingDiagnosisDetails.unset)}</p>{channel.weeks.map((week) => <p key={week.isoWeek}>{week.isoWeek} · {week.start} · {factLabel(t, "published")} {week.published} · {week.complete ? factLabel(t, "complete") : t(($) => $.contentOperatingDiagnosisDetails.incompleteWeek)} · {week.compared ? (week.met === null ? t(($) => $.contentOperatingDiagnosisDetails.notCompared) : week.met ? t(($) => $.contentOperatingDiagnosisDetails.met) : t(($) => $.contentOperatingDiagnosisDetails.notMet)) : t(($) => $.contentOperatingDiagnosisDetails.notCompared)}</p>)}</div>)}<p className="text-muted-foreground">{t(($) => $.contentOperatingDiagnosisDetails.publishedAtMissing)}: {cadence.publishedAtMissing}</p></div>;
+  }
+  if (typeof facts.excerpts === "number") {
+    const feedback = dimension.facts as OpDiagFactsByDimension["audience_feedback"];
+    return <div className="space-y-1"><p>{t(($) => $.contentOperatingDiagnosisDetails.excerpts)}: {feedback.excerpts}</p><p className="font-medium">{factLabel(t, "bySource")}</p>{feedback.bySource.map((source) => <p key={`${source.platform}/${source.sourceType}`}>{source.platform} · {source.sourceType}: {source.excerpts}</p>)}<p className="font-medium">{factLabel(t, "byTag")}</p>{feedback.byTag.map((tag) => <p key={tag.tag}>{tag.tag}: {tag.excerpts}</p>)}<p className="text-muted-foreground">{t(($) => $.contentOperatingDiagnosisDetails.untagged)}: {feedback.untagged} · {t(($) => $.contentOperatingDiagnosisDetails.tagsNotAdditive)}</p></div>;
+  }
+  return <ReadableFacts t={t} value={facts} />;
+}
+
+function ReadableFacts({ t, value }: { t: DiagnosisT; value: unknown }): ReactNode {
+  if (value === null || value === undefined) return <span className="text-muted-foreground">—</span>;
+  if (typeof value === "string") return <span>{value}</span>;
+  if (typeof value === "number" || typeof value === "boolean") return <span>{String(value)}</span>;
+  if (Array.isArray(value)) return <ul className="list-disc space-y-1 pl-5">{value.map((item, index) => <li key={index}><ReadableFacts t={t} value={item} /></li>)}</ul>;
+  if (typeof value === "object") return <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-2">{Object.entries(value).map(([key, item]) => <div className="contents" key={key}><dt className="text-muted-foreground">{factLabel(t, key)}</dt><dd><ReadableFacts t={t} value={item} /></dd></div>)}</dl>;
+  return null;
+}
+
+function factLabel(t: DiagnosisT, key: string) {
+  const camelKey = key.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase());
+  for (const candidate of [...new Set([key, camelKey])]) {
+    const value = t(`contentOperatingDiagnosisDetails.factLabels.${candidate}` as never);
+    if (!value.startsWith("contentOperatingDiagnosisDetails.factLabels.")) return value;
+  }
+  return key.replace(/([A-Z])/g, " $1").replaceAll("_", " ");
+}
+
+function profileStatusLabel(t: DiagnosisT, status: string) {
+  return status === "confirmed" ? t(($) => $.contentOperatingDiagnosisDetails.confirmed) : status === "pending" ? t(($) => $.contentOperatingDiagnosisDetails.unmarked) : t(($) => $.contentOperatingDiagnosis.unknown);
 }
 
 function WindowFacts({ t, label, window }: { t: DiagnosisT; label: string; window: OpDiagFactsByDimension["performance"]["groups"][number]["current"] }) {

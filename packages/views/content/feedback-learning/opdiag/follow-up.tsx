@@ -9,7 +9,7 @@ import { Textarea } from "@multica/ui/components/ui/textarea";
 import { SettingsCard, SettingsSection } from "@multica/views/settings/layout";
 import { useT } from "@multica/views/i18n";
 
-export function FollowUp({ wsId, todos, proposals, todosLoading, proposalsLoading, todosFailed, proposalsFailed, refreshProposals }: {
+export function FollowUp({ wsId, todos, proposals, todosLoading, proposalsLoading, todosFailed, proposalsFailed, refreshTodos, refreshProposals }: {
   wsId: string;
   todos: OpDiagTodo[];
   proposals: OpDiagProposal[];
@@ -17,16 +17,24 @@ export function FollowUp({ wsId, todos, proposals, todosLoading, proposalsLoadin
   proposalsLoading: boolean;
   todosFailed: boolean;
   proposalsFailed: boolean;
+  refreshTodos: () => void;
   refreshProposals: () => void;
 }) {
   const { t } = useT("common");
   const writeTodo = useWriteOpDiagTodo(wsId); const settle = useSettleOpDiagProposal(wsId);
   const [edits, setEdits] = useState<Record<string, { title: string; note: string }>>({});
   const [conflict, setConflict] = useState(false);
+  const [todoConflictId, setTodoConflictId] = useState("");
   const edit = (todo: OpDiagTodo) => edits[todo.todoId] ?? { title: todo.title, note: todo.note };
   const update = (todo: OpDiagTodo, patch: Partial<{ title: string; note: string }>) => setEdits((current) => ({ ...current, [todo.todoId]: { ...edit(todo), ...patch } }));
-  const saveTodo = (todo: OpDiagTodo) => writeTodo.mutate({ path: `todos/${encodeURIComponent(todo.todoId)}/revisions`, body: { base_revision: todo.revision, ...edit(todo) } });
-  const changeTodoState = (todo: OpDiagTodo, state: "open" | "done" | "dropped") => writeTodo.mutate({ path: `todos/${encodeURIComponent(todo.todoId)}/revisions`, body: { base_revision: todo.revision, state } });
+  const reviseTodo = (todo: OpDiagTodo, body: Record<string, unknown>) => {
+    setTodoConflictId("");
+    writeTodo.mutate({ path: `todos/${encodeURIComponent(todo.todoId)}/revisions`, body: { base_revision: todo.revision, ...body } }, {
+      onError: (error) => { if (isConflict(error)) { setTodoConflictId(todo.todoId); refreshTodos(); } },
+    });
+  };
+  const saveTodo = (todo: OpDiagTodo) => reviseTodo(todo, edit(todo));
+  const changeTodoState = (todo: OpDiagTodo, state: "open" | "done" | "dropped") => reviseTodo(todo, { state });
   const settleProposal = (proposal: OpDiagProposal, action: "confirm" | "dismiss") => {
     setConflict(false);
     settle.mutate({ path: `profile-proposals/${encodeURIComponent(proposal.proposalId)}/${action}`, body: action === "confirm" ? { base_revision_id: proposal.baseRevisionId } : {} }, {
@@ -39,6 +47,7 @@ export function FollowUp({ wsId, todos, proposals, todosLoading, proposalsLoadin
         <div className="grid gap-2 sm:grid-cols-[1fr_12rem]"><Input value={edit(todo).title} onChange={(event) => update(todo, { title: event.target.value })} /><Select items={[{ value: "open", label: t(($) => $.contentOperatingDiagnosisDetails.todoOpen) }, { value: "done", label: t(($) => $.contentOperatingDiagnosisDetails.todoDone) }, { value: "dropped", label: t(($) => $.contentOperatingDiagnosisDetails.todoDropped) }]} value={todo.state === "open" || todo.state === "done" || todo.state === "dropped" ? todo.state : ""} onValueChange={(value) => { if (value === "open" || value === "done" || value === "dropped") changeTodoState(todo, value); }}><SelectTrigger><SelectValue placeholder={todo.state === "unknown" ? t(($) => $.contentOperatingDiagnosis.unknown) : undefined} /></SelectTrigger><SelectContent><SelectItem value="open">{t(($) => $.contentOperatingDiagnosisDetails.todoOpen)}</SelectItem><SelectItem value="done">{t(($) => $.contentOperatingDiagnosisDetails.todoDone)}</SelectItem><SelectItem value="dropped">{t(($) => $.contentOperatingDiagnosisDetails.todoDropped)}</SelectItem></SelectContent></Select></div>
         <Textarea value={edit(todo).note} onChange={(event) => update(todo, { note: event.target.value })} placeholder={t(($) => $.contentOperatingDiagnosis.note)} />
         <p className="text-sm text-muted-foreground">{todo.originKind} · {todo.originReportId} · {todo.originVersionNo} · {todo.originGapKey || todo.originDecisionId}</p>
+        {todoConflictId === todo.todoId && <p className="text-sm text-muted-foreground" role="alert">{t(($) => $.contentOperatingDiagnosisDetails.todoConflict)}</p>}
         <Button size="sm" variant="outline" disabled={writeTodo.isPending || (!edit(todo).title.trim())} onClick={() => saveTodo(todo)}>{t(($) => $.contentOperatingDiagnosisDetails.saveTodo)}</Button>
       </div>)}
       {writeTodo.isError && <p className="text-sm text-muted-foreground">{t(($) => $.contentOperatingDiagnosis.failed)}</p>}

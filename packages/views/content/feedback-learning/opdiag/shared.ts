@@ -3,6 +3,7 @@ import { OPDIAG_DIMENSIONS, type OpDiagDimension } from "@multica/core/content/f
 export interface OperatingDiagnosisOption { id: string; label: string; }
 export interface OperatingDiagnosisWork extends OperatingDiagnosisOption { historicalImport: boolean; }
 export interface OperatingDiagnosisRoiReport extends OperatingDiagnosisOption { versionNo: number; }
+export interface OperatingDiagnosisTopicCard { id: string; accountId: string | null; label: string; }
 
 export interface DiagnosisDraft {
   scope: "account" | "brand";
@@ -49,4 +50,14 @@ export function diagnosisParams(draft: DiagnosisDraft, timezone: string, roiRepo
 
 export function roiReportSelectionKey(report: OperatingDiagnosisRoiReport): string {
   return `${report.id}@${report.versionNo}`;
+}
+
+/** Match the server's exact account scope for topic-card adoption. */
+export function topicCardsForTargetAccount<T extends OperatingDiagnosisTopicCard>(cards: T[], accountId: string | null | undefined): T[] {
+  const expectedAccountId = accountId || null;
+  return cards.filter((card) => card.accountId === expectedAccountId);
+}
+
+export function suggestionRequest(body: string, targetKind: string, target: Record<string, unknown>, judgementIds: string[], evidenceRefs: string[]) {
+  return { body, target_kind: targetKind, target, judgement_ids: judgementIds, evidence_refs: evidenceRefs };
 }

@@ -81,7 +81,7 @@ export function OperatingDiagnosisPage(props: OperatingDiagnosisPageProps) {
         <WorkMarks wsId={props.wsId} report={selectedReport} works={props.works} worksLoading={props.worksLoading} worksFailed={props.worksFailed} />
       </>}
       {addTodo.isError && <p className="text-sm text-muted-foreground">{t(($) => $.contentOperatingDiagnosis.failed)}</p>}
-      <FollowUp wsId={props.wsId} todos={todos.data ?? []} proposals={proposals.data ?? []} todosLoading={todos.isLoading} proposalsLoading={proposals.isLoading} todosFailed={todos.isError} proposalsFailed={proposals.isError} refreshProposals={() => { void proposals.refetch(); }} />
+      <FollowUp wsId={props.wsId} todos={todos.data ?? []} proposals={proposals.data ?? []} todosLoading={todos.isLoading} proposalsLoading={proposals.isLoading} todosFailed={todos.isError} proposalsFailed={proposals.isError} refreshTodos={() => { void todos.refetch(); }} refreshProposals={() => { void proposals.refetch(); }} />
       {generate.isError && <p className="text-sm text-muted-foreground">{t(($) => $.contentOperatingDiagnosis.failed)}</p>}
       {previewMutation.isError && <p className="text-sm text-muted-foreground">{t(($) => $.contentOperatingDiagnosis.failed)}</p>}
       {previewMutation.isSuccess && !previewMutation.data && <p className="text-sm text-muted-foreground">{t(($) => $.contentOperatingDiagnosis.failed)}</p>}

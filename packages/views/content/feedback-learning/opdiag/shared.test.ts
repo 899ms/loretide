@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it } from "vitest";
-import { diagnosisParams, initialDiagnosisDraft, roiReportSelectionKey } from "./shared";
+import { diagnosisParams, initialDiagnosisDraft, roiReportSelectionKey, suggestionRequest, topicCardsForTargetAccount } from "./shared";
 
 describe("operating diagnosis request params", () => {
   it("preserves the selected ROI report version and every dimension config", () => {
@@ -33,5 +33,23 @@ describe("operating diagnosis request params", () => {
       { key: "audience_feedback", sources: ["comment", "lead"] },
       { key: "execution_flow" },
     ]);
+  });
+});
+
+describe("operating diagnosis suggestion construction", () => {
+  it("uses only exact account matches for linking topic cards", () => {
+    const cards = [
+      { id: "a", accountId: "account-a", label: "A" },
+      { id: "b", accountId: "account-b", label: "B" },
+      { id: "unassigned", accountId: null, label: "Unassigned" },
+    ];
+    expect(topicCardsForTargetAccount(cards, "account-a").map(({ id }) => id)).toEqual(["a"]);
+    expect(topicCardsForTargetAccount(cards, "account-b").map(({ id }) => id)).toEqual(["b"]);
+    expect(topicCardsForTargetAccount(cards, null).map(({ id }) => id)).toEqual(["unassigned"]);
+  });
+
+  it("includes selected current-version judgement IDs in the request", () => {
+    expect(suggestionRequest("Try this", "todo", { account_id: "a1", title: "Review" }, ["j1", "j3"], ["work:w1"]))
+      .toEqual({ body: "Try this", target_kind: "todo", target: { account_id: "a1", title: "Review" }, judgement_ids: ["j1", "j3"], evidence_refs: ["work:w1"] });
   });
 });
