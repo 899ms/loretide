@@ -50,7 +50,7 @@ func searchSourceFiles(t *testing.T) map[string]string {
 // pkg/db/queries - no upsert, AND an INSERT into each, so a module that lost
 // its writes cannot pass.
 func TestSearchTablesHaveAnInsertAndNoUpdateOrDelete(t *testing.T) {
-	upper := strings.ToUpper(moduleSources(t))
+	upper := strings.ToUpper(strings.ReplaceAll(moduleSources(t), "\r\n", "\n"))
 	for _, table := range searchTables {
 		name := strings.ToUpper(table)
 		for _, forbidden := range []string{"UPDATE " + name, "DELETE FROM " + name, "TRUNCATE " + name} {
