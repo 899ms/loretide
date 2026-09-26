@@ -664,7 +664,8 @@
       "saved": "Saved",
       "restored": "Restored",
       "adopted": "Adopted as baseline",
-      "imported": "Historical import"
+      "imported": "Historical import",
+      "suggestionApplied": "Applied from search suggestion"
     },
     "fromLabel": "From",
     "restore": "Restore this version",

@@ -664,7 +664,8 @@
       "saved": "版として保存",
       "restored": "復元",
       "adopted": "基準として採用",
-      "imported": "履歴からの取り込み"
+      "imported": "履歴からの取り込み",
+      "suggestionApplied": "検索提案から適用"
     },
     "fromLabel": "元",
     "restore": "この版に戻す",

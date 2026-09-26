@@ -3,7 +3,7 @@ import { api } from "@multica/core/api";
 import { searchPath } from "./contract";
 import {
   parseSearchSuggestion, parseSearchSuggestionList, parseSearchSuggestionComparison,
-  type SearchSuggestionInput, type SearchSuggestionRevisionInput, type SearchSuggestionAbandonInput,
+  type SearchSuggestionInput, type SearchSuggestionRevisionInput, type SearchSuggestionAbandonInput, type SearchSuggestionAdoptInput,
   type SearchSuggestionState,
 } from "./suggestion-contract";
 
@@ -72,5 +72,34 @@ export function useAbandonSearchSuggestion(workspaceId: string) {
     mutationFn: async ({ suggestionId, input }: { suggestionId: string; input: SearchSuggestionAbandonInput }) =>
       parseSearchSuggestion(await api.contentSearchPost(searchPath("suggestions", suggestionId, "decisions"), { ...input })),
     onSuccess: () => { void client.invalidateQueries({ queryKey: searchSuggestionKeys.all(workspaceId) }); },
+  });
+}
+
+// Adoption and retry are never optimistic: the server may reject a moved base
+// or record an intermediate effect. Refresh both search state and the target
+// document's version cache after its authoritative response arrives.
+export function useAdoptSearchSuggestion(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (values: { suggestionId: string; input: SearchSuggestionAdoptInput; workId: string; artifactId: string }) =>
+      parseSearchSuggestion(await api.contentSearchPost(searchPath("suggestions", values.suggestionId, "decisions"), { ...values.input })),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: searchSuggestionKeys.all(workspaceId) });
+      // Module boundaries prohibit importing work-editor's private query
+      // helpers here. Its public cache root is invalidated instead.
+      void client.invalidateQueries({ queryKey: ["contentWorks", workspaceId] });
+    },
+  });
+}
+
+export function useRetrySearchSuggestionDecision(workspaceId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (values: { decisionId: string; workId: string; artifactId: string }) =>
+      parseSearchSuggestion(await api.contentSearchPost(searchPath("decisions", values.decisionId, "retry"), {})),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: searchSuggestionKeys.all(workspaceId) });
+      void client.invalidateQueries({ queryKey: ["contentWorks", workspaceId] });
+    },
   });
 }

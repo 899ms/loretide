@@ -88,5 +88,5 @@ export interface SearchSuggestionInput extends SearchSuggestionContentInput {
 }
 /** Targets stay immutable; revisions send only content and the concurrency token. */
 export interface SearchSuggestionRevisionInput extends SearchSuggestionContentInput { base_revision: number }
-/** Adoption is deliberately unavailable until the ApplyBody stage. */
 export interface SearchSuggestionAbandonInput { decision: "abandon"; revision: number; note: string }
+export interface SearchSuggestionAdoptInput { decision: "adopt"; revision: number; note: string }

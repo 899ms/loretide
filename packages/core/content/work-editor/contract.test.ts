@@ -61,6 +61,11 @@ describe("the controlled sets match the Go source", () => {
     expect(VERSION_ACTIONS).toContain("imported");
     expect(VERSION_SOURCES).toHaveLength(3);
   });
+
+  it("records a search suggestion as an action, not a source", () => {
+    expect(VERSION_SOURCES).not.toContain("suggestion_applied");
+    expect(VERSION_ACTIONS).toContain("suggestion_applied");
+  });
 });
 
 const workWire = {

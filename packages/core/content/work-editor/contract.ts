@@ -27,7 +27,7 @@ export type VersionSource = (typeof VERSION_SOURCES)[number];
  *  `imported`, which is a piece pasted back in from where it was published
  *  (SOP 3.3). Its source is still `edited`; what differs is that nobody wrote
  *  it today. */
-export const VERSION_ACTIONS = ["saved", "restored", "adopted", "imported"] as const;
+export const VERSION_ACTIONS = ["saved", "restored", "adopted", "imported", "suggestion_applied"] as const;
 export type VersionAction = (typeof VERSION_ACTIONS)[number];
 
 export interface Work {

@@ -664,7 +664,8 @@
       "saved": "存为一版",
       "restored": "恢复",
       "adopted": "采用为基线",
-      "imported": "历史导入"
+      "imported": "历史导入",
+      "suggestionApplied": "由搜索优化建议采用"
     },
     "fromLabel": "来自",
     "restore": "恢复这一版",
