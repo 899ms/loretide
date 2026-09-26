@@ -465,6 +465,13 @@ var concurrentIndexCleanups = map[string]string{
 	"617_content_search_rank_observation_key_idx":    "content_search_rank_observation_key_idx",
 	"618_content_search_rank_observation_theme_idx":  "content_search_rank_observation_theme_idx",
 	"619_content_search_rank_observation_record_idx": "content_search_rank_observation_record_idx",
+	// specs/036 search suggestions (PR 2). Its own block, as above. The three
+	// table migrations (620-622) build no index and are absent. The numbers
+	// are provisional and move with the files at merge.
+	"623_content_search_suggestion_revision_key_idx":    "content_search_suggestion_revision_key_idx",
+	"624_content_search_suggestion_revision_doc_idx":    "content_search_suggestion_revision_doc_idx",
+	"625_content_search_suggestion_decision_key_idx":    "content_search_suggestion_decision_key_idx",
+	"626_content_search_suggestion_effect_decision_idx": "content_search_suggestion_effect_decision_idx",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction

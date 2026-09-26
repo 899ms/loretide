@@ -134,6 +134,7 @@
     "server/internal/handler/content_opdiag_preview.go",
     "server/internal/handler/content_search_themes.go",
     "server/internal/handler/content_opdiag_decisions.go",
-    "server/internal/handler/content_search_observations.go"
+    "server/internal/handler/content_search_observations.go",
+    "server/internal/handler/content_search_suggestions.go"
   ]
 }
